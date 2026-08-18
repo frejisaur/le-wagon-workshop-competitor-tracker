@@ -68,6 +68,7 @@ export type InsightWireInput = {
   paidMessageSummary?: string | null;
   aiSearchSummary?: string | null;
   recommendations: ClaimWire[];
+  overallConfidence?: 'high' | 'medium' | 'low';
   agentHarness: string;
   model: string;
   skillVersion: string;
@@ -84,6 +85,9 @@ export type ReviewWireInput = {
   inferredClaims: ClaimWire[];
   summary: string;
   recommendations: ClaimWire[];
+  paidMessageSummary?: string | null;
+  aiSearchSummary?: string | null;
+  overallConfidence?: 'high' | 'medium' | 'low';
   reviewReasons: string[];
   evidenceFingerprint: string;
   agentHarness: string;

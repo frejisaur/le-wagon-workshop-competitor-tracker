@@ -126,7 +126,12 @@ export class FixtureCompetitorRepository implements CompetitorStore {
 
   async upsertPublishedInsight(insight: InsightWireInput): Promise<WriteResult> {
     const company = this.findCompanyRecordById(insight.companyId);
-    return company ? this.upsertMany('insights', [{identity: insight.insightId, fields: toAirtableInsightFields(insight, company.id), lookupField: 'Identity • Insight ID'}]) : {succeeded: 0, failed: 1, results: [{identity: insight.insightId, error: 'company_link_missing'}]};
+    if (!company) return {succeeded: 0, failed: 1, results: [{identity: insight.insightId, error: 'company_link_missing'}]};
+    const existing = this.records('insights').filter((record) => record.fields['Identity • Company ID'] === insight.companyId);
+    if (existing.length > 1) return {succeeded: 0, failed: 1, results: [{identity: insight.companyId, error: 'duplicate_published_insights'}]};
+    // Exactly one current published row per company: replace that row only. The
+    // immutable insight ID remains a provenance field, never the lookup key.
+    return this.upsertMany('insights', [{identity: insight.companyId, fields: toAirtableInsightFields(insight, company.id), lookupField: 'Identity • Company ID'}]);
   }
 
   async updateSystem(system: SystemWireInput): Promise<WriteResult> {

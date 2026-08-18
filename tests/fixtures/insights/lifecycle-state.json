@@ -1,0 +1,30 @@
+{
+  "companies": [{
+    "id": "rec-company-alpha",
+    "fields": {
+      "Identity • Company ID": "company-alpha",
+      "Identity • Canonical Domain": "alpha.example",
+      "Observed • Source": "semrush",
+      "Observed • Database": "us",
+      "Observed • At": "2026-08-01T00:00:00.000Z",
+      "Observed • Raw Ref": "dataset:sanitized-alpha",
+      "Observed • Organic Traffic": 200
+    }
+  }],
+  "keywords": [{
+    "id": "rec-keyword-alpha",
+    "fields": {
+      "Identity • Company ID": "company-alpha",
+      "Identity • Keyword ID": "keyword-alpha",
+      "Observed • Source": "semrush",
+      "Observed • Database": "us",
+      "Observed • At": "2026-08-01T00:00:00.000Z",
+      "Observed • Keyword": "competitor research",
+      "Observed • Landing URL": "https://alpha.example/research"
+    }
+  }],
+  "paidAds": [],
+  "insights": [],
+  "reviews": [],
+  "system": []
+}

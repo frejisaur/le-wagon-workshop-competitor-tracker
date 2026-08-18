@@ -163,7 +163,17 @@ export class AirtableCompetitorRepository implements CompetitorStore {
   }
 
   async upsertPublishedInsight(insight: InsightWireInput): Promise<WriteResult> {
-    return this.upsertCompanyLinked(AIRTABLE_TABLES.insights, 'Identity • Insight ID', insight.insightId, (companyRecordId) => toAirtableInsightFields(insight, companyRecordId), insight.companyId);
+    try {
+      const company = await this.findCompanyRecordById(insight.companyId);
+      if (!company) return {succeeded: 0, failed: 1, results: [{identity: insight.companyId, error: 'company_link_missing'}]};
+      const existing = await this.client.list(AIRTABLE_TABLES.insights, {filterByFormula: equalityFormula('Identity • Company ID', insight.companyId)});
+      if (existing.length > 1) return {succeeded: 0, failed: 1, results: [{identity: insight.companyId, error: 'duplicate_published_insights'}]};
+      // Company identity, not generated insight identity, enforces one current
+      // published row. The write cannot target another company's record.
+      return this.performWrites(AIRTABLE_TABLES.insights, [{identity: insight.companyId, fields: toAirtableInsightFields(insight, company.id), recordId: existing[0]?.id}], emptyResult());
+    } catch (error) {
+      return {succeeded: 0, failed: 1, results: [{identity: insight.companyId, error: errorMessage(error)}]};
+    }
   }
 
   async updateSystem(system: SystemWireInput): Promise<WriteResult> {

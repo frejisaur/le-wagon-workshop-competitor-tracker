@@ -4,7 +4,7 @@ import {afterAll, afterEach, beforeAll, describe, expect, it} from 'vitest';
 import {AirtableClient} from '@/lib/airtable/client';
 import {AirtableCompetitorRepository, escapeFormulaLiteral} from '@/lib/airtable/repository';
 import {FixtureCompetitorRepository} from '@/lib/airtable/fixture-repository';
-import type {CompanyWrite} from '@/lib/airtable/types';
+import type {CompanyWrite, InsightWireInput} from '@/lib/airtable/types';
 import type {CuratedKeyword, CuratedPaidAd} from '@/lib/domain/metrics';
 
 const endpoint = 'https://airtable.test';
@@ -120,6 +120,10 @@ function makePaidAds(count: number, companyId = 'company-alpha', observedAt = '2
   }));
 }
 
+function insight(insightId: string): InsightWireInput {
+  return {insightId, companyId: 'company-alpha', observedThemes: [{claimId: 'traffic', conclusion: 'Traffic is measured.', classification: 'observed', confidence: 'high', confidenceReason: 'Current metric.', evidenceRefs: ['company:company-alpha:metric:organic_traffic']}], inferredClaims: [], recommendations: [], overallConfidence: 'high', agentHarness: 'test', model: 'test', skillVersion: '1.0.0', evidenceFingerprint: 'a'.repeat(64), workflowVersion: '1.0.0', runId: 'run', generatedAt: '2026-08-18T12:00:00.000Z'};
+}
+
 describe('AirtableCompetitorRepository', () => {
   it('caps Retry-After waits, rejects invalid attempt counts, and rejects repeated page offsets', async () => {
     expect(() => new AirtableClient({baseId: 'base', apiToken: 'token', maxAttempts: 0})).toThrow('maxAttempts');
@@ -193,6 +197,18 @@ describe('AirtableCompetitorRepository', () => {
     const snapshot = await repository.getDashboardSnapshot();
     expect(snapshot.companies.filter((record) => record.fields['Identity • Company ID'] === 'company-existing')).toHaveLength(1);
     expect(snapshot.companies).toHaveLength(2);
+  });
+
+  it('keeps exactly one current published insight per company while preserving the immutable insight ID as provenance', async () => {
+    const repository = FixtureCompetitorRepository.fromSnapshot(`${process.cwd()}/tests/fixtures/airtable/base-snapshot.json`);
+    await expect(repository.upsertPublishedInsight(insight('insight-first'))).resolves.toMatchObject({succeeded: 1, failed: 0});
+    const first = (await repository.getDashboardSnapshot()).publishedInsights;
+    await expect(repository.upsertPublishedInsight(insight('insight-replacement'))).resolves.toMatchObject({succeeded: 1, failed: 0});
+    const second = (await repository.getDashboardSnapshot()).publishedInsights;
+
+    expect(second).toHaveLength(1);
+    expect(second[0].id).toBe(first[0].id);
+    expect(second[0].fields['Identity • Insight ID']).toBe('insight-replacement');
   });
 
   it('returns per-record failures without losing successfully written record results', async () => {
