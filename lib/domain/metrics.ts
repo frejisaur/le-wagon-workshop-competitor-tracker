@@ -54,18 +54,14 @@ export type CuratedCompanyObserved = {
   aiCitedPages: number | null;
   topCountry: string | null;
   topCountryTraffic: number | null;
-  mozDomainAuthority: ProviderNumber;
-  mozSpamScore: ProviderNumber;
+  mozDomainAuthorityRaw: string | null;
+  mozSpamScoreRaw: string | null;
   organicCompetitors: CuratedCompetitor[];
   paidCompetitors: CuratedCompetitor[];
   aiCountries: CuratedAiCountry[];
-  aiCountriesObservedCount: number;
   aiByLlm: CuratedAiLlm[];
   rawSerpCodes: Array<string | number>;
-  mozTopPages: CuratedMozTopPage[];
   mozTopPagesObserved: CuratedMozTopPageSummary[];
-  mozTopPagesObservedCount: number;
-  topKeywordSampleCount: number;
 };
 
 export type CuratedCompanyCalculated = {
@@ -74,16 +70,23 @@ export type CuratedCompanyCalculated = {
   nonBrandShare: number | null;
   aiBenchmarkGap: number | null;
   trackedSetTrafficShare: number | null;
+  organicCompetitors: CuratedCompetitor[];
+  paidCompetitors: CuratedCompetitor[];
+  aiCountries: CuratedAiCountry[];
+  aiCountriesObservedCount: number;
+  mozDomainAuthority: ProviderNumber;
+  mozSpamScore: ProviderNumber;
+  mozTopPages: CuratedMozTopPage[];
+  mozTopPagesObservedCount: number;
+  topKeywordSampleCount: number;
   compactOrganicTrend: CompactOrganicTrendPoint[];
   landingPagePortfolio: LandingPagePortfolio[];
-  paidActivityPresent: boolean;
+  paidActivityPresent: boolean | null;
 };
 
-export type CuratedKeyword = ObservedGroup<{
-  keywordId: string;
-  companyId: string | undefined;
+export type CuratedKeyword = {
+  observed: ObservedGroup<{
   keyword: string;
-  normalizedLandingUrl: string;
   landingUrl: string;
   position: number | null;
   previousPosition: number | null;
@@ -98,17 +101,21 @@ export type CuratedKeyword = ObservedGroup<{
   intents: string[];
   rawSerpCodes: Array<string | number>;
   results: number | null;
-}>;
+  }>;
+  calculated: CalculatedGroup<{
+    companyId: string;
+    keywordId: string;
+    normalizedLandingUrl: string;
+  }>;
+};
 
-export type CuratedPaidAd = ObservedGroup<{
-  paidAdId: string;
-  companyId: string | undefined;
+export type CuratedPaidAd = {
+  observed: ObservedGroup<{
   keyword: string | null;
   title: string | null;
   description: string | null;
   visibleUrl: string | null;
   landingUrl: string;
-  normalizedLandingUrl: string;
   position: number | null;
   previousPosition: number | null;
   volume: number | null;
@@ -118,10 +125,16 @@ export type CuratedPaidAd = ObservedGroup<{
   traffic: number | null;
   trafficSharePct: number | null;
   trafficCostUsd: number | null;
-}>;
+  }>;
+  calculated: CalculatedGroup<{
+    companyId: string;
+    paidAdId: string;
+    normalizedLandingUrl: string;
+  }>;
+};
 
 export type DataQualityIssue = {
-  code: 'suspicious_moz_top_page' | 'invalid_keyword_landing_url' | 'invalid_paid_ad_landing_url';
+  code: 'suspicious_moz_top_page' | 'invalid_keyword_landing_url' | 'invalid_paid_ad_landing_url' | 'invalid_trend_date';
   message: string;
   sourcePath: string;
   summary: string;

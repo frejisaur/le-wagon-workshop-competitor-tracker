@@ -16,6 +16,21 @@ const context: TransformSemrushContext = {
 };
 
 describe('transformSemrushCompany', () => {
+  it('requires an immutable company ID before producing persistence-ready child identities', () => {
+    // @ts-expect-error companyId is required to build child identities.
+    const missingIdContext: TransformSemrushContext = {
+      identity: context.identity,
+      observedAt: context.observedAt,
+      calculatedAt: context.calculatedAt,
+    };
+
+    expect(() => transformSemrushCompany(semrushFixture[0], missingIdContext as unknown as TransformSemrushContext)).toThrow('companyId is required');
+    expect(transformSemrushCompany(semrushFixture[0], context).keywords[0].calculated.keywordId)
+      .toBe(transformSemrushCompany(semrushFixture[0], context).keywords[0].calculated.keywordId);
+    expect(transformSemrushCompany(semrushFixture[1], context).paidAds[0].calculated.paidAdId)
+      .toBe(transformSemrushCompany(semrushFixture[1], context).paidAds[0].calculated.paidAdId);
+  });
+
   it('keeps conflicting backlink totals independent', () => {
     const record = structuredClone(semrushFixture[0]);
     record.backlinks = 100;
@@ -39,9 +54,14 @@ describe('transformSemrushCompany', () => {
 
     const evidence = transformSemrushCompany(record, context);
 
-    expect(evidence.company.observed.organicCompetitors.every((item) => item.domain !== 'alpha.example')).toBe(true);
-    expect(evidence.company.observed.aiCountries).toEqual([{country: 'ca', mentions: 2, visibility: 1}]);
-    expect(evidence.company.observed.aiCountriesObservedCount).toBe(2);
+    expect(evidence.company.observed.organicCompetitors.some((item) => item.domain === 'alpha.example')).toBe(true);
+    expect(evidence.company.observed.aiCountries).toEqual([
+      {country: 'ca', mentions: 2, visibility: 1},
+      {country: 'us', mentions: 0, visibility: 0},
+    ]);
+    expect(evidence.company.calculated.organicCompetitors.every((item) => item.domain !== 'alpha.example')).toBe(true);
+    expect(evidence.company.calculated.aiCountries).toEqual([{country: 'ca', mentions: 2, visibility: 1}]);
+    expect(evidence.company.calculated.aiCountriesObservedCount).toBe(2);
   });
 
   it('projects classified direct-field groups and identifies normalized keyword and ad records', () => {
@@ -51,21 +71,32 @@ describe('transformSemrushCompany', () => {
     expect(evidence.company.observed).not.toHaveProperty('data');
     expect(evidence.company.calculated).toMatchObject({classification: 'calculated', calculatedAt: context.calculatedAt});
     expect(evidence.company.calculated).not.toHaveProperty('data');
-    expect(evidence.keywords[0]).toMatchObject({
-      companyId: 'company-alpha',
-      keyword: 'alpha topic',
-      normalizedLandingUrl: 'https://alpha.example/page',
-      rawSerpCodes: [999],
-      classification: 'observed',
+    expect(evidence.keywords[0].observed).toMatchObject({
+      keyword: 'alpha topic', rawSerpCodes: [999], classification: 'observed',
     });
-    expect(evidence.keywords[0].keywordId).toBe('company-alpha\u0000alpha topic\u0000https://alpha.example/page');
+    expect(evidence.keywords[0].observed).not.toHaveProperty('keywordId');
+    expect(evidence.keywords[0].observed).not.toHaveProperty('normalizedLandingUrl');
+    expect(evidence.keywords[0].observed).not.toHaveProperty('data');
+    expect(evidence.keywords[0].calculated).toMatchObject({
+      companyId: 'company-alpha', normalizedLandingUrl: 'https://alpha.example/page', classification: 'calculated',
+    });
+    expect(evidence.keywords[0].calculated.keywordId).toBe('company-alpha\u0000alpha topic\u0000https://alpha.example/page');
+    const paidAd = transformSemrushCompany(semrushFixture[1], context).paidAds[0];
+    expect(paidAd.observed).not.toHaveProperty('paidAdId');
+    expect(paidAd.observed).not.toHaveProperty('normalizedLandingUrl');
+    expect(paidAd.calculated).not.toHaveProperty('data');
+    expect(paidAd.calculated).toMatchObject({companyId: 'company-alpha', normalizedLandingUrl: 'https://beta.example/ad', classification: 'calculated'});
+    expect(evidence.company.observed).not.toHaveProperty('aiCountriesObservedCount');
+    expect(evidence.company.observed).not.toHaveProperty('mozDomainAuthority');
+    expect(evidence.company.calculated.mozDomainAuthority).toEqual({raw: '1.6k', normalized: 1600});
   });
 
   it('omits suspicious Moz pages from display data while retaining a quality issue and observed summary', () => {
     const evidence = transformSemrushCompany(semrushFixture[0], context);
 
-    expect(evidence.company.observed.mozTopPagesObservedCount).toBe(1);
-    expect(evidence.company.observed.mozTopPages).toEqual([]);
+    expect(evidence.company.observed.mozTopPagesObserved).toEqual([{url: 'alpha.example', pageAuthority: 2}]);
+    expect(evidence.company.calculated.mozTopPagesObservedCount).toBe(1);
+    expect(evidence.company.calculated.mozTopPages).toEqual([]);
     expect(evidence.qualityIssues).toContainEqual(expect.objectContaining({code: 'suspicious_moz_top_page'}));
   });
 
@@ -87,7 +118,7 @@ describe('transformSemrushCompany', () => {
     expect(evidence.company.calculated.organicTraffic30DayMovement).toBe(0.5);
     expect(evidence.company.calculated.compactOrganicTrend).toHaveLength(24);
     expect(evidence.company.calculated.paidActivityPresent).toBe(true);
-    expect(evidence.paidAds[0].paidAdId).toHaveLength(64);
+    expect(evidence.paidAds[0].calculated.paidAdId).toHaveLength(64);
   });
 
   it('uses the analogous calendar month for the 12-month monthly movement', () => {
@@ -106,7 +137,33 @@ describe('transformSemrushCompany', () => {
     const evidence = transformSemrushCompany(invalidFixture, context);
 
     expect(evidence.keywords).toEqual([]);
-    expect(evidence.company.observed.organicCompetitors).toEqual([]);
+    expect(evidence.company.calculated.organicCompetitors).toEqual([]);
     expect(evidence.company.calculated.nonBrandShare).toBeNull();
+  });
+
+  it('models paid activity as true, explicit false, or unknown without an invalid paid section', () => {
+    const positive = transformSemrushCompany(semrushFixture[1], context);
+    const explicitZero = transformSemrushCompany({...structuredClone(semrushFixture[0]), paid_traffic: 0, paid_keywords: 0}, context);
+    const missingPaid = structuredClone(semrushFixture[0]);
+    delete missingPaid.paid;
+
+    expect(positive.company.calculated.paidActivityPresent).toBe(true);
+    expect(explicitZero.company.calculated.paidActivityPresent).toBe(false);
+    expect(transformSemrushCompany(missingPaid, context).company.calculated.paidActivityPresent).toBeNull();
+  });
+
+  it('sorts actual ISO dates by epoch and records bounded issues for invalid calendar strings', () => {
+    const record = structuredClone(semrushFixture[1]);
+    record.organic!.trend_global_monthly = [
+      ...Array.from({length: 12}, (_, index) => ({...semrushFixture[0].organic!.trend_global_monthly[0], date: `2024-02-${String(30 + index).padStart(2, '0')}`, organic_traffic: 900})),
+      {...semrushFixture[0].organic!.trend_global_monthly[0], date: '2024-01-01', organic_traffic: 10},
+      {...semrushFixture[0].organic!.trend_global_monthly[0], date: '2024-03-01', organic_traffic: 30},
+      {...semrushFixture[0].organic!.trend_global_monthly[0], date: '2024-02-01', organic_traffic: 20},
+    ];
+    const evidence = transformSemrushCompany(record, context);
+
+    expect(evidence.company.calculated.compactOrganicTrend.map((point) => point.date)).toEqual(['2024-01-01', '2024-02-01', '2024-03-01']);
+    expect(evidence.qualityIssues).toContainEqual(expect.objectContaining({code: 'invalid_trend_date', sourcePath: 'organic.trend_global_monthly[0].date', summary: 'invalid ISO calendar date omitted'}));
+    expect(evidence.qualityIssues.filter((issue) => issue.code === 'invalid_trend_date')).toHaveLength(10);
   });
 });

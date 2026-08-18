@@ -8,20 +8,23 @@ function finiteNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function providerDateParts(value: string): {year: number; month: number; day: number; timestamp: number} | null {
-  const match = /^(\d{4})(?:-?(\d{2})(?:-?(\d{2}))?)?$/.exec(value);
+export type ParsedIsoCalendarDate = {year: number; month: number; day: number; timestamp: number};
+
+/** Validates a provider date as an actual ISO calendar date without rewriting its string form. */
+export function parseIsoCalendarDate(value: string): ParsedIsoCalendarDate | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return null;
   const year = Number(match[1]);
-  const month = Number(match[2] ?? '01');
-  const day = Number(match[3] ?? '01');
+  const month = Number(match[2]);
+  const day = Number(match[3]);
   const timestamp = Date.UTC(year, month - 1, day);
   return Number.isFinite(timestamp) && new Date(timestamp).getUTCFullYear() === year && new Date(timestamp).getUTCMonth() === month - 1 && new Date(timestamp).getUTCDate() === day ? {year, month, day, timestamp} : null;
 }
 
 function sortedValidDates(points: DatedMetricPoint[]) {
   return points
-    .map((point) => ({...point, dateParts: providerDateParts(point.date)}))
-    .filter((point): point is DatedMetricPoint & {dateParts: {year: number; month: number; day: number; timestamp: number}} => point.dateParts !== null)
+    .map((point) => ({...point, dateParts: parseIsoCalendarDate(point.date)}))
+    .filter((point): point is DatedMetricPoint & {dateParts: ParsedIsoCalendarDate} => point.dateParts !== null)
     .sort((left, right) => left.dateParts.timestamp - right.dateParts.timestamp);
 }
 
