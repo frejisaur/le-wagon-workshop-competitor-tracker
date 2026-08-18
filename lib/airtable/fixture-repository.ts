@@ -161,7 +161,11 @@ export class FixtureCompetitorRepository implements CompetitorStore {
     const results = writes.map((write) => {
       const existing = [...table.values()].find((record) => record.fields[write.lookupField] === write.identity);
       const id = existing?.id ?? recordId(key, write.identity);
-      table.set(id, {id, fields: clone(write.fields)});
+      // Airtable PATCH leaves omitted fields untouched. Matching that behavior in
+      // fixture mode preserves agent workflow fields during a Railway-only update
+      // while still honoring explicit null invalidations.
+      const present = Object.fromEntries(Object.entries(write.fields).filter(([, value]) => value !== undefined));
+      table.set(id, {id, fields: clone({...existing?.fields, ...present})});
       return {identity: write.identity, recordId: id};
     });
     return {succeeded: results.length, failed: 0, results};
