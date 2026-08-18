@@ -1,10 +1,10 @@
 import type {AirtableFieldValue, AirtableFields, AirtableRecord} from '@/lib/airtable/types';
-import type {BuildEvidencePackageInput, EvidencePackage, EvidenceReference, EvidenceValue, PublishedInsightMetadata, ReviewMetadata} from '@/lib/agents/types';
+import {EvidencePackageSchema, type BuildEvidencePackageInput, type EvidencePackage, type EvidenceReference, type EvidenceValue, type PublishedInsightMetadata, type ReviewMetadata} from '@/lib/agents/types';
 
 // This is deliberately an allow-list, not a prefix match: future Airtable
 // columns (especially an accidental raw-payload column) cannot reach agents.
 const COMPANY_OBSERVED_FIELDS = new Set([
-  'Apollo Account ID', 'Apollo Record ID', 'Display Name', 'Segment', 'Apollo Website', 'Apify Domain', 'Apollo Account Stage', 'Apollo Lists', 'Apollo Employees', 'Apollo Industry', 'Apollo Company Country',
+  'Apify Domain',
   'Domain', 'Authority Score', 'Backlinks', 'Referring Domains', 'Follow Backlinks', 'No-follow Backlinks', 'Organic Traffic', 'Total Traffic', 'Organic Keywords', 'Organic Traffic Cost USD', 'Paid Traffic', 'Paid Keywords', 'Paid Traffic Cost USD', 'AI Visibility', 'AI Visibility Benchmark', 'AI Mentions', 'AI Cited Pages', 'Top Country', 'Top Country Traffic', 'Moz Domain Authority Raw', 'Moz Spam Score Raw',
   'Organic Competitors JSON', 'Organic Competitors Observed Count', 'Paid Competitors JSON', 'Paid Competitors Observed Count', 'AI Countries JSON', 'AI Countries Observed Count', 'AI by LLM JSON', 'AI by LLM Observed Count', 'SERP Codes JSON', 'SERP Codes Observed Count', 'Moz Top Pages JSON', 'Moz Top Pages Observed Count',
 ]);
@@ -58,16 +58,20 @@ function fieldSlug(value: string): string {
 }
 
 function observedProvenance(fields: AirtableFields) {
+  const database = stringField(fields, 'Observed • Database');
+  const observedAt = stringField(fields, 'Observed • At');
+  const rawDatasetRef = stringField(fields, 'Observed • Raw Ref');
   return {
     source: stringField(fields, 'Observed • Source') ?? 'airtable_curated',
-    database: stringField(fields, 'Observed • Database'),
-    observedAt: stringField(fields, 'Observed • At'),
-    rawDatasetRef: stringField(fields, 'Observed • Raw Ref'),
+    ...(database ? {database} : {}),
+    ...(observedAt ? {observedAt} : {}),
+    ...(rawDatasetRef ? {rawDatasetRef} : {}),
   };
 }
 
 function calculatedProvenance(fields: AirtableFields) {
-  return {source: 'deterministic_calculation', calculatedAt: stringField(fields, 'Calculated • At')};
+  const calculatedAt = stringField(fields, 'Calculated • At');
+  return {source: 'deterministic_calculation', ...(calculatedAt ? {calculatedAt} : {})};
 }
 
 function rowEvidence(ref: string, fields: AirtableFields, allowedFields: string[]): EvidenceReference | undefined {
@@ -112,6 +116,31 @@ function reviewMetadata(record: AirtableRecord | undefined): ReviewMetadata | un
   };
 }
 
+function qualityEvidence(companyId: string, fields: AirtableFields): EvidenceReference[] {
+  const raw = fields['Quality • Issues JSON'];
+  if (typeof raw !== 'string') return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .flatMap((issue) => {
+        if (!issue || typeof issue !== 'object') return [];
+        const code = (issue as Record<string, unknown>).code;
+        const sourcePath = (issue as Record<string, unknown>).sourcePath;
+        return typeof code === 'string' && /^[a-z0-9_]+$/.test(code) && typeof sourcePath === 'string'
+          ? [{code, sourcePath}]
+          : [];
+      })
+      .sort((left, right) => left.code.localeCompare(right.code) || left.sourcePath.localeCompare(right.sourcePath))
+      .map((issue, index) => {
+        const observedAt = stringField(fields, 'Observed • At');
+        return {ref: `quality:company:${companyId}:${issue.code}:${index}`, classification: 'observed' as const, source: 'data_quality', ...(observedAt ? {observedAt} : {}), value: issue};
+      });
+  } catch {
+    return [];
+  }
+}
+
 /** Builds an allow-listed evidence package from already-curated store records. */
 export function buildEvidencePackage(input: BuildEvidencePackageInput): EvidencePackage {
   const companyId = stringField(input.company.fields, 'Identity • Company ID');
@@ -148,5 +177,6 @@ export function buildEvidencePackage(input: BuildEvidencePackageInput): Evidence
     if (row) evidence.push(row);
   }
 
-  return {companyId, canonicalDomain, evidence: evidence.sort((left, right) => left.ref.localeCompare(right.ref)), published: publishedMetadata(input.publishedInsight), review: reviewMetadata(input.review)};
+  evidence.push(...qualityEvidence(companyId, input.company.fields));
+  return EvidencePackageSchema.parse({companyId, canonicalDomain, evidence: evidence.sort((left, right) => left.ref.localeCompare(right.ref)), published: publishedMetadata(input.publishedInsight), review: reviewMetadata(input.review)});
 }

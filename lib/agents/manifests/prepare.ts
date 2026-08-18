@@ -1,7 +1,7 @@
 import type {CompetitorStore, DashboardSnapshot} from '@/lib/airtable/types';
 import {buildEvidencePackage} from '@/lib/agents/evidence/build-package';
 import {fingerprintEvidence} from '@/lib/agents/evidence/fingerprint';
-import {AGENT_SKILL_VERSION, MAX_PREPARED_COMPANIES, PREPARED_MANIFEST_VERSION, type PreparedCompany, type PreparedManifest} from '@/lib/agents/types';
+import {AGENT_SKILL_VERSION, PREPARED_MANIFEST_VERSION, PreparedManifestSchema, validatePreparedLimit, type PreparedCompany, type PreparedManifest} from '@/lib/agents/types';
 import {selectDue} from './select-due';
 
 export type PrepareInsightsOptions = {
@@ -12,12 +12,6 @@ export type PrepareInsightsOptions = {
   skillVersion?: string;
   now?: Date;
 };
-
-function boundedLimit(limit: number | undefined): number {
-  if (limit === undefined) return MAX_PREPARED_COMPANIES;
-  if (!Number.isFinite(limit)) throw new TypeError('limit must be a finite number');
-  return Math.min(MAX_PREPARED_COMPANIES, Math.max(1, Math.floor(limit)));
-}
 
 function byCompany(snapshot: DashboardSnapshot, field: string): Map<string, typeof snapshot.keywords> {
   const grouped = new Map<string, typeof snapshot.keywords>();
@@ -31,26 +25,26 @@ function byCompany(snapshot: DashboardSnapshot, field: string): Map<string, type
   return grouped;
 }
 
-function metadataByCompany(records: DashboardSnapshot['publishedInsights']): Map<string, DashboardSnapshot['publishedInsights'][number]> {
-  return new Map(
-    [...records]
-      .sort((left, right) => left.id.localeCompare(right.id))
-      .flatMap((record) => {
-        const companyId = record.fields['Identity • Company ID'];
-        return typeof companyId === 'string' && companyId ? [[companyId, record] as const] : [];
-      }),
-  );
+function metadataByCompany(records: DashboardSnapshot['publishedInsights'], kind: 'published' | 'review'): Map<string, DashboardSnapshot['publishedInsights'][number]> {
+  const metadata = new Map<string, DashboardSnapshot['publishedInsights'][number]>();
+  for (const record of records) {
+    const companyId = record.fields['Identity • Company ID'];
+    if (typeof companyId !== 'string' || !companyId) continue;
+    if (metadata.has(companyId)) throw new TypeError(`duplicate_${kind}_records`);
+    metadata.set(companyId, record);
+  }
+  return metadata;
 }
 
 /** Prepares a deterministic, bounded manifest through the existing CompetitorStore boundary. */
 export async function prepareInsights(options: PrepareInsightsOptions): Promise<PreparedManifest> {
-  const limit = boundedLimit(options.limit);
+  const limit = validatePreparedLimit(options.limit);
   const skillVersion = options.skillVersion ?? AGENT_SKILL_VERSION;
   const snapshot = await options.repository.getDashboardSnapshot();
   const keywords = byCompany(snapshot, 'keywords');
   const paidAds = byCompany(snapshot, 'paidAds');
-  const published = metadataByCompany(snapshot.publishedInsights);
-  const reviews = metadataByCompany(snapshot.reviews);
+  const published = metadataByCompany(snapshot.publishedInsights, 'published');
+  const reviews = metadataByCompany(snapshot.reviews, 'review');
 
   const prepared: PreparedCompany[] = [];
   for (const company of [...snapshot.companies].sort((left, right) => String(left.fields['Identity • Company ID']).localeCompare(String(right.fields['Identity • Company ID'])))) {
@@ -63,5 +57,5 @@ export async function prepareInsights(options: PrepareInsightsOptions): Promise<
     prepared.push({...pkg, evidenceFingerprint, dueReasons});
     if (prepared.length >= limit) break;
   }
-  return {manifestVersion: PREPARED_MANIFEST_VERSION, skillVersion, dueOnly: options.due ?? false, limit, companies: prepared};
+  return PreparedManifestSchema.parse({manifestVersion: PREPARED_MANIFEST_VERSION, skillVersion, dueOnly: options.due ?? false, limit, companies: prepared});
 }

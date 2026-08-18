@@ -1,6 +1,8 @@
 import {describe, expect, it, vi} from 'vitest';
 import {prepareInsights} from '@/lib/agents/manifests/prepare';
 import {selectDue} from '@/lib/agents/manifests/select-due';
+import {buildEvidencePackage} from '@/lib/agents/evidence/build-package';
+import {runPrepareInsightsCli} from '@/jobs/prepare-insights';
 import type {CompetitorStore, DashboardSnapshot} from '@/lib/airtable/types';
 
 const NOW = new Date('2026-08-18T12:00:00.000Z');
@@ -81,6 +83,12 @@ describe('selectDue', () => {
     expect(selectDue(dueInput())).toEqual([]);
     expect(selectDue(dueInput({review: {status: 'needs_review', evidenceFingerprint: 'current-fingerprint', skillVersion: SKILL_VERSION, reviewReasons: []}}))).toEqual([]);
   });
+
+  it('suppresses current approved reviews unless explicit reviewer regeneration overrides it', () => {
+    const approved = {status: 'approved', evidenceFingerprint: 'current-fingerprint', skillVersion: SKILL_VERSION, reviewReasons: []};
+    expect(selectDue(dueInput({nextInsightDueAt: '2026-08-01T00:00:00.000Z', review: approved}))).toEqual([]);
+    expect(selectDue(dueInput({review: {...approved, reviewReasons: ['reviewer_requested_regeneration']}}))).toContain('reviewer_requested_regeneration');
+  });
 });
 
 describe('prepareInsights', () => {
@@ -97,6 +105,28 @@ describe('prepareInsights', () => {
     expect(JSON.stringify(manifest)).not.toContain('secret-token-never-exported');
   });
 
+  it('includes bounded quality issues as stable citation-safe evidence and excludes Apollo roster values', () => {
+    const package_ = buildEvidencePackage({
+      company: {
+        id: 'rec-company-alpha',
+        fields: {
+          'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example',
+          'Observed • Source': 'semrush', 'Observed • At': '2026-08-01T00:00:00.000Z', 'Observed • Raw Ref': 'dataset:alpha',
+          'Observed • Organic Traffic': 200, 'Observed • Display Name': 'Apollo Company Name', 'Observed • Apollo Website': 'https://apollo.example',
+          'Quality • Issues JSON': '[{"code":"suspicious_moz_top_page","sourcePath":"moz.top_pages[0]","summary":"provider text must not cross"}]',
+        },
+      }, keywords: [], paidAds: [],
+    });
+
+    expect(package_.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ref: 'quality:company:company-alpha:suspicious_moz_top_page:0', classification: 'observed', value: {code: 'suspicious_moz_top_page', sourcePath: 'moz.top_pages[0]'}}),
+    ]));
+    expect(JSON.stringify(package_)).not.toContain('Apollo Company Name');
+    expect(JSON.stringify(package_)).not.toContain('apollo.example');
+    expect(JSON.stringify(package_)).not.toContain('provider text must not cross');
+    expect(package_.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ref: 'company:company-alpha:metric:organic_traffic'})]));
+  });
+
   it('caps the default and requested manifest limit at ten and supports companyId', async () => {
     const repository = {getDashboardSnapshot: async () => snapshot(12)} as unknown as CompetitorStore;
     await expect(prepareInsights({due: true, repository, now: NOW})).resolves.toMatchObject({companies: expect.any(Array)});
@@ -107,5 +137,56 @@ describe('prepareInsights', () => {
     expect(defaultManifest.companies).toHaveLength(10);
     expect(cappedManifest.companies).toHaveLength(10);
     expect(selectedManifest.companies.map((company) => company.companyId)).toEqual(['company-11']);
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Infinity])('rejects invalid API limits consistently: %s', async (limit) => {
+    const repository = {getDashboardSnapshot: async () => snapshot()} as unknown as CompetitorStore;
+    await expect(prepareInsights({repository, limit, now: NOW})).rejects.toThrow(/limit/);
+  });
+
+  it.each(['0', '-1', '1.5', 'NaN', 'Infinity'])('rejects invalid CLI limits with a sanitized failure: %s', async (limit) => {
+    const result = await runPrepareInsightsCli(['--limit', limit]);
+    expect(result).toEqual({exitCode: 1, stdout: '{"status":"failed","error":"insight_prepare_failed"}'});
+  });
+
+  it('fails closed for duplicate reviews and duplicate published insights regardless of input order', async () => {
+    const base = snapshot();
+    const duplicateReview = {...base.reviews[0], id: 'rec-review-duplicate'};
+    const published = {
+      id: 'rec-insight-1', fields: {'Identity • Company ID': 'company-0', 'Workflow • Evidence Fingerprint': 'current', 'Workflow • Skill Version': SKILL_VERSION},
+    };
+    const duplicatePublished = {...published, id: 'rec-insight-2'};
+    for (const [reviews, publishedInsights] of [
+      [[...base.reviews, duplicateReview], []], [[duplicateReview, ...base.reviews], []],
+      [[], [published, duplicatePublished]], [[], [duplicatePublished, published]],
+    ] as const) {
+      const repository = {getDashboardSnapshot: async () => ({...base, reviews, publishedInsights})} as unknown as CompetitorStore;
+      await expect(prepareInsights({repository, now: NOW})).rejects.toThrow(/duplicate_(review|published)_records/);
+    }
+  });
+
+  it('validates the full manifest at the CLI boundary and does not serialize injected malformed data', async () => {
+    const result = await runPrepareInsightsCli([], {
+      repository: {} as CompetitorStore,
+      prepare: async () => ({manifestVersion: 'wrong', secret: 'never serialize'} as unknown as Awaited<ReturnType<typeof prepareInsights>>),
+    });
+
+    expect(result).toEqual({exitCode: 1, stdout: '{"status":"failed","error":"insight_prepare_failed"}'});
+  });
+
+  it('rejects an injected manifest with an invalid limit, due reason, fingerprint, reference, or empty evidence', async () => {
+    const malformed = {
+      manifestVersion: '1.0.0', skillVersion: SKILL_VERSION, dueOnly: true, limit: 0,
+      companies: [{
+        companyId: 'company-alpha', evidenceFingerprint: 'not-a-sha', dueReasons: ['unknown_reason'], evidence: [],
+        unexpectedRawPayload: 'never serialize',
+      }],
+    };
+    const result = await runPrepareInsightsCli([], {
+      repository: {} as CompetitorStore,
+      prepare: async () => malformed as unknown as Awaited<ReturnType<typeof prepareInsights>>,
+    });
+
+    expect(result).toEqual({exitCode: 1, stdout: '{"status":"failed","error":"insight_prepare_failed"}'});
   });
 });

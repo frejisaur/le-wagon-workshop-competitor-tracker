@@ -20,9 +20,39 @@ describe('fingerprintEvidence', () => {
   });
 
   it('changes when a canonical evidence scalar changes', () => {
-    const current = {evidence: [{ref: 'company:company-alpha:metric:organic_traffic', value: 200}]};
-    const changed = {evidence: [{ref: 'company:company-alpha:metric:organic_traffic', value: 201}]};
+    const current = {companyId: 'company-alpha', canonicalDomain: 'alpha.example', evidence: [{ref: 'company:company-alpha:metric:organic_traffic', value: 200}]};
+    const changed = {companyId: 'company-alpha', canonicalDomain: 'alpha.example', evidence: [{ref: 'company:company-alpha:metric:organic_traffic', value: 201}]};
 
     expect(fingerprintEvidence(current)).not.toBe(fingerprintEvidence(changed));
+  });
+
+  it('projects only top-level package fields while preserving nested evidence objects and arrays losslessly', () => {
+    const current = {
+      companyId: 'company-alpha', canonicalDomain: 'alpha.example',
+      evidence: [{ref: 'company:company-alpha:metric:organic_traffic', value: {review: {state: 'one'}, values: [0, {nested: true}]}}],
+      review: {untrustedReviewerNotes: 'top-level metadata must not affect evidence'},
+    };
+    const changedNestedReview = {
+      ...current,
+      evidence: [{...current.evidence[0], value: {review: {state: 'two'}, values: [0, {nested: true}]}}],
+      review: {untrustedReviewerNotes: 'different top-level metadata'},
+    };
+    const reordered = {
+      evidence: [{value: {values: [0, {nested: true}], review: {state: 'one'}}, ref: 'company:company-alpha:metric:organic_traffic'}],
+      canonicalDomain: 'alpha.example', companyId: 'company-alpha', runId: 'ignored-top-level-run-id',
+    };
+
+    expect(fingerprintEvidence(current)).not.toBe(fingerprintEvidence(changedNestedReview));
+    expect(fingerprintEvidence(current)).toBe(fingerprintEvidence(reordered));
+  });
+
+  it('normalizes negative zero to zero and rejects non-JSON evidence values instead of dropping them', () => {
+    const packageFor = (value: unknown) => ({companyId: 'company-alpha', canonicalDomain: 'alpha.example', evidence: [{ref: 'company:company-alpha:metric:test', value}]});
+
+    expect(fingerprintEvidence(packageFor(-0))).toBe(fingerprintEvidence(packageFor(0)));
+    expect(() => fingerprintEvidence(packageFor(Number.NaN))).toThrow(/JSON-serializable/);
+    expect(() => fingerprintEvidence(packageFor(Infinity))).toThrow(/JSON-serializable/);
+    expect(() => fingerprintEvidence(packageFor([1, undefined]))).toThrow(/JSON-serializable/);
+    expect(() => fingerprintEvidence(packageFor({retained: 1, unsupported: undefined}))).toThrow(/JSON-serializable/);
   });
 });
