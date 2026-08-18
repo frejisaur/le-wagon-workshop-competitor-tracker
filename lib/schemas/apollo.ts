@@ -7,7 +7,7 @@ export const ApolloRowSchema = z.object({
   Website: z.string(),
   'Apollo Account Id': z.string(),
   'Apollo Record Id': z.string(),
-}).passthrough();
+}).strip();
 
 export type ApolloRow = z.infer<typeof ApolloRowSchema>;
 

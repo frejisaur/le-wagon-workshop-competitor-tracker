@@ -78,13 +78,13 @@ const SerpFeaturesSchema = z.object({
 }).strict();
 
 const MozSchema = z.object({
-  domain_authority: nullableString, spam_score: nullableString, linking_root_domains: nullableString,
+  domain_authority: nullableString, spam_score: nullableString.optional(), linking_root_domains: nullableString,
   ranking_keywords: nullableString,
   linking_domains_trend: z.object({
     discovered_60d: z.array(nullableNumber), lost_60d: z.array(nullableNumber), net_30d: nullableNumber,
   }).strict(),
   top_linking_domains: z.array(z.object({domain: nullableString, domain_authority: nullableNumber}).strict()),
-  top_pages: z.array(z.object({url: z.string().url(), page_authority: nullableNumber}).strict()),
+  top_pages: z.array(z.object({url: z.string(), page_authority: nullableNumber}).strict()),
 }).strict();
 
 const sections = {authority: AuthoritySchema, backlinks_detail: BacklinksDetailSchema, organic: OrganicSchema, paid: PaidSchema, ai_search: AiSearchSchema, serp_features: SerpFeaturesSchema, moz: MozSchema} as const;

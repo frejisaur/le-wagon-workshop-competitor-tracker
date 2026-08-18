@@ -12,6 +12,6 @@
     "paid": {"competitors_total": 0, "competitors": [], "top_ads": []},
     "ai_search": {"ai_visibility": 2, "ai_visibility_benchmark": 1, "total_mentions": 3, "total_cited_pages": 1, "by_llm": [], "by_country": [], "top_cited_sources": []},
     "serp_features": {"total_positions": 1, "keywords_by_feature": {"999": 1}, "positions_by_feature": {"999": 1}},
-    "moz": {"domain_authority": "1.6k", "spam_score": "3%", "linking_root_domains": "bad", "ranking_keywords": "2", "linking_domains_trend": {"discovered_60d": [], "lost_60d": [], "net_30d": 0}, "top_linking_domains": [], "top_pages": [{"url": "not-a-url", "page_authority": 2}]}
+    "moz": {"domain_authority": "1.6k", "spam_score": "3%", "linking_root_domains": "bad", "ranking_keywords": "2", "linking_domains_trend": {"discovered_60d": [], "lost_60d": [], "net_30d": 0}, "top_linking_domains": [], "top_pages": [{"url": "not-a-url", "page_authority": "invalid"}]}
   }
 ]
