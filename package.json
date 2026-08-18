@@ -15,7 +15,7 @@
     "test:e2e": "playwright test",
     "import:initial": "tsx jobs/import-initial.ts",
     "enrich": "tsx jobs/enrich.ts",
-    "insights:prepare": "tsx jobs/insights-prepare.ts",
+    "insights:prepare": "tsx jobs/prepare-insights.ts",
     "insights:submit": "tsx jobs/insights-submit.ts",
     "insights:publish-approved": "tsx jobs/insights-publish-approved.ts"
   },
