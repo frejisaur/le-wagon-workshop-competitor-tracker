@@ -24,6 +24,7 @@ const existingPaidAdIds = new Set<string>();
 const paidAdPatchBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
 const paidAdPostBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
 const insightPatchBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
+const systemPatchBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
 const server = setupServer(
   http.get(`${endpoint}/v0/base/Companies`, ({request}) => {
     const formula = new URL(request.url).searchParams.get('filterByFormula') ?? '';
@@ -92,10 +93,16 @@ const server = setupServer(
     insightPatchBodies.push(body);
     return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-insight-${index}`, fields: {}}))});
   }),
+  http.get(`${endpoint}/v0/base/System`, () => HttpResponse.json({records: [{id: 'rec-system', fields: {'Identity • System ID': 'system'}}]})),
+  http.patch(`${endpoint}/v0/base/System`, async ({request}) => {
+    const body = await request.json() as {records: Array<{fields: Record<string, unknown>}>};
+    systemPatchBodies.push(body);
+    return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-system-${index}`, fields: {}}))});
+  }),
 );
 
 beforeAll(() => server.listen({onUnhandledRequest: 'error'}));
-afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; companyPatchBodies.length = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; companyLookupCount = 0; paidAdWriteCount = 0; paidAdIdentityLookupCount = 0; existingPaidAdIds.clear(); paidAdPatchBodies.length = 0; paidAdPostBodies.length = 0; insightPatchBodies.length = 0; });
+afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; companyPatchBodies.length = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; companyLookupCount = 0; paidAdWriteCount = 0; paidAdIdentityLookupCount = 0; existingPaidAdIds.clear(); paidAdPatchBodies.length = 0; paidAdPostBodies.length = 0; insightPatchBodies.length = 0; systemPatchBodies.length = 0; });
 afterAll(() => server.close());
 
 function makeCompanies(count: number): CompanyWrite[] {
@@ -230,6 +237,14 @@ describe('AirtableCompetitorRepository', () => {
       'Inferred • Summary': null, 'Inferred • Paid Message Summary': null, 'Inferred • AI Search Summary': null,
       'Observed • Themes JSON': expect.stringContaining('Traffic is measured.'),
     });
+  });
+
+  it('omits an unknown last-successful timestamp from the production System PATCH', async () => {
+    const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
+
+    await expect(repository.updateSystem({systemId: 'system', status: 'failed', processedCompanies: 0, succeededCompanies: 0, failedCompanies: 0})).resolves.toMatchObject({succeeded: 1, failed: 0});
+
+    expect(systemPatchBodies[0].records[0].fields).not.toHaveProperty('Workflow • Last Successful Run At');
   });
 
   it('returns per-record failures without losing successfully written record results', async () => {

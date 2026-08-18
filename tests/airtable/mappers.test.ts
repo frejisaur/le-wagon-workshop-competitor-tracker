@@ -1,8 +1,8 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {toAirtableCompanyFields, toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields} from '@/lib/airtable/mappers';
-import type {ClaimWire, CompanyWrite, InsightWireInput, ReviewWireInput} from '@/lib/airtable/types';
+import {toAirtableCompanyFields, toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields, toAirtableSystemFields} from '@/lib/airtable/mappers';
+import type {ClaimWire, CompanyWrite, InsightWireInput, ReviewWireInput, SystemWireInput} from '@/lib/airtable/types';
 import {FixtureCompetitorRepository} from '@/lib/airtable/fixture-repository';
 import type {CuratedPaidAd} from '@/lib/domain/metrics';
 
@@ -80,6 +80,18 @@ describe('Airtable mappers', () => {
     expect(JSON.parse(insightFields['Observed • Themes JSON'] as string)[0]).toMatchObject(observedClaim);
     expect(reviewFields).toMatchObject({'Identity • Company Link': ['rec-company-alpha'], 'Observed • Themes Claim Count': 1, 'Inferred • Claims Claim Count': 1});
     expect(JSON.parse(reviewFields['Inferred • Claims JSON'] as string)[0]).toMatchObject(inferredClaim);
+  });
+
+  it('omits an unknown last-successful timestamp from production System fields and preserves it in fixture PATCH parity', async () => {
+    const failed: SystemWireInput = {systemId: 'system', status: 'failed', processedCompanies: 0, succeededCompanies: 0, failedCompanies: 0};
+    const fields = toAirtableSystemFields(failed);
+    const repository = FixtureCompetitorRepository.fromSnapshot(resolve(process.cwd(), 'tests/fixtures/airtable/refresh-system-snapshot.json'));
+    const sentinel = '2026-08-01T00:00:00.000Z';
+    await repository.updateSystem({...failed, status: 'succeeded', lastSuccessfulRunAt: sentinel});
+    await repository.updateSystem(failed);
+
+    expect(fields).not.toHaveProperty('Workflow • Last Successful Run At');
+    expect((await repository.getDashboardSnapshot()).system[0].fields['Workflow • Last Successful Run At']).toBe(sentinel);
   });
 
   it('rejects oversized evidence-ref collections rather than silently removing references', () => {

@@ -112,6 +112,25 @@ describe('runEnrichment', () => {
     expect(system.fields['Workflow • Status']).toBe('failed');
   });
 
+  it('does not invalidate cache after a failed intended terminal publication even when failed-state recovery succeeds', async () => {
+    const store = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'airtable/refresh-system-snapshot.json'));
+    const invalidate = vi.fn(async () => {});
+    const statuses: string[] = [];
+    let terminalWrites = 0;
+    const failing = Object.create(store) as CompetitorStore;
+    failing.updateSystem = async (input) => {
+      statuses.push(input.status);
+      if (input.status !== 'running' && terminalWrites++ === 0) return {succeeded: 0, failed: 1, results: [{identity: 'system', error: 'unavailable'}]};
+      return store.updateSystem(input);
+    };
+
+    const report = await runEnrichment({repository: failing, runDomainOverview: async () => [providerRecords[0]], cache: {invalidate}});
+
+    expect(report).toMatchObject({status: 'failed', cacheInvalidated: false});
+    expect(statuses).toEqual(['running', 'succeeded', 'failed']);
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
   it('orders running, writes, terminal System transition, then cache invalidation', async () => {
     const store = repository();
     const {callOrder, dependencies: deps} = dependencies(store, async () => [providerRecords[0]]);
@@ -147,7 +166,28 @@ describe('runEnrichment', () => {
 
     expect(report.status).toBe('failed');
     expect(system.fields).toMatchObject({'Workflow • Status': 'failed', 'Railway • Run ID': 'railway-startup-snapshot'});
-    expect(system.fields['Workflow • Last Successful Run At']).toBeNull();
+    expect(system.fields).not.toHaveProperty('Workflow • Last Successful Run At');
+  });
+
+  it('omits an unknown last-successful timestamp after snapshot startup failure and preserves fixture state', async () => {
+    const store = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'airtable/refresh-system-snapshot.json'));
+    const sentinel = '2026-08-01T00:00:00.000Z';
+    await store.updateSystem({systemId: 'system', lastSuccessfulRunAt: sentinel, status: 'succeeded', processedCompanies: 1, succeededCompanies: 1, failedCompanies: 0});
+    const inputs: Array<Record<string, unknown>> = [];
+    const failing = Object.create(store) as CompetitorStore;
+    failing.getDashboardSnapshot = async () => { throw new Error('snapshot unavailable'); };
+    failing.updateSystem = async (input) => {
+      inputs.push(input);
+      return store.updateSystem(input);
+    };
+
+    const report = await runEnrichment({repository: failing, runDomainOverview: async () => providerRecords});
+    const system = (await store.getDashboardSnapshot()).system[0];
+
+    expect(report.status).toBe('failed');
+    expect(inputs).toEqual([expect.not.objectContaining({lastSuccessfulRunAt: expect.anything()})]);
+    expect(inputs[0]).not.toHaveProperty('lastSuccessfulRunAt');
+    expect(system.fields['Workflow • Last Successful Run At']).toBe(sentinel);
   });
 
   it('keeps a running-System write failure failed and still attempts a non-running terminal state', async () => {

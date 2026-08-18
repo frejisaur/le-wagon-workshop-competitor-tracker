@@ -46,8 +46,8 @@ deletions. No additional table or browser API fields are introduced.
 
 ## Validation
 
-- `npm test -- --run tests/workflows/enrich.test.ts tests/airtable/paid-ad-replacement.test.ts tests/jobs/enrich.test.ts tests/apify/client.test.ts tests/config/server-env.test.ts` — 29 passed.
-- `npm test` — 177 passed.
+- `npm test -- --run tests/workflows/enrich.test.ts tests/airtable/mappers.test.ts tests/airtable/repository.test.ts` — 50 passed.
+- `npm test` — 181 passed.
 - `node .agents/skills/competitor-data-contracts/scripts/generate-semrush-schema.mjs --check` — current.
 - `npx tsc --noEmit` — passed.
 - `npm run build` — passed.
@@ -58,3 +58,18 @@ deletions. No additional table or browser API fields are introduced.
 - Task 10 must supply the deployment-specific HTTP cache invalidation adapter
   and its operational authentication policy. This task intentionally does not
   select or configure one.
+
+## Fix Round 2
+
+- Cache invalidation is now authorized only by the first, intended terminal
+  System publication. A best-effort `failed` recovery after that publication
+  fails can clear a stale `running` state, but it cannot authorize cache work.
+- A failed initial dashboard snapshot leaves the previous successful-run value
+  unknown. The terminal failure System input and its Airtable field mapping omit
+  that optional field, so PATCH semantics preserve an existing timestamp. A
+  readable snapshot still treats an absent timestamp as known `null`, retaining
+  the established cache-failure correction behavior.
+- Regression coverage verifies the cache spy remains untouched after a
+  successful failed-state recovery, confirms the terminal input omits the
+  unknown timestamp, and checks production System PATCH payload and the
+  sanitized fixture repository have matching preserve-on-omission behavior.

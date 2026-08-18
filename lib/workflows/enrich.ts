@@ -139,7 +139,10 @@ function terminalSystem(runId: string, status: EnrichmentStatus, report: Pick<En
   return {
     systemId: SYSTEM_ID,
     lastRunFinishedAt: finishedAt,
-    ...(status === 'succeeded' ? {lastSuccessfulRunAt: finishedAt} : {lastSuccessfulRunAt: previousLastSuccessful ?? null}),
+    // An unreadable startup snapshot means the previous value is unknown. Omit
+    // it so the Airtable PATCH preserves the existing timestamp; known null is
+    // still an explicit null.
+    ...(status === 'succeeded' ? {lastSuccessfulRunAt: finishedAt} : previousLastSuccessful === undefined ? {} : {lastSuccessfulRunAt: previousLastSuccessful}),
     status,
     processedCompanies: report.processed,
     succeededCompanies: report.succeeded,
@@ -201,13 +204,18 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
   if (options.signal?.aborted) forwardAbort();
   else options.signal?.addEventListener('abort', forwardAbort, {once: true});
   let persistenceFailed = false;
-  let terminalUpdated = false;
+  // Only the first intended terminal publication authorizes cache invalidation.
+  // A recovery write merely clears a potentially stale `running` state.
+  let intendedTerminalPublished = false;
   let fatalStartupFailure = false;
   let previousLastSuccessful: string | null | undefined;
 
   try {
     const initial = await options.repository.getDashboardSnapshot();
-    previousLastSuccessful = initial.system.find((record) => record.fields['Identity • System ID'] === SYSTEM_ID)?.fields['Workflow • Last Successful Run At'] as string | null | undefined;
+    const storedLastSuccessful = initial.system.find((record) => record.fields['Identity • System ID'] === SYSTEM_ID)?.fields['Workflow • Last Successful Run At'];
+    // A readable snapshot makes an absent/malformed value a known explicit
+    // null. Only a failed snapshot read leaves the prior value unknown.
+    previousLastSuccessful = typeof storedLastSuccessful === 'string' ? storedLastSuccessful : null;
     const companies = activeCompanies(initial);
     report.processed = companies.length;
     const running = await options.repository.updateSystem({
@@ -316,18 +324,15 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
     try {
       const result = await options.repository.updateSystem(terminal);
       if (result.failed > 0) throw new Error('terminal_system_write_failed');
-      terminalUpdated = true;
+      intendedTerminalPublished = true;
     } catch {
       report.errors.push({stage: 'system', code: 'terminal_system_write_failed'});
       report.status = 'failed';
       try {
-        const recovery = await options.repository.updateSystem(terminalSystem(runId, 'failed', report, iso(now), previousLastSuccessful));
-        terminalUpdated = recovery.failed === 0;
-      } catch {
-        terminalUpdated = false;
-      }
+        await options.repository.updateSystem(terminalSystem(runId, 'failed', report, iso(now), previousLastSuccessful));
+      } catch {}
     }
-    if (terminalUpdated && report.succeeded > 0 && !persistenceFailed && options.cache) {
+    if (intendedTerminalPublished && report.succeeded > 0 && !persistenceFailed && options.cache) {
       try {
         await options.cache.invalidate();
         report.cacheInvalidated = true;
@@ -336,11 +341,8 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
         report.status = 'failed';
         report.cacheInvalidated = false;
         try {
-          const correction = await options.repository.updateSystem(terminalSystem(runId, 'failed', report, iso(now), previousLastSuccessful));
-          terminalUpdated = correction.failed === 0;
-        } catch {
-          terminalUpdated = false;
-        }
+          await options.repository.updateSystem(terminalSystem(runId, 'failed', report, iso(now), previousLastSuccessful));
+        } catch {}
       }
     }
   }
