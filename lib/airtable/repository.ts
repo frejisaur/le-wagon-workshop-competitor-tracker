@@ -104,19 +104,28 @@ export class AirtableCompetitorRepository implements CompetitorStore {
   async upsertPaidAds(paidAds: CuratedPaidAd[]): Promise<WriteResult> {
     const result = emptyResult();
     const writes: WriteItem[] = [];
+    const byCompany = new Map<string, CuratedPaidAd[]>();
     for (const ad of paidAds) {
+      const group = byCompany.get(ad.calculated.companyId) ?? [];
+      group.push(ad);
+      byCompany.set(ad.calculated.companyId, group);
+    }
+    for (const [companyId, ads] of byCompany) {
       try {
-        const companyRecord = await this.findCompanyRecordById(ad.calculated.companyId);
+        const companyRecord = await this.findCompanyRecordById(companyId);
         if (!companyRecord) {
-          result.failed += 1;
-          result.results.push({identity: ad.calculated.paidAdId, error: 'company_link_missing'});
+          result.failed += ads.length;
+          result.results.push(...ads.map((ad) => ({identity: ad.calculated.paidAdId, error: 'company_link_missing'})));
           continue;
         }
-        const existing = await this.client.list(AIRTABLE_TABLES.paidAds, {filterByFormula: equalityFormula('Identity • Paid Ad ID', ad.calculated.paidAdId)});
-        writes.push({identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, companyRecord.id), recordId: existing[0]?.id});
+        for (const ad of ads) {
+          const existing = await this.client.list(AIRTABLE_TABLES.paidAds, {filterByFormula: equalityFormula('Identity • Paid Ad ID', ad.calculated.paidAdId)});
+          const firstObservedAt = existing[0]?.fields['Observed • First Observed At'];
+          writes.push({identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, companyRecord.id, typeof firstObservedAt === 'string' ? firstObservedAt : undefined), recordId: existing[0]?.id});
+        }
       } catch (error) {
-        result.failed += 1;
-        result.results.push({identity: ad.calculated.paidAdId, error: errorMessage(error)});
+        result.failed += ads.length;
+        result.results.push(...ads.map((ad) => ({identity: ad.calculated.paidAdId, error: errorMessage(error)})));
       }
     }
     return this.performWrites(AIRTABLE_TABLES.paidAds, writes, result);

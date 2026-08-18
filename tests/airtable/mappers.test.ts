@@ -74,8 +74,38 @@ describe('Airtable mappers', () => {
     const paidAd = {observed: {classification: 'observed', source: 'semrush', observedAt: '2026-03-03T00:00:00.000Z', database: 'us', keyword: 'alpha', title: 'title', description: 'description', visibleUrl: 'alpha.example', landingUrl: 'https://alpha.example/ad', position: 1, previousPosition: null, volume: null, cpcUsd: null, keywordDifficulty: null, competition: null, traffic: null, trafficSharePct: null, trafficCostUsd: null}, calculated: {classification: 'calculated', inputs: ['companyId'], calculatedAt: '2026-03-03T00:00:00.000Z', companyId: 'company-alpha', paidAdId: 'ad-1', normalizedLandingUrl: 'https://alpha.example/ad'}} satisfies CuratedPaidAd;
 
     expect(toAirtablePaidAdFields(paidAd, 'rec-company-alpha')).toMatchObject({'Identity • Company ID': 'company-alpha', 'Identity • Company Link': ['rec-company-alpha'], 'Observed • First Observed At': '2026-03-03T00:00:00.000Z', 'Observed • Last Observed At': '2026-03-03T00:00:00.000Z'});
-    expect(toAirtableInsightFields(insight, 'rec-company-alpha')).toMatchObject({'Identity • Company Link': ['rec-company-alpha'], 'Observed • Themes JSON': JSON.stringify([observedClaim]), 'Inferred • Claims JSON': JSON.stringify([inferredClaim])});
-    expect(toAirtableReviewFields(review, 'rec-company-alpha')).toMatchObject({'Identity • Company Link': ['rec-company-alpha'], 'Observed • Themes JSON': JSON.stringify([observedClaim]), 'Inferred • Claims JSON': JSON.stringify([inferredClaim])});
+    const insightFields = toAirtableInsightFields(insight, 'rec-company-alpha');
+    const reviewFields = toAirtableReviewFields(review, 'rec-company-alpha');
+    expect(insightFields).toMatchObject({'Identity • Company Link': ['rec-company-alpha'], 'Observed • Themes Claim Count': 1, 'Inferred • Claims Claim Count': 1});
+    expect(JSON.parse(insightFields['Observed • Themes JSON'] as string)[0]).toMatchObject(observedClaim);
+    expect(reviewFields).toMatchObject({'Identity • Company Link': ['rec-company-alpha'], 'Observed • Themes Claim Count': 1, 'Inferred • Claims Claim Count': 1});
+    expect(JSON.parse(reviewFields['Inferred • Claims JSON'] as string)[0]).toMatchObject(inferredClaim);
+  });
+
+  it('keeps one oversized claim while bounding its evidence refs and recording original and retained counts', () => {
+    const oversizedClaim: ClaimWire = {
+      claimId: 'claim-large', conclusion: 'Still retained', classification: 'observed', confidence: 'high', confidenceReason: 'direct evidence',
+      evidenceRefs: Array.from({length: 101}, () => 'evidence-'.concat('x'.repeat(2_000))),
+    };
+    const insight: InsightWireInput = {insightId: 'insight-large', companyId: 'company-alpha', observedThemes: [oversizedClaim], inferredClaims: [], recommendations: [], agentHarness: 'test', model: 'test', skillVersion: '1', evidenceFingerprint: 'fingerprint', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z'};
+    const fields = toAirtableInsightFields(insight, 'rec-company-alpha');
+    const stored = JSON.parse(fields['Observed • Themes JSON'] as string) as Array<ClaimWire & {evidenceRefCount: number; evidenceRefsRetainedCount: number}>;
+
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({claimId: 'claim-large', evidenceRefCount: 101, evidenceRefsRetainedCount: expect.any(Number)});
+    expect(stored[0].evidenceRefsRetainedCount).toBeLessThanOrEqual(100);
+    expect(fields['Observed • Themes Claim Count']).toBe(1);
+    expect(fields['Observed • Themes Claims Retained Count']).toBe(1);
+    expect(new TextEncoder().encode(fields['Observed • Themes JSON'] as string).byteLength).toBeLessThanOrEqual(90_000);
+  });
+
+  it('records original and retained claim counts after the outer cardinality cap', () => {
+    const claims = Array.from({length: 101}, (_, index): ClaimWire => ({claimId: `claim-${index}`, conclusion: 'observed', classification: 'observed', confidence: 'high', confidenceReason: 'direct', evidenceRefs: []}));
+    const insight: InsightWireInput = {insightId: 'insight-many', companyId: 'company-alpha', observedThemes: claims, inferredClaims: [], recommendations: [], agentHarness: 'test', model: 'test', skillVersion: '1', evidenceFingerprint: 'fingerprint', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z'};
+    const fields = toAirtableInsightFields(insight, 'rec-company-alpha');
+
+    expect(fields).toMatchObject({'Observed • Themes Claim Count': 101, 'Observed • Themes Claims Retained Count': 100});
+    expect(JSON.parse(fields['Observed • Themes JSON'] as string)).toHaveLength(100);
   });
 
   it('uses a sanitized fixture snapshot only', () => {

@@ -35,9 +35,24 @@ function boundedJson<T>(items: T[], maxItems: number): string {
   return json(bounded);
 }
 
-function classifiedClaims(claims: ClaimWire[], classification: ClaimWire['classification']): string {
+export type StoredClaimWire = Omit<ClaimWire, 'evidenceRefs'> & {evidenceRefs: string[]; evidenceRefCount: number; evidenceRefsRetainedCount: number};
+type StoredClaimCollection = {json: string; originalCount: number; retainedCount: number};
+
+function claimWithBoundedEvidence(claim: ClaimWire): StoredClaimWire {
+  const evidenceRefs = claim.evidenceRefs.slice(0, JSON_CAPS.evidenceRefs);
+  const stored: StoredClaimWire = {...claim, evidenceRefs, evidenceRefCount: claim.evidenceRefs.length, evidenceRefsRetainedCount: evidenceRefs.length};
+  while (stored.evidenceRefs.length > 0 && new TextEncoder().encode(json(stored)).byteLength > MAX_AIRTABLE_JSON_BYTES) {
+    stored.evidenceRefs.pop();
+    stored.evidenceRefsRetainedCount = stored.evidenceRefs.length;
+  }
+  return stored;
+}
+
+function classifiedClaims(claims: ClaimWire[], classification: ClaimWire['classification']): StoredClaimCollection {
   if (claims.some((claim) => claim.classification !== classification)) throw new TypeError(`${classification} claim collection contains another classification`);
-  return boundedJson(claims, JSON_CAPS.claims);
+  const bounded = claims.map(claimWithBoundedEvidence).slice(0, JSON_CAPS.claims);
+  while (bounded.length > 0 && new TextEncoder().encode(json(bounded)).byteLength > MAX_AIRTABLE_JSON_BYTES) bounded.pop();
+  return {json: json(bounded), originalCount: claims.length, retainedCount: bounded.length};
 }
 
 function issueSummary(issue: DataQualityIssue): {code: DataQualityIssue['code']; sourcePath: string; summary: string} {
@@ -136,7 +151,7 @@ export function toAirtableKeywordFields(keyword: CuratedKeyword, companyAirtable
   };
 }
 
-export function toAirtablePaidAdFields(ad: CuratedPaidAd, companyAirtableRecordId: string): AirtableFields {
+export function toAirtablePaidAdFields(ad: CuratedPaidAd, companyAirtableRecordId: string, firstObservedAt = ad.observed.observedAt): AirtableFields {
   const {observed, calculated} = ad;
   return {
     'Identity • Paid Ad ID': calculated.paidAdId, 'Identity • Company ID': calculated.companyId, 'Identity • Company Link': [companyAirtableRecordId],
@@ -146,17 +161,23 @@ export function toAirtablePaidAdFields(ad: CuratedPaidAd, companyAirtableRecordI
     'Observed • Previous Position': observed.previousPosition, 'Observed • Volume': observed.volume, 'Observed • CPC USD': observed.cpcUsd,
     'Observed • Keyword Difficulty': observed.keywordDifficulty, 'Observed • Competition': observed.competition,
     'Observed • Traffic': observed.traffic, 'Observed • Traffic Share Pct': observed.trafficSharePct, 'Observed • Traffic Cost USD': observed.trafficCostUsd,
-    'Observed • First Observed At': observed.observedAt, 'Observed • Last Observed At': observed.observedAt,
+    'Observed • First Observed At': firstObservedAt, 'Observed • Last Observed At': observed.observedAt,
     'Calculated • Normalized Landing URL': calculated.normalizedLandingUrl, 'Calculated • At': calculated.calculatedAt,
   };
 }
 
 export function toAirtableInsightFields(insight: InsightWireInput, companyAirtableRecordId: string): AirtableFields {
-  return {'Identity • Insight ID': insight.insightId, 'Identity • Company ID': insight.companyId, 'Identity • Company Link': [companyAirtableRecordId], 'Observed • Themes JSON': classifiedClaims(insight.observedThemes, 'observed'), 'Inferred • Claims JSON': classifiedClaims(insight.inferredClaims, 'inferred'), 'Inferred • Paid Message Summary': insight.paidMessageSummary, 'Inferred • AI Search Summary': insight.aiSearchSummary, 'Inferred • Recommendations JSON': classifiedClaims(insight.recommendations, 'inferred'), 'Workflow • Agent Harness': insight.agentHarness, 'Workflow • Model': insight.model, 'Workflow • Skill Version': insight.skillVersion, 'Workflow • Evidence Fingerprint': insight.evidenceFingerprint, 'Workflow • Version': insight.workflowVersion, 'Workflow • Run ID': insight.runId, 'Workflow • Generated At': insight.generatedAt};
+  const observedThemes = classifiedClaims(insight.observedThemes, 'observed');
+  const inferredClaims = classifiedClaims(insight.inferredClaims, 'inferred');
+  const recommendations = classifiedClaims(insight.recommendations, 'inferred');
+  return {'Identity • Insight ID': insight.insightId, 'Identity • Company ID': insight.companyId, 'Identity • Company Link': [companyAirtableRecordId], 'Observed • Themes JSON': observedThemes.json, 'Observed • Themes Claim Count': observedThemes.originalCount, 'Observed • Themes Claims Retained Count': observedThemes.retainedCount, 'Inferred • Claims JSON': inferredClaims.json, 'Inferred • Claims Claim Count': inferredClaims.originalCount, 'Inferred • Claims Retained Count': inferredClaims.retainedCount, 'Inferred • Paid Message Summary': insight.paidMessageSummary, 'Inferred • AI Search Summary': insight.aiSearchSummary, 'Inferred • Recommendations JSON': recommendations.json, 'Inferred • Recommendations Claim Count': recommendations.originalCount, 'Inferred • Recommendations Claims Retained Count': recommendations.retainedCount, 'Workflow • Agent Harness': insight.agentHarness, 'Workflow • Model': insight.model, 'Workflow • Skill Version': insight.skillVersion, 'Workflow • Evidence Fingerprint': insight.evidenceFingerprint, 'Workflow • Version': insight.workflowVersion, 'Workflow • Run ID': insight.runId, 'Workflow • Generated At': insight.generatedAt};
 }
 
 export function toAirtableReviewFields(review: ReviewWireInput, companyAirtableRecordId: string): AirtableFields {
-  return {'Identity • Company ID': review.companyId, 'Identity • Company Link': [companyAirtableRecordId], 'Observed • Themes JSON': classifiedClaims(review.observedThemes, 'observed'), 'Inferred • Claims JSON': classifiedClaims(review.inferredClaims, 'inferred'), 'Inferred • Summary': review.summary, 'Inferred • Recommendations JSON': classifiedClaims(review.recommendations, 'inferred'), 'Inferred • Review Reasons JSON': boundedJson(review.reviewReasons, JSON_CAPS.reviewReasons), 'Workflow • Evidence Fingerprint': review.evidenceFingerprint, 'Workflow • Agent Harness': review.agentHarness, 'Workflow • Model': review.model, 'Workflow • Skill Version': review.skillVersion, 'Workflow • Version': review.workflowVersion, 'Workflow • Run ID': review.runId, 'Workflow • Generated At': review.generatedAt, 'Review • Status': review.status, 'Review • Notes': review.reviewerNotes, 'Review • Identity': review.reviewerIdentity, 'Review • At': review.reviewedAt};
+  const observedThemes = classifiedClaims(review.observedThemes, 'observed');
+  const inferredClaims = classifiedClaims(review.inferredClaims, 'inferred');
+  const recommendations = classifiedClaims(review.recommendations, 'inferred');
+  return {'Identity • Company ID': review.companyId, 'Identity • Company Link': [companyAirtableRecordId], 'Observed • Themes JSON': observedThemes.json, 'Observed • Themes Claim Count': observedThemes.originalCount, 'Observed • Themes Claims Retained Count': observedThemes.retainedCount, 'Inferred • Claims JSON': inferredClaims.json, 'Inferred • Claims Claim Count': inferredClaims.originalCount, 'Inferred • Claims Retained Count': inferredClaims.retainedCount, 'Inferred • Summary': review.summary, 'Inferred • Recommendations JSON': recommendations.json, 'Inferred • Recommendations Claim Count': recommendations.originalCount, 'Inferred • Recommendations Claims Retained Count': recommendations.retainedCount, 'Inferred • Review Reasons JSON': boundedJson(review.reviewReasons, JSON_CAPS.reviewReasons), 'Workflow • Evidence Fingerprint': review.evidenceFingerprint, 'Workflow • Agent Harness': review.agentHarness, 'Workflow • Model': review.model, 'Workflow • Skill Version': review.skillVersion, 'Workflow • Version': review.workflowVersion, 'Workflow • Run ID': review.runId, 'Workflow • Generated At': review.generatedAt, 'Review • Status': review.status, 'Review • Notes': review.reviewerNotes, 'Review • Identity': review.reviewerIdentity, 'Review • At': review.reviewedAt};
 }
 
 export function toAirtableSystemFields(system: SystemWireInput): AirtableFields {

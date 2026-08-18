@@ -73,14 +73,24 @@ export class FixtureCompetitorRepository implements CompetitorStore {
 
   async upsertPaidAds(paidAds: CuratedPaidAd[]): Promise<WriteResult> {
     const results: WriteResult['results'] = [];
+    const byCompany = new Map<string, CuratedPaidAd[]>();
     for (const ad of paidAds) {
-      const company = this.findCompanyRecordById(ad.calculated.companyId);
+      const group = byCompany.get(ad.calculated.companyId) ?? [];
+      group.push(ad);
+      byCompany.set(ad.calculated.companyId, group);
+    }
+    for (const [companyId, ads] of byCompany) {
+      const company = this.findCompanyRecordById(companyId);
       if (!company) {
-        results.push({identity: ad.calculated.paidAdId, error: 'company_link_missing'});
+        results.push(...ads.map((ad) => ({identity: ad.calculated.paidAdId, error: 'company_link_missing'})));
         continue;
       }
-      const written = await this.upsertMany('paidAds', [{identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, company.id), lookupField: 'Identity • Paid Ad ID'}]);
-      results.push(...written.results);
+      for (const ad of ads) {
+        const existing = [...this.table('paidAds').values()].find((record) => record.fields['Identity • Paid Ad ID'] === ad.calculated.paidAdId);
+        const firstObservedAt = existing?.fields['Observed • First Observed At'];
+        const written = await this.upsertMany('paidAds', [{identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, company.id, typeof firstObservedAt === 'string' ? firstObservedAt : undefined), lookupField: 'Identity • Paid Ad ID'}]);
+        results.push(...written.results);
+      }
     }
     return {succeeded: results.filter((item) => !item.error).length, failed: results.filter((item) => item.error).length, results};
   }

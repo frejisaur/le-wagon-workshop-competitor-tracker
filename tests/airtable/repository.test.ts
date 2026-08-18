@@ -5,7 +5,7 @@ import {AirtableClient} from '@/lib/airtable/client';
 import {AirtableCompetitorRepository, escapeFormulaLiteral} from '@/lib/airtable/repository';
 import {FixtureCompetitorRepository} from '@/lib/airtable/fixture-repository';
 import type {CompanyWrite} from '@/lib/airtable/types';
-import type {CuratedKeyword} from '@/lib/domain/metrics';
+import type {CuratedKeyword, CuratedPaidAd} from '@/lib/domain/metrics';
 
 const endpoint = 'https://airtable.test';
 const requestBodies: Array<{records: unknown[]}> = [];
@@ -16,11 +16,17 @@ let companyUpdateCount = 0;
 let keywordPostCount = 0;
 let failSecondKeywordBatch = false;
 const keywordBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
+let companyLookupCount = 0;
+let paidAdWriteCount = 0;
+const paidAdPatchBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
 const server = setupServer(
   http.get(`${endpoint}/v0/base/Companies`, ({request}) => {
     const formula = new URL(request.url).searchParams.get('filterByFormula') ?? '';
     if (formula.includes("'acct-1'")) return HttpResponse.json({records: [{id: 'rec-company-existing', fields: {'Identity • Company ID': 'company-existing', 'Observed • Apollo Account ID': 'acct-1', 'Identity • Canonical Domain': 'existing.example'}}]});
-    if (formula.includes("'company-alpha'")) return HttpResponse.json({records: [{id: 'rec-company-alpha', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example'}}]});
+    if (formula.includes("'company-alpha'")) {
+      companyLookupCount += 1;
+      return HttpResponse.json({records: [{id: 'rec-company-alpha', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example'}}]});
+    }
     return HttpResponse.json({records: []});
   }),
   http.post(`${endpoint}/v0/base/Companies`, async ({request}) => {
@@ -47,10 +53,26 @@ const server = setupServer(
     deletedKeywordIds = new URL(request.url).searchParams.getAll('records[]');
     return HttpResponse.json({records: deletedKeywordIds.map((id) => ({id, fields: {}}))});
   }),
+  http.get(`${endpoint}/v0/base/Paid%20Ads`, ({request}) => {
+    const formula = new URL(request.url).searchParams.get('filterByFormula') ?? '';
+    if (formula.includes("'ad-existing'")) return HttpResponse.json({records: [{id: 'rec-ad-existing', fields: {'Identity • Paid Ad ID': 'ad-existing', 'Observed • First Observed At': '2025-01-01T00:00:00.000Z'}}]});
+    return HttpResponse.json({records: []});
+  }),
+  http.post(`${endpoint}/v0/base/Paid%20Ads`, async ({request}) => {
+    paidAdWriteCount += 1;
+    const body = await request.json() as {records: Array<{fields: Record<string, unknown>}>};
+    return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-ad-${index}`, fields: {}}))});
+  }),
+  http.patch(`${endpoint}/v0/base/Paid%20Ads`, async ({request}) => {
+    paidAdWriteCount += 1;
+    const body = await request.json() as {records: Array<{fields: Record<string, unknown>}>};
+    paidAdPatchBodies.push(body);
+    return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-ad-${index}`, fields: {}}))});
+  }),
 );
 
 beforeAll(() => server.listen({onUnhandledRequest: 'error'}));
-afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; });
+afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; companyLookupCount = 0; paidAdWriteCount = 0; paidAdPatchBodies.length = 0; });
 afterAll(() => server.close());
 
 function makeCompanies(count: number): CompanyWrite[] {
@@ -77,6 +99,13 @@ function makeKeywords(count: number): CuratedKeyword[] {
     keyword.calculated.normalizedLandingUrl = `https://alpha.example/new-${index}`;
     return keyword;
   });
+}
+
+function makePaidAds(count: number, companyId = 'company-alpha', observedAt = '2026-03-03T00:00:00.000Z'): CuratedPaidAd[] {
+  return Array.from({length: count}, (_, index) => ({
+    observed: {classification: 'observed', source: 'semrush', observedAt, database: 'us', keyword: `paid-${index}`, title: 'title', description: 'description', visibleUrl: 'alpha.example', landingUrl: `https://alpha.example/ad-${index}`, position: 1, previousPosition: null, volume: null, cpcUsd: null, keywordDifficulty: null, competition: null, traffic: null, trafficSharePct: null, trafficCostUsd: null},
+    calculated: {classification: 'calculated', inputs: ['companyId'], calculatedAt: observedAt, companyId, paidAdId: `ad-${index}`, normalizedLandingUrl: `https://alpha.example/ad-${index}`},
+  }));
 }
 
 describe('AirtableCompetitorRepository', () => {
@@ -163,6 +192,43 @@ describe('AirtableCompetitorRepository', () => {
 
     expect(result).toMatchObject({succeeded: 10, failed: 1});
     expect(deletedKeywordIds).toEqual([]);
+  });
+
+  it('resolves one Company row for sixteen same-company paid ads', async () => {
+    const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
+    const result = await repository.upsertPaidAds(makePaidAds(16));
+
+    expect(result).toMatchObject({succeeded: 16, failed: 0});
+    expect(companyLookupCount).toBe(1);
+    expect(paidAdWriteCount).toBe(2);
+  });
+
+  it('fails a missing paid-ad company group without issuing paid-ad writes', async () => {
+    const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
+    const result = await repository.upsertPaidAds(makePaidAds(2, 'company-missing'));
+
+    expect(result).toMatchObject({succeeded: 0, failed: 2});
+    expect(paidAdWriteCount).toBe(0);
+  });
+
+  it('preserves a paid ad first-observed timestamp while updating its last-observed timestamp', async () => {
+    const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
+    const ad = makePaidAds(1, 'company-alpha', '2026-03-03T00:00:00.000Z')[0];
+    ad.calculated.paidAdId = 'ad-existing';
+
+    await expect(repository.upsertPaidAds([ad])).resolves.toMatchObject({succeeded: 1, failed: 0});
+    expect(paidAdPatchBodies[0].records[0].fields).toMatchObject({'Observed • First Observed At': '2025-01-01T00:00:00.000Z', 'Observed • Last Observed At': '2026-03-03T00:00:00.000Z'});
+  });
+
+  it('preserves paid first-observed time in the fixture repository too', async () => {
+    const repository = FixtureCompetitorRepository.fromSnapshot(`${process.cwd()}/tests/fixtures/airtable/base-snapshot.json`);
+    const first = makePaidAds(1, 'company-alpha', '2025-01-01T00:00:00.000Z')[0];
+    const later = makePaidAds(1, 'company-alpha', '2026-03-03T00:00:00.000Z')[0];
+    await repository.upsertPaidAds([first]);
+    await repository.upsertPaidAds([later]);
+
+    const snapshot = await repository.getDashboardSnapshot();
+    expect(snapshot.paidAds[0].fields).toMatchObject({'Observed • First Observed At': '2025-01-01T00:00:00.000Z', 'Observed • Last Observed At': '2026-03-03T00:00:00.000Z'});
   });
 
   it('escapes formula literals without interpolating newlines, quotes, or backslashes', () => {
