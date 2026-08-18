@@ -99,8 +99,34 @@ describe('Airtable mappers', () => {
     expect(new TextEncoder().encode(fields['Observed • Themes JSON'] as string).byteLength).toBeLessThanOrEqual(90_000);
   });
 
+  it('rejects an Insight or Review when a claim cannot retain one complete evidence ref without exposing it', () => {
+    const oversizedEvidenceRef = `private-evidence-ref-${'x'.repeat(90_000)}`;
+    const claim: ClaimWire = {claimId: 'claim-oversized-ref', conclusion: 'Observed', classification: 'observed', confidence: 'high', confidenceReason: 'Direct', evidenceRefs: [oversizedEvidenceRef]};
+    const insight: InsightWireInput = {insightId: 'insight-oversized-ref', companyId: 'company-alpha', observedThemes: [claim], inferredClaims: [], recommendations: [], agentHarness: 'test', model: 'test', skillVersion: '1', evidenceFingerprint: 'fingerprint', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z'};
+    const review: ReviewWireInput = {companyId: 'company-alpha', observedThemes: [claim], inferredClaims: [], summary: 'review', recommendations: [], reviewReasons: [], evidenceFingerprint: 'fingerprint', agentHarness: 'test', model: 'test', skillVersion: '1', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z', status: 'needs_review'};
+
+    for (const map of [() => toAirtableInsightFields(insight, 'rec-company-alpha'), () => toAirtableReviewFields(review, 'rec-company-alpha')]) {
+      let thrown: unknown;
+      try {
+        map();
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(TypeError);
+      expect(String(thrown)).toContain('claim cannot retain evidence within Airtable JSON byte budget');
+      expect(String(thrown)).not.toContain('private-evidence-ref');
+    }
+  });
+
+  it('rejects a claim with no evidence refs instead of persisting evidenceRefs as empty', () => {
+    const claim: ClaimWire = {claimId: 'claim-no-evidence', conclusion: 'Observed', classification: 'observed', confidence: 'high', confidenceReason: 'Direct', evidenceRefs: []};
+    const insight: InsightWireInput = {insightId: 'insight-no-evidence', companyId: 'company-alpha', observedThemes: [claim], inferredClaims: [], recommendations: [], agentHarness: 'test', model: 'test', skillVersion: '1', evidenceFingerprint: 'fingerprint', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z'};
+
+    expect(() => toAirtableInsightFields(insight, 'rec-company-alpha')).toThrow('claim requires at least one evidence ref');
+  });
+
   it('records original and retained claim counts after the outer cardinality cap', () => {
-    const claims = Array.from({length: 101}, (_, index): ClaimWire => ({claimId: `claim-${index}`, conclusion: 'observed', classification: 'observed', confidence: 'high', confidenceReason: 'direct', evidenceRefs: []}));
+    const claims = Array.from({length: 101}, (_, index): ClaimWire => ({claimId: `claim-${index}`, conclusion: 'observed', classification: 'observed', confidence: 'high', confidenceReason: 'direct', evidenceRefs: [`evidence-${index}`]}));
     const insight: InsightWireInput = {insightId: 'insight-many', companyId: 'company-alpha', observedThemes: claims, inferredClaims: [], recommendations: [], agentHarness: 'test', model: 'test', skillVersion: '1', evidenceFingerprint: 'fingerprint', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z'};
     const fields = toAirtableInsightFields(insight, 'rec-company-alpha');
 
@@ -108,15 +134,19 @@ describe('Airtable mappers', () => {
     expect(JSON.parse(fields['Observed • Themes JSON'] as string)).toHaveLength(100);
   });
 
-  it('retains the first multibyte near-boundary claim within its actual JSON array budget', () => {
-    const claim: ClaimWire = {claimId: 'claim-multibyte', conclusion: 'é'.repeat(50_000), classification: 'observed', confidence: 'high', confidenceReason: '理由'.repeat(5_000), evidenceRefs: []};
-    const insight: InsightWireInput = {insightId: 'insight-boundary', companyId: 'company-alpha', observedThemes: [claim, {...claim, claimId: 'tail-claim'}], inferredClaims: [], recommendations: [], agentHarness: 'test', model: 'test', skillVersion: '1', evidenceFingerprint: 'fingerprint', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z'};
+  it('fits multiple near-boundary claims while retaining a complete evidence ref for each claim', () => {
+    const first: ClaimWire = {claimId: 'claim-multibyte', conclusion: 'é'.repeat(44_000), classification: 'observed', confidence: 'high', confidenceReason: 'direct', evidenceRefs: ['evidence-first']};
+    const second: ClaimWire = {claimId: 'tail-claim', conclusion: 'é'.repeat(2_000), classification: 'observed', confidence: 'high', confidenceReason: 'direct', evidenceRefs: ['evidence-second']};
+    const insight: InsightWireInput = {insightId: 'insight-boundary', companyId: 'company-alpha', observedThemes: [first, second], inferredClaims: [], recommendations: [], agentHarness: 'test', model: 'test', skillVersion: '1', evidenceFingerprint: 'fingerprint', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z'};
     const fields = toAirtableInsightFields(insight, 'rec-company-alpha');
     const json = fields['Observed • Themes JSON'] as string;
+    const stored = JSON.parse(json) as Array<ClaimWire & {evidenceRefsRetainedCount: number}>;
 
-    expect(JSON.parse(json)[0]).toMatchObject({claimId: 'claim-multibyte'});
+    expect(stored).toHaveLength(2);
+    expect(stored.map((claim) => claim.evidenceRefs)).toEqual([['evidence-first'], ['evidence-second']]);
+    expect(stored.every((claim) => claim.evidenceRefsRetainedCount >= 1)).toBe(true);
     expect(new TextEncoder().encode(json).byteLength).toBeLessThanOrEqual(90_000);
-    expect(fields).toMatchObject({'Observed • Themes Claim Count': 2, 'Observed • Themes Claims Retained Count': 1});
+    expect(fields).toMatchObject({'Observed • Themes Claim Count': 2, 'Observed • Themes Claims Retained Count': 2});
   });
 
   it('uses a sanitized fixture snapshot only', () => {

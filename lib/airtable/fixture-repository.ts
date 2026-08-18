@@ -80,17 +80,22 @@ export class FixtureCompetitorRepository implements CompetitorStore {
       byCompany.set(ad.calculated.companyId, group);
     }
     for (const [companyId, ads] of byCompany) {
-      const company = this.findCompanyRecordById(companyId);
-      if (!company) {
-        results.push(...ads.map((ad) => ({identity: ad.calculated.paidAdId, error: 'company_link_missing'})));
-        continue;
-      }
-      for (const ad of ads) {
-        const existing = [...this.table('paidAds').values()].find((record) => record.fields['Identity • Paid Ad ID'] === ad.calculated.paidAdId);
-        const firstObservedAt = existing?.fields['Observed • First Observed At'];
-        const lastObservedAt = existing?.fields['Observed • Last Observed At'];
-        const written = await this.upsertMany('paidAds', [{identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, company.id, typeof firstObservedAt === 'string' ? firstObservedAt : undefined, typeof lastObservedAt === 'string' ? lastObservedAt : undefined), lookupField: 'Identity • Paid Ad ID'}]);
+      try {
+        const company = this.findCompanyRecordById(companyId);
+        if (!company) {
+          results.push(...ads.map((ad) => ({identity: ad.calculated.paidAdId, error: 'company_link_missing'})));
+          continue;
+        }
+        const staged = ads.map((ad) => {
+          const existing = [...this.table('paidAds').values()].find((record) => record.fields['Identity • Paid Ad ID'] === ad.calculated.paidAdId);
+          const firstObservedAt = existing?.fields['Observed • First Observed At'];
+          const lastObservedAt = existing?.fields['Observed • Last Observed At'];
+          return {identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, company.id, typeof firstObservedAt === 'string' ? firstObservedAt : undefined, typeof lastObservedAt === 'string' ? lastObservedAt : undefined), lookupField: 'Identity • Paid Ad ID'};
+        });
+        const written = await this.upsertMany('paidAds', staged);
         results.push(...written.results);
+      } catch {
+        results.push(...ads.map((ad) => ({identity: ad.calculated.paidAdId, error: 'paid_ad_group_failed'})));
       }
     }
     return {succeeded: results.filter((item) => !item.error).length, failed: results.filter((item) => item.error).length, results};

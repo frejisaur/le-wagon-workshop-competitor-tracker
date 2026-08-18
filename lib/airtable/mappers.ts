@@ -42,11 +42,8 @@ function byteLength(value: unknown): number {
   return new TextEncoder().encode(json(value)).byteLength;
 }
 
-function fitsClaimArray(claim: StoredClaimWire): boolean {
-  return byteLength([claim]) <= MAX_AIRTABLE_JSON_BYTES;
-}
-
-function trimClaimTextToFit(claim: StoredClaimWire, field: 'conclusion' | 'confidenceReason'): void {
+function trimClaimTextToFit(claims: StoredClaimWire[], claimIndex: number, field: 'conclusion' | 'confidenceReason'): void {
+  const claim = claims[claimIndex];
   const codePoints = Array.from(claim[field]);
   let low = 0;
   let high = codePoints.length;
@@ -54,7 +51,7 @@ function trimClaimTextToFit(claim: StoredClaimWire, field: 'conclusion' | 'confi
   while (low <= high) {
     const middle = Math.floor((low + high) / 2);
     claim[field] = codePoints.slice(0, middle).join('');
-    if (fitsClaimArray(claim)) {
+    if (byteLength(claims) <= MAX_AIRTABLE_JSON_BYTES) {
       best = claim[field];
       low = middle + 1;
     } else {
@@ -65,25 +62,31 @@ function trimClaimTextToFit(claim: StoredClaimWire, field: 'conclusion' | 'confi
 }
 
 function claimWithBoundedEvidence(claim: ClaimWire): StoredClaimWire {
+  if (claim.evidenceRefs.length === 0) throw new TypeError('claim requires at least one evidence ref');
   const evidenceRefs = claim.evidenceRefs.slice(0, JSON_CAPS.evidenceRefs);
-  const stored: StoredClaimWire = {...claim, evidenceRefs, evidenceRefCount: claim.evidenceRefs.length, evidenceRefsRetainedCount: evidenceRefs.length};
-  while (stored.evidenceRefs.length > 0 && !fitsClaimArray(stored)) {
-    stored.evidenceRefs.pop();
-    stored.evidenceRefsRetainedCount = stored.evidenceRefs.length;
-  }
-  if (!fitsClaimArray(stored)) trimClaimTextToFit(stored, 'conclusion');
-  if (!fitsClaimArray(stored)) trimClaimTextToFit(stored, 'confidenceReason');
-  if (!fitsClaimArray(stored)) throw new TypeError('claim cannot fit the Airtable JSON byte budget');
-  return stored;
+  return {...claim, evidenceRefs, evidenceRefCount: claim.evidenceRefs.length, evidenceRefsRetainedCount: evidenceRefs.length};
 }
 
 function classifiedClaims(claims: ClaimWire[], classification: ClaimWire['classification']): StoredClaimCollection {
   if (claims.some((claim) => claim.classification !== classification)) throw new TypeError(`${classification} claim collection contains another classification`);
-  const bounded: StoredClaimWire[] = [];
-  for (const claim of claims.slice(0, JSON_CAPS.claims).map(claimWithBoundedEvidence)) {
-    if (byteLength([...bounded, claim]) > MAX_AIRTABLE_JSON_BYTES) break;
-    bounded.push(claim);
+  const bounded = claims.slice(0, JSON_CAPS.claims).map(claimWithBoundedEvidence);
+  while (byteLength(bounded) > MAX_AIRTABLE_JSON_BYTES) {
+    let claimWithExtraEvidence: StoredClaimWire | undefined;
+    for (let index = bounded.length - 1; index >= 0; index -= 1) {
+      if (bounded[index].evidenceRefs.length > 1) {
+        claimWithExtraEvidence = bounded[index];
+        break;
+      }
+    }
+    if (!claimWithExtraEvidence) break;
+    claimWithExtraEvidence.evidenceRefs.pop();
+    claimWithExtraEvidence.evidenceRefsRetainedCount = claimWithExtraEvidence.evidenceRefs.length;
   }
+  for (let index = bounded.length - 1; index >= 0 && byteLength(bounded) > MAX_AIRTABLE_JSON_BYTES; index -= 1) {
+    trimClaimTextToFit(bounded, index, 'conclusion');
+    if (byteLength(bounded) > MAX_AIRTABLE_JSON_BYTES) trimClaimTextToFit(bounded, index, 'confidenceReason');
+  }
+  if (byteLength(bounded) > MAX_AIRTABLE_JSON_BYTES) throw new TypeError('claim cannot retain evidence within Airtable JSON byte budget');
   return {json: json(bounded), originalCount: claims.length, retainedCount: bounded.length};
 }
 
