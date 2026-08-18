@@ -9,7 +9,7 @@ import {transformSemrushCompany} from '@/lib/transforms/semrush-to-domain';
 export type ImportCompanyError = {
   canonicalDomain: string;
   companyId?: string;
-  stage: 'identity' | 'company' | 'keywords' | 'paid_ads' | 'enrichment';
+  stage: 'validation' | 'identity' | 'company' | 'keywords' | 'paid_ads' | 'enrichment';
   message: string;
 };
 
@@ -105,11 +105,13 @@ function apolloWriteFields(joined: JoinedRosterCompany): Pick<CompanyWrite, 'ide
   };
 }
 
-function toUnenrichedWrite(joined: JoinedRosterCompany, companyId: string): UnenrichedCompanyWrite {
+function toUnenrichedWrite(joined: JoinedRosterCompany, companyId: string, dueAt: string): UnenrichedCompanyWrite {
   return {
     companyId,
     ...apolloWriteFields(joined),
     qualityIssues: [],
+    evidenceFingerprint: null,
+    nextAgentEnrichmentDueAt: dueAt,
   };
 }
 
@@ -146,15 +148,55 @@ function batches(count: number): number {
   return Math.ceil(count / 10);
 }
 
-function estimatedApiCalls(prepared: PreparedCompany[], accepted: number, dryRun: boolean): number {
+function writeBatches(creates: number, updates: number): number {
+  return batches(creates) + batches(updates);
+}
+
+function existingRecordsByCompany(snapshot: DashboardSnapshot | undefined): Map<string, Array<{identity: string}>> {
+  const result = new Map<string, Array<{identity: string}>>();
+  for (const record of snapshot?.keywords ?? []) {
+    const companyId = record.fields['Identity • Company ID'];
+    const identity = record.fields['Identity • Keyword ID'];
+    if (typeof companyId !== 'string' || typeof identity !== 'string') continue;
+    const entries = result.get(companyId) ?? [];
+    entries.push({identity});
+    result.set(companyId, entries);
+  }
+  return result;
+}
+
+/** Conservative HTTP mutation estimate: known writes/deletes are never omitted. */
+function estimatedWriteCalls(snapshot: DashboardSnapshot | undefined, prepared: PreparedCompany[]): {total: number; keywordDeleteBatches: number} {
+  const existingCompanyIds = new Set((snapshot?.companies ?? []).map((company) => company.fields['Identity • Company ID']).filter((id): id is string => typeof id === 'string'));
+  const companyCreates = prepared.filter((company) => !existingCompanyIds.has(company.companyId)).length;
+  const companyUpdates = prepared.length - companyCreates;
+  const existingKeywords = existingRecordsByCompany(snapshot);
+  let keywordWrites = 0;
+  let keywordDeleteBatches = 0;
+  for (const company of prepared.filter((company) => company.write.observed)) {
+    const existing = existingKeywords.get(company.companyId) ?? [];
+    const existingIds = new Set(existing.map((record) => record.identity));
+    const updates = company.keywords.filter((keyword) => existingIds.has(keyword.calculated.keywordId)).length;
+    keywordWrites += writeBatches(company.keywords.length - updates, updates);
+    // Replacement deletes occur only after successful writes; this upper bound
+    // intentionally includes every current record to avoid underestimating.
+    keywordDeleteBatches += batches(existing.length);
+  }
+  const existingPaidAdIds = new Set((snapshot?.paidAds ?? []).map((ad) => ad.fields['Identity • Paid Ad ID']).filter((id): id is string => typeof id === 'string'));
+  const paidAds = prepared.flatMap((company) => company.paidAds);
+  const paidAdUpdates = paidAds.filter((ad) => existingPaidAdIds.has(ad.calculated.paidAdId)).length;
+  return {total: writeBatches(companyCreates, companyUpdates) + keywordWrites + keywordDeleteBatches + writeBatches(paidAds.length - paidAdUpdates, paidAdUpdates), keywordDeleteBatches};
+}
+
+function estimatedApiCalls(prepared: PreparedCompany[], accepted: number, dryRun: boolean, knownWriteCalls: number): number {
   if (dryRun) return 0;
   const enriched = prepared.filter((company) => company.write.observed);
   const paidAds = enriched.flatMap((company) => company.paidAds);
   // Snapshot (six tables), identity lookups (at most two each), company lookup
   // and write batches, then dependent keyword/ad lookup and write batches.
-  return 6 + accepted * 2 + prepared.length * 2 + batches(prepared.length)
-    + enriched.length * 2 + enriched.reduce((sum, company) => sum + batches(company.keywords.length), 0)
-    + (paidAds.length > 0 ? enriched.filter((company) => company.paidAds.length > 0).length + paidAds.length + batches(paidAds.length) : 0);
+  return 6 + accepted * 2 + prepared.length * 2 + enriched.length * 2
+    + (paidAds.length > 0 ? enriched.filter((company) => company.paidAds.length > 0).length + paidAds.length : 0)
+    + knownWriteCalls;
 }
 
 /**
@@ -168,7 +210,11 @@ export async function runInitialImport(options: InitialImportOptions): Promise<I
   const observedAt = options.observedAt ?? nowIso();
   const calculatedAt = options.calculatedAt ?? observedAt;
   const join = joinRoster(options.apolloRows, options.semrushRecords, {observedAt, rawRef: options.rawRef});
-  const errors: ImportCompanyError[] = [];
+  const errors: ImportCompanyError[] = join.rejections.map((rejection) => ({
+    canonicalDomain: rejection.canonicalDomain ?? 'unresolved',
+    stage: 'validation',
+    message: rejection.code,
+  }));
   const repository = options.repository;
   const snapshot = dryRun ? undefined : await repository!.getDashboardSnapshot();
   const current = options.recordBudgetCounts ?? (snapshot ? snapshotCounts(snapshot) : emptyCounts());
@@ -204,7 +250,7 @@ export async function runInitialImport(options: InitialImportOptions): Promise<I
     if (!companyId) continue;
     const semrush = selectedSemrushRecord(joined);
     if (!semrush) {
-      if (joined.semrush.records.length === 0) prepared.push({joined, companyId, write: toUnenrichedWrite(joined, companyId), keywords: [], paidAds: []});
+      if (joined.semrush.records.length === 0) prepared.push({joined, companyId, write: toUnenrichedWrite(joined, companyId, observedAt), keywords: [], paidAds: []});
       else recordError(errors, joined, 'enrichment', 'multiple_current_semrush_observations_requires_selection', companyId);
       continue;
     }
@@ -227,6 +273,8 @@ export async function runInitialImport(options: InitialImportOptions): Promise<I
           observed: transformed.company.observed,
           calculated: transformed.company.calculated,
           qualityIssues: transformed.qualityIssues,
+          evidenceFingerprint: null,
+          nextAgentEnrichmentDueAt: observedAt,
         },
         keywords: transformed.keywords,
         paidAds: transformed.paidAds,
@@ -238,13 +286,13 @@ export async function runInitialImport(options: InitialImportOptions): Promise<I
 
   const projected = projectCounts(current, snapshot, prepared);
   const estimate = estimateRecordBudget(projected);
-  const estimatedWriteCalls = prepared.length + prepared.filter((company) => company.write.observed).length + prepared.filter((company) => company.paidAds.length > 0).length;
-  const apiCalls = estimatedApiCalls(prepared, join.accepted.length, dryRun);
+  const writeEstimate = estimatedWriteCalls(snapshot, prepared);
+  const apiCalls = estimatedApiCalls(prepared, join.accepted.length, dryRun, writeEstimate.total);
   const recordBudget: ImportRecordBudget = {
     ...estimate,
     current,
     projected,
-    estimatedWriteCalls,
+    estimatedWriteCalls: writeEstimate.total,
     estimatedApiCalls: apiCalls,
     ...(!estimate.withinFreeLimit ? {failure: 'record_budget_exceeded' as const} : {}),
   };
@@ -252,20 +300,20 @@ export async function runInitialImport(options: InitialImportOptions): Promise<I
     runId,
     accepted: join.accepted.length,
     unenriched: join.unmatchedApollo.length,
-    rejected: join.rejections.filter((rejection) => rejection.provider === 'apollo').length,
+    rejected: new Set(join.rejections.flatMap((rejection) => rejection.apolloIndex === undefined ? [] : [rejection.apolloIndex])).size,
     apifyOnly: join.apifyOnly.length,
     recordBudget,
     errors,
   };
 
   if (dryRun || !estimate.withinFreeLimit) {
-    return {...baseReport, succeeded: 0, failed: errors.length};
+    return {...baseReport, succeeded: 0, failed: errors.filter((error) => error.stage !== 'validation').length};
   }
 
   const companyWrites = await repository!.upsertCompanies(prepared.map((company) => company.write));
   const companyResultById = new Map(companyWrites.results.map((result) => [result.identity, result]));
   let succeeded = 0;
-  let failed = errors.length;
+  let failed = errors.filter((error) => error.stage !== 'validation').length;
 
   for (const company of prepared) {
     const companyResult = companyResultById.get(company.companyId);

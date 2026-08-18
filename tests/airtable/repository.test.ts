@@ -13,6 +13,7 @@ let rateLimitedRequestCount = 0;
 let failCompanyWrites = false;
 let deletedKeywordIds: string[] = [];
 let companyUpdateCount = 0;
+const companyPatchBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
 let keywordPostCount = 0;
 let failSecondKeywordBatch = false;
 const keywordBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
@@ -42,7 +43,8 @@ const server = setupServer(
   }),
   http.patch(`${endpoint}/v0/base/Companies`, async ({request}) => {
     companyUpdateCount += 1;
-    const body = await request.json() as {records: unknown[]};
+    const body = await request.json() as {records: Array<{fields: Record<string, unknown>}>};
+    companyPatchBodies.push(body);
     return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-update-${index}`, fields: {}}))});
   }),
   http.get(`${endpoint}/v0/base/Keywords`, () => HttpResponse.json({records: [{id: 'rec-old-keyword', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Keyword ID': 'company-alpha\u0000old\u0000https://alpha.example/old'}}]})),
@@ -82,7 +84,7 @@ const server = setupServer(
 );
 
 beforeAll(() => server.listen({onUnhandledRequest: 'error'}));
-afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; companyLookupCount = 0; paidAdWriteCount = 0; paidAdIdentityLookupCount = 0; existingPaidAdIds.clear(); paidAdPatchBodies.length = 0; paidAdPostBodies.length = 0; });
+afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; companyPatchBodies.length = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; companyLookupCount = 0; paidAdWriteCount = 0; paidAdIdentityLookupCount = 0; existingPaidAdIds.clear(); paidAdPatchBodies.length = 0; paidAdPostBodies.length = 0; });
 afterAll(() => server.close());
 
 function makeCompanies(count: number): CompanyWrite[] {
@@ -152,6 +154,22 @@ describe('AirtableCompetitorRepository', () => {
     const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
     await expect(repository.resolveCompanyIdentity({apolloAccountId: 'acct-1', canonicalDomain: 'new.example'}))
       .resolves.toEqual({companyId: 'company-existing', source: 'apollo_account_id'});
+  });
+
+  it('sends explicit null fingerprint invalidation and a due-now enrichment timestamp in a company PATCH', async () => {
+    const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
+    const incoming = makeCompanies(1)[0] as CompanyWrite & {nextAgentEnrichmentDueAt: string};
+    incoming.companyId = 'company-alpha';
+    incoming.identity.canonicalDomain = 'alpha.example';
+    incoming.identity.apolloAccountId = '';
+    incoming.evidenceFingerprint = null as never;
+    incoming.nextAgentEnrichmentDueAt = '2026-08-18T00:00:00.000Z';
+
+    await expect(repository.upsertCompanies([incoming])).resolves.toMatchObject({succeeded: 1, failed: 0});
+    expect(companyPatchBodies[0].records[0].fields).toMatchObject({
+      'Workflow • Evidence Fingerprint': null,
+      'Workflow • Next Insight Due At': '2026-08-18T00:00:00.000Z',
+    });
   });
 
   it('rejects an immutable company ID conflict in production without updating the existing row', async () => {

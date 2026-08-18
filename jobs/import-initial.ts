@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+import {pathToFileURL} from 'node:url';
 import {AirtableCompetitorRepository} from '@/lib/airtable/repository';
 import {FixtureCompetitorRepository} from '@/lib/airtable/fixture-repository';
 import {AirtableClient} from '@/lib/airtable/client';
@@ -39,30 +40,44 @@ function safeFailureSummary(): string {
   return JSON.stringify({status: 'failed', error: 'initial_import_failed'});
 }
 
-async function main(): Promise<number> {
+type CliDependencies = {
+  readFile?: (path: string, encoding: BufferEncoding) => string;
+  runInitialImport?: typeof runInitialImport;
+};
+
+export type InitialImportCliResult = {exitCode: number; stdout: string};
+
+/** Injectable CLI boundary: returns exactly one sanitized JSON line and never logs raw rows. */
+export async function runInitialImportCli(arguments_: string[], dependencies: CliDependencies = {}): Promise<InitialImportCliResult> {
   try {
-    const arguments_ = parseArguments(process.argv.slice(2));
-    const apolloRows = parseApolloCsv(readFileSync(arguments_.apollo, 'utf8'));
-    const semrushRecords = parseSemrushPayload(JSON.parse(readFileSync(arguments_.semrush, 'utf8'))).records;
-    const repository = arguments_.dryRun
+    const parsedArguments = parseArguments(arguments_);
+    const readFile = dependencies.readFile ?? readFileSync;
+    const apolloRows = parseApolloCsv(readFile(parsedArguments.apollo, 'utf8'));
+    const semrushRecords = parseSemrushPayload(JSON.parse(readFile(parsedArguments.semrush, 'utf8'))).records;
+    const repository = parsedArguments.dryRun
       ? undefined
-      : arguments_.fixtureState
-        ? FixtureCompetitorRepository.fromSnapshot(arguments_.fixtureState)
+      : parsedArguments.fixtureState
+        ? FixtureCompetitorRepository.fromSnapshot(parsedArguments.fixtureState)
         : (() => {
           const env = getWebEnv();
           return new AirtableCompetitorRepository(new AirtableClient({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT}));
         })();
-    const report = await runInitialImport({apolloRows, semrushRecords, repository, dryRun: arguments_.dryRun});
-    process.stdout.write(`${JSON.stringify(report)}\n`);
+    const report = await (dependencies.runInitialImport ?? runInitialImport)({apolloRows, semrushRecords, repository, dryRun: parsedArguments.dryRun});
     // Partial imports are successful recoverable reports. A budget rejection or
     // a run that could not persist any accepted company is unrecovered.
-    return !report.recordBudget.withinFreeLimit || (!arguments_.dryRun && report.accepted > 0 && report.succeeded === 0) ? 1 : 0;
+    const unrecovered = !report.recordBudget.withinFreeLimit
+      || (report.accepted === 0 && report.rejected > 0)
+      || (!parsedArguments.dryRun && report.accepted > 0 && report.succeeded === 0);
+    return {exitCode: unrecovered ? 1 : 0, stdout: JSON.stringify(report)};
   } catch {
-    process.stdout.write(`${safeFailureSummary()}\n`);
-    return 1;
+    return {exitCode: 1, stdout: safeFailureSummary()};
   }
 }
 
-main().then((exitCode) => {
-  process.exitCode = exitCode;
-});
+async function main(): Promise<void> {
+  const result = await runInitialImportCli(process.argv.slice(2));
+  process.stdout.write(`${result.stdout}\n`);
+  process.exitCode = result.exitCode;
+}
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) void main();

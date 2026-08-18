@@ -1,0 +1,22 @@
+{
+  "companies": [
+    {"id": "rec-alpha", "fields": {"Identity • Company ID": "company-alpha", "Identity • Canonical Domain": "alpha.example", "Observed • Apollo Account ID": "acct-alpha"}}
+  ],
+  "keywords": [
+    {"id": "rec-old-01", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "old-01"}},
+    {"id": "rec-old-02", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "old-02"}},
+    {"id": "rec-old-03", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "old-03"}},
+    {"id": "rec-old-04", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "old-04"}},
+    {"id": "rec-old-05", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "old-05"}},
+    {"id": "rec-old-06", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "old-06"}},
+    {"id": "rec-old-07", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "old-07"}},
+    {"id": "rec-old-08", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "old-08"}},
+    {"id": "rec-old-09", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "old-09"}},
+    {"id": "rec-old-10", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "old-10"}},
+    {"id": "rec-old-11", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "old-11"}}
+  ],
+  "paidAds": [],
+  "insights": [],
+  "reviews": [],
+  "system": []
+}

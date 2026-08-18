@@ -60,12 +60,60 @@ describe('runInitialImport', () => {
     });
   });
 
+  it('rejects a conflicting same-batch Semrush domain without writing it as unenriched', async () => {
+    const repository = fixtureRepository();
+    const options = fixtureOptions(repository);
+    options.semrushRecords.push({...options.semrushRecords[0], organic_traffic: 999});
+
+    const result = await runInitialImport(options);
+
+    expect(result).toMatchObject({accepted: 1, unenriched: 0, rejected: 2, succeeded: 1, failed: 0});
+    expect(result.errors).toContainEqual(expect.objectContaining({canonicalDomain: 'alpha.example', stage: 'validation', message: 'conflicting_semrush_observation'}));
+    expect(repository.companyIds()).toEqual(['company-beta']);
+  });
+
+  it('counts duplicate Apollo input rows once each despite multiple retained rejection reasons', async () => {
+    const repository = fixtureRepository();
+    const options = fixtureOptions(repository);
+    options.apolloRows = [options.apolloRows[0], structuredClone(options.apolloRows[0])];
+
+    const result = await runInitialImport(options);
+
+    expect(result).toMatchObject({accepted: 0, rejected: 2, succeeded: 0});
+    expect(result.errors.filter((error) => error.canonicalDomain === 'alpha.example').map((error) => error.message))
+      .toEqual(expect.arrayContaining(['duplicate_apollo_domain', 'conflicting_apollo_source_identity']));
+  });
+
+  it('clears stale evidence fingerprints and schedules every imported company for enrichment now', async () => {
+    const repository = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'airtable/base-snapshot.json'));
+
+    await runInitialImport(fixtureOptions(repository));
+    const alpha = (await repository.getDashboardSnapshot()).companies.find((company) => company.fields['Identity • Company ID'] === 'company-alpha');
+
+    expect(alpha?.fields).toMatchObject({
+      'Workflow • Evidence Fingerprint': null,
+      'Workflow • Next Insight Due At': '2026-08-18T00:00:00.000Z',
+    });
+  });
+
   it('preflights the strict record budget before performing any writes', async () => {
     const repository = fixtureRepository();
     const result = await runInitialImport({...fixtureOptions(repository), recordBudgetCounts: {companies: 995, keywords: 0, paidAds: 0, insights: 0, reviews: 0, system: 0}});
 
     expect(result).toMatchObject({recordBudget: {total: 1_001, withinFreeLimit: false, failure: 'record_budget_exceeded'}, succeeded: 0, failed: 0});
     expect((await repository.getDashboardSnapshot()).companies).toEqual([]);
+  });
+
+  it('conservatively includes two keyword-delete batches for eleven current records', async () => {
+    const noObsolete = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'import/existing-alpha-no-keywords.json'));
+    const withObsolete = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'import/eleven-obsolete-keywords.json'));
+
+    const baseline = await runInitialImport(fixtureOptions(noObsolete));
+    const estimated = await runInitialImport({...fixtureOptions(withObsolete), dryRun: false});
+
+    expect(baseline.recordBudget.estimatedWriteCalls).toBe(4);
+    expect(estimated.recordBudget.estimatedWriteCalls).toBe(6);
+    expect(estimated.recordBudget.estimatedWriteCalls - baseline.recordBudget.estimatedWriteCalls).toBe(2);
   });
 
   it('skips dependent writes for a company whose company upsert fails while preserving successes', async () => {

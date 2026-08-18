@@ -1,0 +1,10 @@
+{
+  "companies": [
+    {"id": "rec-alpha", "fields": {"Identity • Company ID": "company-alpha", "Identity • Canonical Domain": "alpha.example", "Observed • Apollo Account ID": "acct-alpha"}}
+  ],
+  "keywords": [],
+  "paidAds": [],
+  "insights": [],
+  "reviews": [],
+  "system": []
+}

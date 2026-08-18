@@ -55,8 +55,8 @@ describe('joinRoster', () => {
     const rejected = joinRoster(apolloFixture.slice(0, 1), [semrushFixture[0], conflicting]);
 
     expect(collapsed.accepted[0].semrush.records).toHaveLength(1);
-    expect(rejected.accepted[0].semrush.records).toEqual([]);
-    expect(rejected.rejections).toContainEqual(expect.objectContaining({code: 'conflicting_semrush_observation'}));
+    expect(rejected.accepted).toEqual([]);
+    expect(rejected.rejections).toContainEqual(expect.objectContaining({code: 'conflicting_semrush_observation', apolloIndex: 0}));
   });
 
   it('keeps observations from separate databases distinct', () => {

@@ -22,6 +22,8 @@ export type JoinRejection = {
   canonicalDomain?: string;
   provider: 'apollo' | 'semrush';
   index: number;
+  /** Original Apollo row index when this rejection makes that roster row ineligible. */
+  apolloIndex?: number;
 };
 
 export type JoinedRosterCompany = {
@@ -83,12 +85,12 @@ export function joinRoster(
 
   apolloRows.forEach((row, index) => {
     if (!row.Website.trim()) {
-      rejections.push({code: 'missing_apollo_website', message: 'Apollo Website is required', provider: 'apollo', index});
+      rejections.push({code: 'missing_apollo_website', message: 'Apollo Website is required', provider: 'apollo', index, apolloIndex: index});
       return;
     }
     const domain = normalizeDomain(row.Website);
     if (!domain) {
-      rejections.push({code: 'invalid_apollo_website', message: 'Apollo Website is not a public hostname', provider: 'apollo', index});
+      rejections.push({code: 'invalid_apollo_website', message: 'Apollo Website is not a public hostname', provider: 'apollo', index, apolloIndex: index});
       return;
     }
     validApollo.add(index);
@@ -101,7 +103,7 @@ export function joinRoster(
       if (indexes.length < 2) return;
       indexes.forEach((index) => {
         invalidApollo.add(index);
-        rejections.push({code, message: `Apollo identity conflict for ${key}`, canonicalDomain: domains.get(index), provider: 'apollo', index});
+        rejections.push({code, message: `Apollo identity conflict for ${key}`, canonicalDomain: domains.get(index), provider: 'apollo', index, apolloIndex: index});
       });
     });
   };
@@ -115,7 +117,7 @@ export function joinRoster(
   markConflicts(indexesByValue(apolloRows, 'Apollo Account Id', validApollo), 'conflicting_apollo_source_identity');
   markConflicts(indexesByValue(apolloRows, 'Apollo Record Id', validApollo), 'conflicting_apollo_source_identity');
 
-  const candidates = [...validApollo].filter((index) => !invalidApollo.has(index));
+  const validCandidates = [...validApollo].filter((index) => !invalidApollo.has(index));
   const bySemrushKey = new Map<string, SemrushObservation[]>();
   semrushRecords.forEach((record, index) => {
     const canonicalDomain = normalizeDomain(record.domain);
@@ -130,6 +132,7 @@ export function joinRoster(
   });
 
   const semrushByDomain = new Map<string, SemrushDomainOverview[]>();
+  const conflictedSemrushDomains = new Map<string, number>();
   bySemrushKey.forEach((entries) => {
     const first = entries[0];
     if (entries.some((entry) => canonicalJson(entry.record) !== canonicalJson(first.record))) {
@@ -140,11 +143,27 @@ export function joinRoster(
         provider: 'semrush',
         index: entry.index,
       }));
+      conflictedSemrushDomains.set(first.canonicalDomain, first.index);
       return;
     }
     const records = semrushByDomain.get(first.canonicalDomain) ?? [];
     records.push(first.record);
     semrushByDomain.set(first.canonicalDomain, records);
+  });
+
+  const candidates = validCandidates.filter((index) => {
+    const canonicalDomain = domains.get(index)!;
+    const semrushIndex = conflictedSemrushDomains.get(canonicalDomain);
+    if (semrushIndex === undefined) return true;
+    rejections.push({
+      code: 'conflicting_semrush_observation',
+      message: 'Apollo roster row cannot use conflicting Semrush observation',
+      canonicalDomain,
+      provider: 'semrush',
+      index: semrushIndex,
+      apolloIndex: index,
+    });
+    return false;
   });
 
   const accepted = candidates.map((index): JoinedRosterCompany => {

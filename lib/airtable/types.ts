@@ -35,9 +35,12 @@ export type CompanyWrite = {
   observed: ObservedGroup<CuratedCompanyObserved>;
   calculated: CalculatedGroup<CuratedCompanyCalculated>;
   qualityIssues: DataQualityIssue[];
-  evidenceFingerprint?: string;
+  /** Null explicitly invalidates the previously published evidence fingerprint. */
+  evidenceFingerprint?: string | null;
   lastSuccessfulRefreshAt?: string;
   nextInsightDueAt?: string;
+  /** Explicit due timestamp for agent enrichment after observed evidence changes. */
+  nextAgentEnrichmentDueAt?: string | null;
 };
 
 /** An accepted Apollo roster entry that has no validated Semrush observation. */

@@ -170,7 +170,7 @@ export function toAirtableCompanyFields(company: CompanyPersistenceWrite): Airta
     'Quality • Issues JSON': boundedJson(company.qualityIssues.map(issueSummary), MAX_QUALITY_ISSUES),
     'Workflow • Evidence Fingerprint': company.evidenceFingerprint,
     'Workflow • Last Successful Refresh At': company.lastSuccessfulRefreshAt,
-    'Workflow • Next Insight Due At': company.nextInsightDueAt,
+    'Workflow • Next Insight Due At': company.nextAgentEnrichmentDueAt ?? company.nextInsightDueAt,
   };
 }
 
