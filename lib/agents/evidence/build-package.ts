@@ -13,6 +13,14 @@ const COMPANY_CALCULATED_FIELDS = new Set([
 ]);
 const KEYWORD_FIELDS = ['Keyword', 'Landing URL', 'Position', 'Previous Position', 'Position Difference', 'Volume', 'CPC USD', 'Keyword Difficulty', 'Competition', 'Traffic', 'Traffic Share Pct', 'Traffic Cost USD', 'Intents JSON', 'SERP Codes JSON', 'Results'];
 const PAID_AD_FIELDS = ['Keyword', 'Title', 'Description', 'Visible URL', 'Landing URL', 'Position', 'Previous Position', 'Volume', 'CPC USD', 'Keyword Difficulty', 'Competition', 'Traffic', 'Traffic Share Pct', 'Traffic Cost USD', 'First Observed At', 'Last Observed At'];
+const MAX_QUALITY_EVIDENCE = 25;
+const QUALITY_PATHS = {
+  suspicious_moz_top_page: /^moz\.top_pages\[\d+\]\.url$/,
+  invalid_keyword_landing_url: /^organic\.top_keywords\[\d+\]\.url$/,
+  invalid_paid_ad_landing_url: /^paid\.top_ads\[\d+\]\.url$/,
+  invalid_trend_date: /^organic\.trend_global_(?:daily|monthly)\[\d+\]\.date$/,
+} as const;
+type QualityCode = keyof typeof QUALITY_PATHS;
 
 function stringField(fields: AirtableFields, name: string): string | undefined {
   const value = fields[name];
@@ -122,16 +130,22 @@ function qualityEvidence(companyId: string, fields: AirtableFields): EvidenceRef
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
+    const seen = new Set<string>();
     return parsed
       .flatMap((issue) => {
         if (!issue || typeof issue !== 'object') return [];
         const code = (issue as Record<string, unknown>).code;
         const sourcePath = (issue as Record<string, unknown>).sourcePath;
-        return typeof code === 'string' && /^[a-z0-9_]+$/.test(code) && typeof sourcePath === 'string'
-          ? [{code, sourcePath}]
-          : [];
+        if (typeof code !== 'string' || typeof sourcePath !== 'string' || !Object.hasOwn(QUALITY_PATHS, code)) return [];
+        const qualityCode = code as QualityCode;
+        if (!QUALITY_PATHS[qualityCode].test(sourcePath)) return [];
+        const identity = `${qualityCode}\u0000${sourcePath}`;
+        if (seen.has(identity)) return [];
+        seen.add(identity);
+        return [{code: qualityCode, sourcePath}];
       })
       .sort((left, right) => left.code.localeCompare(right.code) || left.sourcePath.localeCompare(right.sourcePath))
+      .slice(0, MAX_QUALITY_EVIDENCE)
       .map((issue, index) => {
         const observedAt = stringField(fields, 'Observed • At');
         return {ref: `quality:company:${companyId}:${issue.code}:${index}`, classification: 'observed' as const, source: 'data_quality', ...(observedAt ? {observedAt} : {}), value: issue};
