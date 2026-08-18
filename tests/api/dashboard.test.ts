@@ -62,4 +62,29 @@ describe('dashboard response and cache', () => {
     expect(response.kpis.combinedOrganicTraffic).toMatchObject({value: null, coverage: {available: 1, total: 2}});
     expect(response.companies.find((company) => company.companyId === 'company-empty')?.paidActivity.value).toBeNull();
   });
+
+  it('shapes an empty snapshot with zero coverage rather than an invalid aggregate', () => {
+    const response = shapeDashboardSnapshot({companies: [], keywords: [], paidAds: [], publishedInsights: [], reviews: [], system: []}).landscape;
+    expect(response).toMatchObject({status: 'empty', kpis: {combinedOrganicTraffic: {value: 0, coverage: {available: 0, total: 0}}}});
+  });
+
+  it('does not let an older load generation clear a later invalidation', async () => {
+    const cache = new DashboardCache<typeof snapshot>();
+    cache.seed(snapshot);
+    cache.invalidate();
+    let finishFirst!: (value: typeof snapshot) => void;
+    const first = vi.fn(() => new Promise<typeof snapshot>((done) => { finishFirst = done; }));
+    await cache.getOrLoad(first, {background: true});
+    cache.invalidate();
+    finishFirst(snapshot);
+    await Promise.resolve();
+    expect(cache.peek().state.status).toBe('stale');
+    let finishSecond!: (value: typeof snapshot) => void;
+    const second = vi.fn(() => new Promise<typeof snapshot>((done) => { finishSecond = done; }));
+    await cache.getOrLoad(second, {background: true});
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
+    finishSecond(snapshot);
+    await vi.waitFor(() => expect(cache.peek().state.status).toBe('succeeded'));
+  });
 });

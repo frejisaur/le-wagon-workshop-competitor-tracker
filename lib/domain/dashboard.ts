@@ -15,7 +15,7 @@ export const DashboardValueSchema = z.object({
   database: z.string().min(1).optional(),
   observedAt: IsoTimestampSchema.optional(),
   calculatedAt: IsoTimestampSchema.optional(),
-  coverage: z.object({available: z.number().int().nonnegative(), total: z.number().int().positive()}).strict().optional(),
+  coverage: z.object({available: z.number().int().nonnegative(), total: z.number().int().nonnegative()}).strict().refine(({available, total}) => available <= total, 'coverage available cannot exceed total').optional(),
 }).strict();
 export type DashboardValue = z.infer<typeof DashboardValueSchema>;
 
@@ -57,7 +57,7 @@ export const LandscapeResponseSchema = z.object({
 }).strict();
 export type LandscapeResponse = z.infer<typeof LandscapeResponseSchema>;
 
-const EvidenceSchema = z.object({ref: z.string().min(1), classification: z.enum(['observed', 'calculated']), source: z.string().min(1), database: z.string().min(1).optional(), observedAt: IsoTimestampSchema.optional(), calculatedAt: IsoTimestampSchema.optional(), rawDatasetRef: z.string().url().optional(), value: z.unknown()}).strict();
+const EvidenceSchema = z.object({ref: z.string().min(1), classification: z.enum(['observed', 'calculated']), source: z.string().min(1), database: z.string().min(1).optional(), observedAt: IsoTimestampSchema.optional(), calculatedAt: IsoTimestampSchema.optional(), value: z.unknown()}).strict();
 const ClaimSchema = z.object({claimId: z.string().min(1), conclusion: z.string().min(1), classification: z.enum(['observed', 'inferred']), confidence: z.enum(['high', 'medium', 'low']), confidenceReason: z.string().min(1), evidenceRefs: z.array(z.string().min(1)).min(1)}).strict();
 
 export const CompanyResponseSchema = z.object({

@@ -78,6 +78,6 @@ export function shapeCompany(snapshot: DashboardSnapshot, company: AirtableRecor
     publishedInsightState: published ? publishedIsCurrent ? 'current' : 'stale' : 'absent',
     ...(publishedIsCurrent ? {publishedInsight: {overallConfidence: text(published!.fields, 'Inferred • Overall Confidence') as 'high' | 'medium' | 'low' | undefined, claims: publishedClaims, ...(iso(text(published!.fields, 'Workflow • Generated At')) ? {generatedAt: iso(text(published!.fields, 'Workflow • Generated At'))} : {}), evidenceFingerprint: currentFingerprint}} : {}),
     ...(reviewStatus === 'needs_review' || reviewStatus === 'approved' || reviewStatus === 'rejected' || reviewStatus === 'stale' || reviewStatus === 'published' ? {reviewCandidate: {status: reviewStatus, reasons: reviewReasons(review!)}} : {}),
-    evidence,
+    evidence: evidence.map(({ref, classification, source, database, observedAt, calculatedAt, value}) => ({ref, classification, source, ...(database ? {database} : {}), ...(observedAt ? {observedAt} : {}), ...(calculatedAt ? {calculatedAt} : {}), value})),
   });
 }

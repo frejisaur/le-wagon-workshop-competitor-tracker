@@ -42,4 +42,13 @@ describe('company response', () => {
     expect(stale?.publishedInsightState).toBe('stale');
     expect(stale).not.toHaveProperty('publishedInsight');
   });
+
+  it('retains resolvable evidence semantics without exposing raw dataset references', () => {
+    const company = structuredClone(snapshot.companies[0]!);
+    company.fields['Observed • Raw Ref'] = 'https://provider.example/dataset?token=sentinel-token';
+    const response = shapeDashboardSnapshot({...snapshot, companies: [company]}).companies.get('company-alpha');
+    expect(response?.evidence[0]).toMatchObject({ref: expect.any(String), source: expect.any(String), classification: expect.any(String)});
+    expect(JSON.stringify(response)).not.toContain('sentinel-token');
+    expect(JSON.stringify(response)).not.toContain('rawDatasetRef');
+  });
 });

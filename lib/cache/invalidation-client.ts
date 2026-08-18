@@ -24,7 +24,7 @@ export function createCacheInvalidationAdapter(options: CacheInvalidationAdapter
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await (options.fetch ?? globalThis.fetch)(endpoint, {method: 'POST', body, signal: controller.signal, headers: {'content-type': 'application/json', 'x-cache-timestamp': timestamp, 'x-cache-signature': `v1=${signCacheInvalidation(timestamp, body, options.secret)}`}});
+      const response = await (options.fetch ?? globalThis.fetch)(endpoint, {method: 'POST', redirect: 'error', body, signal: controller.signal, headers: {'content-type': 'application/json', 'x-cache-timestamp': timestamp, 'x-cache-signature': `v1=${signCacheInvalidation(timestamp, body, options.secret)}`}});
       if (!response.ok) throw new Error('cache_invalidation_failed');
     } catch {
       throw new Error('cache_invalidation_failed');

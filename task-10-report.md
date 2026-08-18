@@ -73,3 +73,25 @@ Committed as `feat: serve cached competitor dashboard data`.
 Fix Round 1 validation: 38 focused tests; full suite 193 passed; `npx tsc
 --noEmit`, production build, schema drift check, browser scan, and fixture CLI
 all passed. Fixture output retained `cacheInvalidated: false`.
+
+## Fix Round 2
+
+- Empty dashboards now remain schema-valid with zero-valued aggregate KPIs and
+  coverage `{available: 0, total: 0}`. Coverage is constrained so available
+  can never exceed total.
+- Cache loads carry an invalidation generation. A result started before a later
+  invalidation is discarded and cannot clear the stale state; one new
+  single-flight load starts for the current generation.
+- The invalidation adapter uses `redirect: "error"`, so signed headers are not
+  forwarded to a redirect destination; redirects and non-2xx responses share a
+  sanitized failure.
+- Browser evidence is now an explicit API projection. It retains stable ref,
+  source, classification, timestamps, and curated value but strips all raw
+  dataset references and URLs.
+- Landscape and company server reads share a `DashboardService` cache façade;
+  tests cover concurrent first load plus shared stale/reload behavior.
+
+Fix Round 2 validation: 43 focused tests; full suite 199 passed; `npx tsc
+--noEmit`, production build, schema drift check, browser scan including raw
+dataset markers, fixture CLI, and diff check all passed. Fixture output retained
+`cacheInvalidated: false`.

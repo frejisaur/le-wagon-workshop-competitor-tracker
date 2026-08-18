@@ -1,4 +1,4 @@
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import {createHmac} from 'node:crypto';
 import {cacheInvalidationCanonicalBytes, CacheInvalidationReplayStore, readBoundedInvalidationBody, signCacheInvalidation, verifyCacheInvalidation} from '@/lib/cache/signature';
 import {createCacheInvalidationAdapter} from '@/lib/cache/invalidation-client';
@@ -55,5 +55,13 @@ describe('signed cache invalidation', () => {
     expect(() => createCacheInvalidationAdapter({baseUrl: 'http://app.example', secret: 'test-secret'})).toThrow(/https/i);
     expect(() => createCacheInvalidationAdapter({baseUrl: 'https://user:pass@app.example/path?x=1', secret: 'test-secret'})).toThrow(/base URL/i);
     expect(() => createCacheInvalidationAdapter({baseUrl: 'http://127.0.0.1:3000', secret: 'test-secret', environment: 'development'})).not.toThrow();
+  });
+
+  it('disables redirects and turns a redirect into the same sanitized adapter failure', async () => {
+    const fetch = vi.fn(async () => new Response('', {status: 302, headers: {location: 'https://attacker.example'}}));
+    const adapter = createCacheInvalidationAdapter({baseUrl: 'https://app.example', secret: 'test-secret', nonce: () => '0123456789abcdef', fetch});
+    await expect(adapter.invalidate()).rejects.toThrow('cache_invalidation_failed');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect((fetch.mock.calls as unknown as Array<[unknown, RequestInit | undefined]>)[0]?.[1]).toMatchObject({redirect: 'error'});
   });
 });
