@@ -117,6 +117,13 @@ describe('Airtable mappers', () => {
     expect(() => toAirtableInsightFields(insight, 'rec-company-alpha')).toThrow('claim requires at least one evidence ref');
   });
 
+  it('persists accepted claim conclusion and confidence-reason bytes exactly', () => {
+    const claim: ClaimWire = {claimId: 'claim-exact', conclusion: 'Measured  traffic.', classification: 'observed', confidence: 'high', confidenceReason: 'Direct  current source.', evidenceRefs: ['evidence-exact']};
+    const insight: InsightWireInput = {insightId: 'insight-exact', companyId: 'company-alpha', observedThemes: [claim], inferredClaims: [], recommendations: [], agentHarness: 'test', model: 'test', skillVersion: '1', evidenceFingerprint: 'fingerprint', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z'};
+    const stored = JSON.parse(toAirtableInsightFields(insight, 'rec-company-alpha')['Observed • Themes JSON'] as string)[0];
+    expect(stored).toMatchObject({conclusion: 'Measured  traffic.', confidenceReason: 'Direct  current source.', evidenceRefs: ['evidence-exact']});
+  });
+
   it('rejects outer claim cardinality over the persisted cap', () => {
     const claims = Array.from({length: 101}, (_, index): ClaimWire => ({claimId: `claim-${index}`, conclusion: 'observed', classification: 'observed', confidence: 'high', confidenceReason: 'direct', evidenceRefs: [`evidence-${index}`]}));
     const insight: InsightWireInput = {insightId: 'insight-many', companyId: 'company-alpha', observedThemes: claims, inferredClaims: [], recommendations: [], agentHarness: 'test', model: 'test', skillVersion: '1', evidenceFingerprint: 'fingerprint', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z'};

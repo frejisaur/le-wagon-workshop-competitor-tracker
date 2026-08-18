@@ -60,3 +60,10 @@ Initial lifecycle tests failed because `lib/agents/publication/submit` and `publ
 - Submit results now always expose `status`, `companyId`, `runId`, and `reasons` (with typed idempotency/confidence metadata).
 
 Operational limitation: Airtable does not offer a server-side unique constraint for the company-linked review row. The adapters and lifecycle fail closed on duplicates, and concurrent writers from separate processes still require a serialized operational run/migration policy.
+
+## Fix Round 2
+
+- Published-insight replacements explicitly write `null` for the three retired free-form prose columns (`Inferred • Summary`, `Inferred • Paid Message Summary`, and `Inferred • AI Search Summary`). This prevents Airtable PATCH from retaining old uncited prose while retaining the validated claim fields.
+- Injection scanning now checks full strings and object keys with one bounded package-wide traversal budget. Exhausting that budget fails closed into `prompt_injection_content`; no tail content is skipped.
+- Candidate text is validated as already trimmed instead of normalized. Accepted claim conclusion/reason bytes are persisted unchanged; whitespace-padded candidate text rejects before writes.
+- Fixture promotion coverage now proves stale approved state is written only to an explicit output file, leaves the source fixture byte-identical, retains its prior published insight, and marks the review stale.

@@ -13,11 +13,14 @@ function candidateText(candidate: InsightCandidate): string[] {
   return [...candidate.observedThemes, ...candidate.inferredClaims, ...candidate.recommendations].flatMap((claim) => [claim.conclusion, claim.confidenceReason]);
 }
 
-function containsInjection(value: unknown, budget = {nodes: 0}): boolean {
-  if (budget.nodes++ > 1_000) return false;
-  if (typeof value === 'string') return INJECTION_PATTERN.test(value.slice(0, 4_000));
+function containsInjection(value: unknown, budget = {nodes: 0, characters: 0}): boolean {
+  if (budget.nodes++ > 10_000) return true;
+  if (typeof value === 'string') {
+    budget.characters += value.length;
+    return budget.characters > 1_000_000 || INJECTION_PATTERN.test(value);
+  }
   if (Array.isArray(value)) return value.some((item) => containsInjection(item, budget));
-  if (value && typeof value === 'object') return Object.values(value).some((item) => containsInjection(item, budget));
+  if (value && typeof value === 'object') return Object.entries(value).some(([key, item]) => containsInjection(key, budget) || containsInjection(item, budget));
   return false;
 }
 
@@ -40,7 +43,8 @@ export function validateInsightCandidate(input: unknown, prepared: PreparedCompa
   if (!prepared.canonicalDomain || candidate.companyId !== prepared.companyId || candidate.canonicalDomain !== prepared.canonicalDomain) reasons.add('ambiguous_company_identity');
   if (prepared.evidence.some((evidence) => evidence.ref.startsWith('quality:'))) reasons.add('suspicious_provider_data');
   if (prepared.review?.reviewReasons.includes('reviewer_requested_regeneration')) reasons.add('reviewer_requested_regeneration');
-  if (candidateText(candidate).some((value) => INJECTION_PATTERN.test(value)) || prepared.evidence.some((evidence) => containsInjection(evidence.value)) || containsInjection(prepared.review?.untrustedReviewerNotes)) reasons.add('prompt_injection_content');
+  const scanBudget = {nodes: 0, characters: 0};
+  if (candidateText(candidate).some((value) => INJECTION_PATTERN.test(value)) || prepared.evidence.some((evidence) => containsInjection(evidence.value, scanBudget)) || containsInjection(prepared.review?.untrustedReviewerNotes, scanBudget)) reasons.add('prompt_injection_content');
   if (claims.some((claim) => claim.classification === 'inferred' && claim.confidence === 'high' && claim.evidenceRefs.length < 2)) reasons.add('insufficient_evidence');
 
   const overallConfidence = claims.map((claim) => claim.confidence).reduce((lowest, confidence) => CONFIDENCE_RANK[confidence] < CONFIDENCE_RANK[lowest] ? confidence : lowest, 'high' as Confidence);

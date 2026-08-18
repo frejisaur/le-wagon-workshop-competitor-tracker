@@ -1,26 +1,29 @@
 import {z} from 'zod';
 
 export const ConfidenceSchema = z.enum(['high', 'medium', 'low']);
+function exactText(maximum: number) {
+  return z.string().min(1).max(maximum).refine((value) => value === value.trim(), 'text must be nonempty and already trimmed');
+}
 export const CandidateReviewReasonSchema = z.enum([
   'prompt_injection_content', 'unresolved_evidence_reference', 'conflicting_sources', 'suspicious_provider_data',
   'ambiguous_company_identity', 'insufficient_evidence', 'reviewer_requested_regeneration',
 ]);
 
 export const CandidateClaimSchema = z.object({
-  claimId: z.string().min(1).max(200),
-  conclusion: z.string().trim().min(1).max(2_000),
+  claimId: exactText(200),
+  conclusion: exactText(2_000),
   classification: z.enum(['observed', 'inferred']),
   confidence: ConfidenceSchema,
-  confidenceReason: z.string().trim().min(1).max(1_000),
-  evidenceRefs: z.array(z.string().min(1).max(500)).min(1).max(100).refine((refs) => new Set(refs).size === refs.length, 'evidence refs must be unique'),
+  confidenceReason: exactText(1_000),
+  evidenceRefs: z.array(exactText(500)).min(1).max(100).refine((refs) => new Set(refs).size === refs.length, 'evidence refs must be unique'),
 }).strict();
 
 const CandidateProvenanceSchema = z.object({
-  runId: z.string().min(1).max(200),
-  agentHarness: z.string().min(1).max(200),
-  model: z.string().min(1).max(200),
-  skillVersion: z.string().min(1).max(100),
-  workflowVersion: z.string().min(1).max(100),
+  runId: exactText(200),
+  agentHarness: exactText(200),
+  model: exactText(200),
+  skillVersion: exactText(100),
+  workflowVersion: exactText(100),
   generatedAt: z.string().datetime({offset: true}),
 }).strict();
 
@@ -30,8 +33,8 @@ function collection(classification: 'observed' | 'inferred') {
 
 /** Agent output boundary: no raw provider object, record ID, status, or aggregate confidence may cross it. */
 export const InsightCandidateSchema = z.object({
-  companyId: z.string().min(1).max(200),
-  canonicalDomain: z.string().min(1).max(255),
+  companyId: exactText(200),
+  canonicalDomain: exactText(255),
   evidenceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   provenance: CandidateProvenanceSchema,
   observedThemes: collection('observed'),

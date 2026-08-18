@@ -23,6 +23,7 @@ let paidAdIdentityLookupCount = 0;
 const existingPaidAdIds = new Set<string>();
 const paidAdPatchBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
 const paidAdPostBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
+const insightPatchBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
 const server = setupServer(
   http.get(`${endpoint}/v0/base/Companies`, ({request}) => {
     const formula = new URL(request.url).searchParams.get('filterByFormula') ?? '';
@@ -81,10 +82,20 @@ const server = setupServer(
     paidAdPatchBodies.push(body);
     return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-ad-${index}`, fields: {}}))});
   }),
+  http.get(`${endpoint}/v0/base/GTM%20Insights`, ({request}) => {
+    const formula = new URL(request.url).searchParams.get('filterByFormula') ?? '';
+    if (formula.includes("'company-alpha'")) return HttpResponse.json({records: [{id: 'rec-insight-alpha', fields: {'Identity • Company ID': 'company-alpha', 'Inferred • Summary': 'legacy prose', 'Inferred • Paid Message Summary': 'legacy paid', 'Inferred • AI Search Summary': 'legacy ai'}}]});
+    return HttpResponse.json({records: []});
+  }),
+  http.patch(`${endpoint}/v0/base/GTM%20Insights`, async ({request}) => {
+    const body = await request.json() as {records: Array<{fields: Record<string, unknown>}>};
+    insightPatchBodies.push(body);
+    return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-insight-${index}`, fields: {}}))});
+  }),
 );
 
 beforeAll(() => server.listen({onUnhandledRequest: 'error'}));
-afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; companyPatchBodies.length = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; companyLookupCount = 0; paidAdWriteCount = 0; paidAdIdentityLookupCount = 0; existingPaidAdIds.clear(); paidAdPatchBodies.length = 0; paidAdPostBodies.length = 0; });
+afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; companyPatchBodies.length = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; companyLookupCount = 0; paidAdWriteCount = 0; paidAdIdentityLookupCount = 0; existingPaidAdIds.clear(); paidAdPatchBodies.length = 0; paidAdPostBodies.length = 0; insightPatchBodies.length = 0; });
 afterAll(() => server.close());
 
 function makeCompanies(count: number): CompanyWrite[] {
@@ -209,6 +220,16 @@ describe('AirtableCompetitorRepository', () => {
     expect(second).toHaveLength(1);
     expect(second[0].id).toBe(first[0].id);
     expect(second[0].fields['Identity • Insight ID']).toBe('insight-replacement');
+    expect(second[0].fields).toMatchObject({'Inferred • Summary': null, 'Inferred • Paid Message Summary': null, 'Inferred • AI Search Summary': null});
+  });
+
+  it('clears retired published prose fields in production PATCHes while retaining validated claim data', async () => {
+    const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
+    await expect(repository.upsertPublishedInsight(insight('insight-replacement'))).resolves.toMatchObject({succeeded: 1, failed: 0});
+    expect(insightPatchBodies[0].records[0].fields).toMatchObject({
+      'Inferred • Summary': null, 'Inferred • Paid Message Summary': null, 'Inferred • AI Search Summary': null,
+      'Observed • Themes JSON': expect.stringContaining('Traffic is measured.'),
+    });
   });
 
   it('returns per-record failures without losing successfully written record results', async () => {
