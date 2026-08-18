@@ -55,7 +55,7 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function indexesByValue(rows: ApolloRow[], key: keyof ApolloRow, valid: Set<number>): Map<string, number[]> {
+function indexesByValue(rows: ApolloRow[], key: 'Apollo Account Id' | 'Apollo Record Id', valid: Set<number>): Map<string, number[]> {
   const result = new Map<string, number[]>();
   rows.forEach((row, index) => {
     if (!valid.has(index) || !row[key].trim()) return;

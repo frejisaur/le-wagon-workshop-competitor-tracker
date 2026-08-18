@@ -7,6 +7,12 @@ export const ApolloRowSchema = z.object({
   Website: z.string(),
   'Apollo Account Id': z.string(),
   'Apollo Record Id': z.string(),
+  // Reviewed observed fields only. Every other provider column is stripped.
+  'Account Stage': z.string().optional(),
+  Lists: z.string().optional(),
+  '# Employees': z.string().optional(),
+  Industry: z.string().optional(),
+  'Company Country': z.string().optional(),
 }).strip();
 
 export type ApolloRow = z.infer<typeof ApolloRowSchema>;

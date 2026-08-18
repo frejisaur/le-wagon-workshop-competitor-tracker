@@ -22,10 +22,16 @@ export type AirtableWriteResponse = {records: AirtableRecord[]};
 export type CompanyWrite = {
   companyId: string;
   identity: CompanyIdentityResolution;
+  /** All values below are observed Apollo roster values, never inferred labels. */
   displayName?: string;
   segment?: string;
   apolloWebsite?: string;
   apifyDomain?: string;
+  apolloAccountStage?: string;
+  apolloLists?: string;
+  apolloEmployees?: string;
+  apolloIndustry?: string;
+  apolloCompanyCountry?: string;
   observed: ObservedGroup<CuratedCompanyObserved>;
   calculated: CalculatedGroup<CuratedCompanyCalculated>;
   qualityIssues: DataQualityIssue[];
@@ -33,6 +39,13 @@ export type CompanyWrite = {
   lastSuccessfulRefreshAt?: string;
   nextInsightDueAt?: string;
 };
+
+/** An accepted Apollo roster entry that has no validated Semrush observation. */
+export type UnenrichedCompanyWrite = Omit<CompanyWrite, 'observed' | 'calculated'> & {
+  observed?: never;
+  calculated?: never;
+};
+export type CompanyPersistenceWrite = CompanyWrite | UnenrichedCompanyWrite;
 
 /** A claim remains traceable to its evidence and never crosses observed/inferred layers. */
 export type ClaimWire = {
@@ -110,12 +123,14 @@ export type DashboardSnapshot = {
   keywords: AirtableRecord[];
   paidAds: AirtableRecord[];
   publishedInsights: AirtableRecord[];
+  reviews: AirtableRecord[];
+  system: AirtableRecord[];
 };
 export type DueInsightInput = {company: AirtableRecord; publishedInsight?: AirtableRecord; review?: AirtableRecord};
 
 export interface CompetitorStore {
   resolveCompanyIdentity(identity: Pick<CompanyIdentityResolution, 'apolloAccountId' | 'canonicalDomain'>): Promise<{companyId: string; source: 'apollo_account_id' | 'canonical_domain'} | null>;
-  upsertCompanies(companies: CompanyWrite[]): Promise<WriteResult>;
+  upsertCompanies(companies: CompanyPersistenceWrite[]): Promise<WriteResult>;
   replaceKeywords(companyId: string, keywords: CuratedKeyword[]): Promise<WriteResult>;
   upsertPaidAds(paidAds: CuratedPaidAd[]): Promise<WriteResult>;
   getDashboardSnapshot(): Promise<DashboardSnapshot>;

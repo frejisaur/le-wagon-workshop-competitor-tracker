@@ -1,7 +1,7 @@
 import type {CuratedKeyword, CuratedPaidAd} from '@/lib/domain/metrics';
 import {AirtableClient, AirtableClientError} from './client';
 import {toAirtableCompanyFields, toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields, toAirtableSystemFields} from './mappers';
-import {AIRTABLE_TABLES, type AirtableFields, type AirtableRecord, type AirtableTable, type CompanyWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type RecordResult, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
+import {AIRTABLE_TABLES, type AirtableFields, type AirtableRecord, type AirtableTable, type CompanyPersistenceWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type RecordResult, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
 
 const BATCH_SIZE = 10;
 
@@ -52,7 +52,7 @@ export class AirtableCompetitorRepository implements CompetitorStore {
     return null;
   }
 
-  async upsertCompanies(companies: CompanyWrite[]): Promise<WriteResult> {
+  async upsertCompanies(companies: CompanyPersistenceWrite[]): Promise<WriteResult> {
     const writes: WriteItem[] = [];
     const result = emptyResult();
     for (const company of companies) {
@@ -135,10 +135,10 @@ export class AirtableCompetitorRepository implements CompetitorStore {
   }
 
   async getDashboardSnapshot(): Promise<DashboardSnapshot> {
-    const [companies, keywords, paidAds, publishedInsights] = await Promise.all([
-      this.client.list(AIRTABLE_TABLES.companies), this.client.list(AIRTABLE_TABLES.keywords), this.client.list(AIRTABLE_TABLES.paidAds), this.client.list(AIRTABLE_TABLES.insights),
+    const [companies, keywords, paidAds, publishedInsights, reviews, system] = await Promise.all([
+      this.client.list(AIRTABLE_TABLES.companies), this.client.list(AIRTABLE_TABLES.keywords), this.client.list(AIRTABLE_TABLES.paidAds), this.client.list(AIRTABLE_TABLES.insights), this.client.list(AIRTABLE_TABLES.reviews), this.client.list(AIRTABLE_TABLES.system),
     ]);
-    return {companies, keywords, paidAds, publishedInsights};
+    return {companies, keywords, paidAds, publishedInsights, reviews, system};
   }
 
   async getDueInsightInputs(): Promise<DueInsightInput[]> {
@@ -170,7 +170,7 @@ export class AirtableCompetitorRepository implements CompetitorStore {
     return this.upsertOne(AIRTABLE_TABLES.system, 'Identity • System ID', system.systemId, toAirtableSystemFields(system));
   }
 
-  private async findCompanyRecord(company: CompanyWrite): Promise<AirtableRecord | undefined> {
+  private async findCompanyRecord(company: CompanyPersistenceWrite): Promise<AirtableRecord | undefined> {
     if (company.identity.apolloAccountId) {
       const byAccount = await this.client.list(AIRTABLE_TABLES.companies, {filterByFormula: equalityFormula('Observed • Apollo Account ID', company.identity.apolloAccountId)});
       if (byAccount[0]) return byAccount[0];

@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import type {CuratedKeyword, CuratedPaidAd} from '@/lib/domain/metrics';
 import {toAirtableCompanyFields, toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields, toAirtableSystemFields} from './mappers';
-import {type AirtableRecord, type CompanyWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
+import {type AirtableRecord, type CompanyPersistenceWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
 
 type FixtureSnapshot = Partial<Record<'companies' | 'keywords' | 'paidAds' | 'insights' | 'reviews' | 'system', AirtableRecord[]>>;
 
@@ -44,7 +44,7 @@ export class FixtureCompetitorRepository implements CompetitorStore {
     return typeof companyId === 'string' ? {companyId, source: 'canonical_domain'} : null;
   }
 
-  async upsertCompanies(companies: CompanyWrite[]): Promise<WriteResult> {
+  async upsertCompanies(companies: CompanyPersistenceWrite[]): Promise<WriteResult> {
     const results: WriteResult['results'] = [];
     for (const company of companies) {
       const existing = this.findCompanyRecord(company);
@@ -102,7 +102,7 @@ export class FixtureCompetitorRepository implements CompetitorStore {
   }
 
   async getDashboardSnapshot(): Promise<DashboardSnapshot> {
-    return {companies: this.records('companies'), keywords: this.records('keywords'), paidAds: this.records('paidAds'), publishedInsights: this.records('insights')};
+    return {companies: this.records('companies'), keywords: this.records('keywords'), paidAds: this.records('paidAds'), publishedInsights: this.records('insights'), reviews: this.records('reviews'), system: this.records('system')};
   }
 
   async getDueInsightInputs(): Promise<DueInsightInput[]> {
@@ -133,6 +133,18 @@ export class FixtureCompetitorRepository implements CompetitorStore {
     return this.upsertMany('system', [{identity: system.systemId, fields: toAirtableSystemFields(system), lookupField: 'Identity • System ID'}]);
   }
 
+  /** Test-only inspection helpers; they expose only stored curated identities/counts. */
+  companyIds(): string[] {
+    return this.records('companies')
+      .map((record) => record.fields['Identity • Company ID'])
+      .filter((companyId): companyId is string => typeof companyId === 'string')
+      .sort();
+  }
+
+  counts(): {companies: number; keywords: number; paidAds: number} {
+    return {companies: this.records('companies').length, keywords: this.records('keywords').length, paidAds: this.records('paidAds').length};
+  }
+
   private async upsertMany(key: keyof FixtureSnapshot, writes: Array<{identity: string; fields: AirtableRecord['fields']; lookupField: string}>): Promise<WriteResult> {
     const table = this.table(key);
     const results = writes.map((write) => {
@@ -144,7 +156,7 @@ export class FixtureCompetitorRepository implements CompetitorStore {
     return {succeeded: results.length, failed: 0, results};
   }
 
-  private findCompanyRecord(company: CompanyWrite): AirtableRecord | undefined {
+  private findCompanyRecord(company: CompanyPersistenceWrite): AirtableRecord | undefined {
     if (company.identity.apolloAccountId) {
       const byAccount = this.records('companies').find((record) => record.fields['Observed • Apollo Account ID'] === company.identity.apolloAccountId);
       if (byAccount) return byAccount;
