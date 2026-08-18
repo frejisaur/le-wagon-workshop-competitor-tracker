@@ -1,0 +1,19 @@
+{
+  "companies": [
+    {
+      "id": "rec-alpha",
+      "fields": {
+        "Identity • Company ID": "company-alpha",
+        "Identity • Canonical Domain": "alpha.example",
+        "Observed • Apollo Account ID": "acct-alpha",
+        "Observed • Organic Traffic": 200,
+        "Workflow • Evidence Fingerprint": "fixture-fingerprint-alpha"
+      }
+    }
+  ],
+  "keywords": [],
+  "paidAds": [],
+  "insights": [],
+  "reviews": [],
+  "system": []
+}
