@@ -1,4 +1,8 @@
 .superpowers/
+node_modules/
+.next/
+playwright-report/
+test-results/
 
 # Local credentials and environment overrides
 .env
