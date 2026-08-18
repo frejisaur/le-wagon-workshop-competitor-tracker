@@ -18,6 +18,8 @@ describe('joinRoster', () => {
       canonicalDomain: 'alpha.example',
       semrush: {classification: 'observed', observedAt: INITIAL_APIFY_OBSERVATION_BATCH},
     });
+    expect(report.accepted[0].apollo).not.toHaveProperty('data');
+    expect(report.accepted[0].semrush).not.toHaveProperty('data');
     expect(report.rejections).toContainEqual(expect.objectContaining({code: 'missing_apollo_website'}));
     expect(report.unmatchedApollo).toEqual([]);
     expect(report.apifyOnly).toEqual([]);

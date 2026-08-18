@@ -22,7 +22,7 @@ function parsePublicUrl(value: string): URL | null {
 }
 
 function isPublicLookingHostname(hostname: string): boolean {
-  if (!hostname || hostname === 'localhost' || isIP(hostname) !== 0 || hostname.length > 253) return false;
+  if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost') || isIP(hostname) !== 0 || hostname.length > 253) return false;
   const labels = hostname.split('.');
   if (labels.length < 2 || labels.some((label) => !hostnameLabel.test(label))) return false;
   return publicSuffix.test(labels.at(-1) ?? '');

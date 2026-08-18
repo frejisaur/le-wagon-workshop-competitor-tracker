@@ -39,7 +39,7 @@ export type JoinReport = {
 };
 
 export type JoinContext = {
-  /** Supplied by a later workflow; the initial import deliberately uses its batch label. */
+  /** The one observation-batch label for this join call; initial import uses its batch label. */
   observedAt?: string;
   rawRef?: string;
 };
@@ -154,11 +154,10 @@ export function joinRoster(
     return {
       canonicalDomain,
       identity: {canonicalDomain, apolloAccountId: row['Apollo Account Id'], apolloRecordId: row['Apollo Record Id']},
-      apollo: {...row, classification: 'observed', data: row, source: 'apollo', observedAt},
+      apollo: {...row, classification: 'observed', source: 'apollo', observedAt},
       semrush: {
         records: semrushRecordsForDomain,
         classification: 'observed',
-        data: {records: semrushRecordsForDomain},
         source: 'semrush',
         observedAt,
         rawRef: context.rawRef,

@@ -17,6 +17,7 @@ describe('normalization', () => {
     ['http://127.0.0.1/path', null],
     ['http://[::1]/path', null],
     ['http://localhost/path', null],
+    ['http://dashboard.localhost/path', null],
     ['http://not-a-public-host/path', null],
   ])('rejects invalid domain input %s', (input, expected) => {
     expect(normalizeDomain(input)).toBe(expected);
@@ -30,5 +31,13 @@ describe('normalization', () => {
   it('preserves a non-default port in a normalized landing URL', () => {
     expect(normalizeUrl('http://Example.COM:8080/path?q=1#fragment'))
       .toBe('http://example.com:8080/path?q=1');
+  });
+
+  it.each([
+    ['https://user:pass@example.com/offer', null],
+    ['http://127.0.0.1/offer', null],
+    ['http://dashboard.localhost/offer', null],
+  ])('rejects unsafe landing URL input %s', (input, expected) => {
+    expect(normalizeUrl(input)).toBe(expected);
   });
 });
