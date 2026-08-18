@@ -45,10 +45,17 @@ export type EnrichmentOptions = {
 type ActiveCompany = {companyId: string; canonicalDomain: string; fields: Record<string, unknown>};
 
 const SYSTEM_ID = 'system';
+// 10 aligns one domain batch with Airtable's documented mutation batch; three
+// attempts and a two-minute request ceiling fit a 90-minute workshop safely.
+const MAX_BATCH_SIZE = 10;
+const MAX_ATTEMPTS = 3;
+const MAX_TIMEOUT_MS = 120_000;
+const MAX_RETRY_DELAY_MS = 30_000;
+const MAX_UNEXPECTED_DATASET_ERRORS = 10;
 
-function validPositiveInteger(value: number | undefined, fallback: number, name: string): number {
+function validPositiveInteger(value: number | undefined, fallback: number, name: string, maximum: number): number {
   const actual = value ?? fallback;
-  if (!Number.isInteger(actual) || actual < 1) throw new TypeError(`${name} must be a positive integer`);
+  if (!Number.isInteger(actual) || actual < 1 || actual > maximum) throw new TypeError(`${name} must be an integer from 1 to ${maximum}`);
   return actual;
 }
 
@@ -85,7 +92,7 @@ function stringField(fields: Record<string, unknown>, name: string): string | un
   return typeof fields[name] === 'string' ? fields[name] : undefined;
 }
 
-function companyWrite(company: ActiveCompany, record: SemrushDomainOverview, refreshedAt: string): CompanyWrite {
+function companyWrite(company: ActiveCompany, record: SemrushDomainOverview, refreshedAt: string): {write: CompanyWrite; keywords: ReturnType<typeof transformSemrushCompany>['keywords']; paidAds: ReturnType<typeof transformSemrushCompany>['paidAds']} {
   const evidence = transformSemrushCompany(record, {
     companyId: company.companyId,
     identity: {
@@ -97,7 +104,7 @@ function companyWrite(company: ActiveCompany, record: SemrushDomainOverview, ref
     calculatedAt: refreshedAt,
     rawRef: undefined,
   });
-  return {
+  return {write: {
     companyId: company.companyId,
     identity: evidence.company.identity,
     observed: evidence.company.observed,
@@ -116,7 +123,7 @@ function companyWrite(company: ActiveCompany, record: SemrushDomainOverview, ref
     // fingerprint claiming that changed evidence is current.
     evidenceFingerprint: null,
     nextAgentEnrichmentDueAt: refreshedAt,
-  };
+  }, keywords: evidence.keywords, paidAds: evidence.paidAds};
 }
 
 function matchingFailure(result: WriteResult, identity: string): string | null {
@@ -128,11 +135,11 @@ function deriveStatus(succeeded: number, failed: number): EnrichmentStatus {
   return succeeded > 0 ? 'partial' : 'failed';
 }
 
-function terminalSystem(runId: string, status: EnrichmentStatus, report: Pick<EnrichmentReport, 'processed' | 'succeeded' | 'failed' | 'errors'>, finishedAt: string): SystemWireInput {
+function terminalSystem(runId: string, status: EnrichmentStatus, report: Pick<EnrichmentReport, 'processed' | 'succeeded' | 'failed' | 'errors'>, finishedAt: string, previousLastSuccessful: string | null | undefined): SystemWireInput {
   return {
     systemId: SYSTEM_ID,
     lastRunFinishedAt: finishedAt,
-    ...(status === 'succeeded' ? {lastSuccessfulRunAt: finishedAt} : {}),
+    ...(status === 'succeeded' ? {lastSuccessfulRunAt: finishedAt} : {lastSuccessfulRunAt: previousLastSuccessful ?? null}),
     status,
     processedCompanies: report.processed,
     succeededCompanies: report.succeeded,
@@ -145,6 +152,8 @@ function terminalSystem(runId: string, status: EnrichmentStatus, report: Pick<En
 
 function indexedRecords(items: unknown[], expected: Map<string, ActiveCompany>, errors: EnrichmentError[]): Map<string, SemrushDomainOverview> {
   const records = new Map<string, SemrushDomainOverview>();
+  const poisoned = new Set<string>();
+  let unexpected = 0;
   for (const item of items) {
     const rawDomain = item && typeof item === 'object' && typeof (item as {domain?: unknown}).domain === 'string'
       ? normalizeDomain((item as {domain: string}).domain)
@@ -154,14 +163,24 @@ function indexedRecords(items: unknown[], expected: Map<string, ActiveCompany>, 
       const domain = normalizeDomain(parsed.domain);
       if (!domain) continue;
       const company = expected.get(domain);
-      if (!company) continue; // An actor may return an adjacent, unrequested domain; it is not persisted.
+      if (!company) {
+        if (unexpected < MAX_UNEXPECTED_DATASET_ERRORS) errors.push({stage: 'validation', code: 'unexpected_dataset_item'});
+        unexpected += 1;
+        continue;
+      }
+      if (poisoned.has(domain)) continue;
       if (records.has(domain)) {
         errors.push({companyId: company.companyId, canonicalDomain: domain, stage: 'validation', code: 'duplicate_dataset_item'});
         records.delete(domain);
+        poisoned.add(domain);
       } else records.set(domain, parsed);
     } catch {
       const company = rawDomain ? expected.get(rawDomain) : undefined;
       if (company) errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'validation', code: 'invalid_provider_record'});
+      else if (unexpected < MAX_UNEXPECTED_DATASET_ERRORS) {
+        errors.push({stage: 'validation', code: 'unexpected_dataset_item'});
+        unexpected += 1;
+      }
     }
   }
   return records;
@@ -169,11 +188,11 @@ function indexedRecords(items: unknown[], expected: Map<string, ActiveCompany>, 
 
 /** Deterministic Railway metric refresh. It never invokes or changes the agent workflow. */
 export async function runEnrichment(options: EnrichmentOptions): Promise<EnrichmentReport> {
-  const batchSize = validPositiveInteger(options.batchSize, 10, 'batchSize');
-  const maxAttempts = validPositiveInteger(options.maxAttempts, 2, 'maxAttempts');
-  const timeoutMs = validPositiveInteger(options.timeoutMs, 60_000, 'timeoutMs');
+  const batchSize = validPositiveInteger(options.batchSize, 10, 'batchSize', MAX_BATCH_SIZE);
+  const maxAttempts = validPositiveInteger(options.maxAttempts, 2, 'maxAttempts', MAX_ATTEMPTS);
+  const timeoutMs = validPositiveInteger(options.timeoutMs, 60_000, 'timeoutMs', MAX_TIMEOUT_MS);
   const retryDelayMs = options.retryDelayMs ?? 250;
-  if (!Number.isInteger(retryDelayMs) || retryDelayMs < 0) throw new TypeError('retryDelayMs must be a non-negative integer');
+  if (!Number.isInteger(retryDelayMs) || retryDelayMs < 0 || retryDelayMs > MAX_RETRY_DELAY_MS) throw new TypeError(`retryDelayMs must be an integer from 0 to ${MAX_RETRY_DELAY_MS}`);
   const now = options.now ?? (() => new Date());
   const runId = options.runIdFactory?.() ?? `railway-${randomUUID()}`;
   const report: EnrichmentReport = {runId, status: 'failed', processed: 0, succeeded: 0, failed: 0, cacheInvalidated: false, errors: []};
@@ -183,9 +202,12 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
   else options.signal?.addEventListener('abort', forwardAbort, {once: true});
   let persistenceFailed = false;
   let terminalUpdated = false;
+  let fatalStartupFailure = false;
+  let previousLastSuccessful: string | null | undefined;
 
   try {
     const initial = await options.repository.getDashboardSnapshot();
+    previousLastSuccessful = initial.system.find((record) => record.fields['Identity • System ID'] === SYSTEM_ID)?.fields['Workflow • Last Successful Run At'] as string | null | undefined;
     const companies = activeCompanies(initial);
     report.processed = companies.length;
     const running = await options.repository.updateSystem({
@@ -219,22 +241,43 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
         }
         const refreshedAt = iso(now);
         let write: CompanyWrite;
+        let keywords: ReturnType<typeof transformSemrushCompany>['keywords'];
+        let paidAds: ReturnType<typeof transformSemrushCompany>['paidAds'];
         try {
-          write = companyWrite(company, record, refreshedAt);
+          ({write, keywords, paidAds} = companyWrite(company, record, refreshedAt));
         } catch {
           report.errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'validation', code: 'transform_failed'});
           continue;
         }
-        const companyResult = await options.repository.upsertCompanies([write]);
+        let companyResult: WriteResult;
+        try {
+          companyResult = await options.repository.upsertCompanies([write]);
+        } catch {
+          persistenceFailed = true;
+          report.errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'company', code: 'company_write_failed'});
+          continue;
+        }
         const companyFailure = matchingFailure(companyResult, company.companyId);
         if (companyFailure) {
           persistenceFailed = true;
           report.errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'company', code: 'company_write_failed'});
           continue;
         }
-        const transformed = transformSemrushCompany(record, {companyId: company.companyId, identity: write.identity, observedAt: refreshedAt, calculatedAt: refreshedAt});
-        const keywordResult = await options.repository.replaceKeywords(company.companyId, transformed.keywords);
-        const paidResult = await options.repository.upsertPaidAds(transformed.paidAds);
+        let keywordResult: WriteResult;
+        let paidResult: WriteResult;
+        try {
+          keywordResult = await options.repository.replaceKeywords(company.companyId, keywords);
+        } catch {
+          keywordResult = {succeeded: 0, failed: 1, results: [{identity: company.companyId, error: 'keyword_write_failed'}]};
+        }
+        try {
+          // Replace the complete paid-ad snapshot only after it has crossed the
+          // provider validation and domain transform boundaries. The repository
+          // writes every incoming record before it deletes obsolete rows.
+          paidResult = await options.repository.replacePaidAds(company.companyId, paidAds);
+        } catch {
+          paidResult = {succeeded: 0, failed: 1, results: [{identity: company.companyId, error: 'paid_ad_write_failed'}]};
+        }
         const keywordFailure = keywordResult.failed > 0;
         const paidFailure = paidResult.failed > 0;
         if (keywordFailure || paidFailure) {
@@ -260,6 +303,7 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
     report.failed = report.processed - report.succeeded;
     report.status = deriveStatus(report.succeeded, report.failed);
   } catch {
+    fatalStartupFailure = true;
     if (report.errors.every((error) => error.stage !== 'system')) report.errors.push({stage: 'system', code: 'system_start_failed'});
     report.failed = Math.max(report.failed, report.processed - report.succeeded);
     report.status = 'failed';
@@ -267,8 +311,8 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
     controller.abort();
     options.signal?.removeEventListener('abort', forwardAbort);
     report.failed = Math.max(0, report.processed - report.succeeded);
-    report.status = deriveStatus(report.succeeded, report.failed);
-    const terminal = terminalSystem(runId, report.status, report, iso(now));
+    report.status = fatalStartupFailure ? 'failed' : deriveStatus(report.succeeded, report.failed);
+    const terminal = terminalSystem(runId, report.status, report, iso(now), previousLastSuccessful);
     try {
       const result = await options.repository.updateSystem(terminal);
       if (result.failed > 0) throw new Error('terminal_system_write_failed');
@@ -277,7 +321,7 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
       report.errors.push({stage: 'system', code: 'terminal_system_write_failed'});
       report.status = 'failed';
       try {
-        const recovery = await options.repository.updateSystem(terminalSystem(runId, 'failed', report, iso(now)));
+        const recovery = await options.repository.updateSystem(terminalSystem(runId, 'failed', report, iso(now), previousLastSuccessful));
         terminalUpdated = recovery.failed === 0;
       } catch {
         terminalUpdated = false;
@@ -291,6 +335,12 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
         report.errors.push({stage: 'cache', code: 'cache_invalidation_failed'});
         report.status = 'failed';
         report.cacheInvalidated = false;
+        try {
+          const correction = await options.repository.updateSystem(terminalSystem(runId, 'failed', report, iso(now), previousLastSuccessful));
+          terminalUpdated = correction.failed === 0;
+        } catch {
+          terminalUpdated = false;
+        }
       }
     }
   }

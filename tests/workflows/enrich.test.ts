@@ -3,7 +3,10 @@ import {resolve} from 'node:path';
 import {describe, expect, it, vi} from 'vitest';
 import {FixtureCompetitorRepository} from '@/lib/airtable/fixture-repository';
 import type {CompetitorStore, WriteResult} from '@/lib/airtable/types';
+import {buildEvidencePackage} from '@/lib/agents/evidence/build-package';
+import {fingerprintEvidence} from '@/lib/agents/evidence/fingerprint';
 import {parseSemrushPayload} from '@/lib/schemas/semrush';
+import {transformSemrushCompany} from '@/lib/transforms/semrush-to-domain';
 import {runEnrichment} from '@/lib/workflows/enrich';
 
 const fixtures = resolve(process.cwd(), 'tests/fixtures');
@@ -11,6 +14,17 @@ const providerRecords = parseSemrushPayload(JSON.parse(readFileSync(resolve(fixt
 
 function repository() {
   return FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'airtable/base-snapshot.json'));
+}
+
+function alphaPaidAds(observedAt = '2026-08-01T00:00:00.000Z') {
+  const paidRecord = structuredClone(providerRecords[1]);
+  paidRecord.domain = 'alpha.example';
+  return transformSemrushCompany(paidRecord, {
+    companyId: 'company-alpha',
+    identity: {canonicalDomain: 'alpha.example', apolloAccountId: 'acct-alpha', apolloRecordId: ''},
+    observedAt,
+    calculatedAt: observedAt,
+  }).paidAds;
 }
 
 function dependencies(store: CompetitorStore, runDomainOverview: (domains: string[]) => Promise<unknown[]> = async () => providerRecords) {
@@ -122,5 +136,158 @@ describe('runEnrichment', () => {
       'Agent • Review Count': 2,
       'Agent • Error Summary': 'agent preserved',
     });
+  });
+
+  it('keeps startup failures failed instead of recomputing them as succeeded', async () => {
+    const store = repository();
+    const failing = Object.create(store) as CompetitorStore;
+    failing.getDashboardSnapshot = async () => { throw new Error('snapshot unavailable'); };
+    const report = await runEnrichment({repository: failing, runDomainOverview: async () => providerRecords, runIdFactory: () => 'railway-startup-snapshot'});
+    const system = (await store.getDashboardSnapshot()).system[0];
+
+    expect(report.status).toBe('failed');
+    expect(system.fields).toMatchObject({'Workflow • Status': 'failed', 'Railway • Run ID': 'railway-startup-snapshot'});
+    expect(system.fields['Workflow • Last Successful Run At']).toBeNull();
+  });
+
+  it('keeps a running-System write failure failed and still attempts a non-running terminal state', async () => {
+    const store = repository();
+    const statuses: string[] = [];
+    const failing = Object.create(store) as CompetitorStore;
+    failing.updateSystem = async (input) => {
+      statuses.push(input.status);
+      if (input.status === 'running') return {succeeded: 0, failed: 1, results: [{identity: 'system', error: 'unavailable'}]};
+      return store.updateSystem(input);
+    };
+    const report = await runEnrichment({repository: failing, runDomainOverview: async () => providerRecords});
+
+    expect(report.status).toBe('failed');
+    expect(statuses).toEqual(['running', 'failed']);
+  });
+
+  it('reconciles System to failed after cache rejection without advancing last-successful time', async () => {
+    const store = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'airtable/refresh-system-snapshot.json'));
+    const statuses: string[] = [];
+    const wrapped = Object.create(store) as CompetitorStore;
+    wrapped.updateSystem = async (input) => { statuses.push(input.status); return store.updateSystem(input); };
+    const report = await runEnrichment({repository: wrapped, runDomainOverview: async () => [providerRecords[0]], cache: {invalidate: async () => { throw new Error('cache unavailable'); }}, now: () => new Date('2026-08-18T12:00:00.000Z')});
+    const system = (await store.getDashboardSnapshot()).system[0];
+
+    expect(report).toMatchObject({status: 'failed', cacheInvalidated: false});
+    expect(statuses).toEqual(['running', 'succeeded', 'failed']);
+    expect(system.fields).toMatchObject({'Workflow • Status': 'failed', 'Workflow • Last Successful Run At': null});
+  });
+
+  it('permanently poisons duplicate dataset domains, bounds unexpected-item audits, and persists none', async () => {
+    const store = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'airtable/refresh-system-snapshot.json'));
+    const unexpected = Array.from({length: 12}, (_, index) => ({...providerRecords[0], domain: `unexpected-${index}.example`}));
+    const report = await runEnrichment({repository: store, runDomainOverview: async () => [providerRecords[0], providerRecords[0], providerRecords[0], ...unexpected]});
+
+    expect(report).toMatchObject({status: 'failed', succeeded: 0, failed: 1});
+    expect(report.errors.filter((error) => error.code === 'duplicate_dataset_item')).toHaveLength(1);
+    expect(report.errors.filter((error) => error.code === 'unexpected_dataset_item')).toHaveLength(10);
+    expect(JSON.stringify(report.errors)).not.toContain('unexpected-');
+  });
+
+  it('continues later companies after a thrown store operation and leaves the partially written company fingerprint invalid', async () => {
+    const store = repository();
+    const failing = Object.create(store) as CompetitorStore;
+    let calls = 0;
+    failing.upsertCompanies = async (companies) => {
+      calls += 1;
+      if (calls === 1) throw new Error('store unavailable');
+      return store.upsertCompanies(companies);
+    };
+    const existing = structuredClone(providerRecords[0]);
+    existing.domain = 'existing.example';
+    const report = await runEnrichment({repository: failing, batchSize: 1, runDomainOverview: async (domains) => domains[0] === 'alpha.example' ? [providerRecords[0]] : [existing]});
+    const snapshot = await store.getDashboardSnapshot();
+    const alpha = snapshot.companies.find((record) => record.fields['Identity • Company ID'] === 'company-alpha');
+    const existingCompany = snapshot.companies.find((record) => record.fields['Identity • Company ID'] === 'company-existing');
+
+    expect(report).toMatchObject({status: 'partial', succeeded: 1, failed: 1});
+    expect(alpha?.fields['Workflow • Evidence Fingerprint']).toBe('fixture-fingerprint-alpha');
+    expect(existingCompany?.fields['Workflow • Evidence Fingerprint']).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('replaces empty paid-ad evidence before fingerprinting the freshly prepared package', async () => {
+    const store = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'airtable/refresh-system-snapshot.json'));
+    await store.replacePaidAds('company-alpha', alphaPaidAds());
+    const noAds = structuredClone(providerRecords[0]);
+    noAds.paid = {...noAds.paid!, top_ads: []};
+    const report = await runEnrichment({repository: store, runDomainOverview: async () => [noAds], now: () => new Date('2026-08-18T12:00:00.000Z')});
+    const snapshot = await store.getDashboardSnapshot();
+    const company = snapshot.companies[0];
+    const expected = fingerprintEvidence(buildEvidencePackage({company, keywords: snapshot.keywords, paidAds: snapshot.paidAds, publishedInsight: undefined, review: undefined}));
+
+    expect(report.status).toBe('succeeded');
+    expect(snapshot.paidAds).toEqual([]);
+    expect(company.fields['Workflow • Evidence Fingerprint']).toBe(expected);
+  });
+
+  it('does not delete old paid ads or mark evidence current when the replacement write fails', async () => {
+    const store = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'airtable/refresh-system-snapshot.json'));
+    await store.replacePaidAds('company-alpha', alphaPaidAds());
+    const failing = Object.create(store) as CompetitorStore;
+    failing.replacePaidAds = async () => ({succeeded: 0, failed: 1, results: [{identity: 'company-alpha', error: 'paid_ad_write_failed'}]});
+    const noAds = structuredClone(providerRecords[0]);
+    noAds.paid = {...noAds.paid!, top_ads: []};
+
+    const report = await runEnrichment({repository: failing, runDomainOverview: async () => [noAds]});
+    const snapshot = await store.getDashboardSnapshot();
+
+    expect(report).toMatchObject({status: 'failed', succeeded: 0, failed: 1});
+    expect(snapshot.paidAds).toHaveLength(1);
+    expect(snapshot.companies[0].fields['Workflow • Evidence Fingerprint']).toBeNull();
+  });
+
+  it('deletes paid ads only for the refreshed company', async () => {
+    const store = repository();
+    await store.replacePaidAds('company-alpha', alphaPaidAds());
+    const otherPaidRecord = structuredClone(providerRecords[1]);
+    otherPaidRecord.domain = 'existing.example';
+    const otherAds = transformSemrushCompany(otherPaidRecord, {
+      companyId: 'company-existing',
+      identity: {canonicalDomain: 'existing.example', apolloAccountId: 'acct-existing', apolloRecordId: ''},
+      observedAt: '2026-08-01T00:00:00.000Z',
+      calculatedAt: '2026-08-01T00:00:00.000Z',
+    }).paidAds;
+    await store.replacePaidAds('company-existing', otherAds);
+    const noAds = structuredClone(providerRecords[0]);
+    noAds.paid = {...noAds.paid!, top_ads: []};
+
+    await runEnrichment({repository: store, runDomainOverview: async () => [noAds]});
+    const snapshot = await store.getDashboardSnapshot();
+
+    expect(snapshot.paidAds.filter((record) => record.fields['Identity • Company ID'] === 'company-alpha')).toEqual([]);
+    expect(snapshot.paidAds.filter((record) => record.fields['Identity • Company ID'] === 'company-existing')).toHaveLength(otherAds.length);
+  });
+
+  it('converges to the same paid-ad snapshot and fingerprint when a failed replacement is retried', async () => {
+    const store = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'airtable/refresh-system-snapshot.json'));
+    await store.replacePaidAds('company-alpha', alphaPaidAds());
+    const failing = Object.create(store) as CompetitorStore;
+    failing.replacePaidAds = async () => ({succeeded: 0, failed: 1, results: [{identity: 'company-alpha', error: 'paid_ad_write_failed'}]});
+    const noAds = structuredClone(providerRecords[0]);
+    noAds.paid = {...noAds.paid!, top_ads: []};
+
+    await runEnrichment({repository: failing, runDomainOverview: async () => [noAds], now: () => new Date('2026-08-18T12:00:00.000Z')});
+    const retry = await runEnrichment({repository: store, runDomainOverview: async () => [noAds], now: () => new Date('2026-08-18T12:00:00.000Z')});
+    const snapshot = await store.getDashboardSnapshot();
+    const company = snapshot.companies[0];
+    const expected = fingerprintEvidence(buildEvidencePackage({company, keywords: snapshot.keywords, paidAds: snapshot.paidAds, publishedInsight: undefined, review: undefined}));
+
+    expect(retry).toMatchObject({status: 'succeeded', succeeded: 1, failed: 0});
+    expect(snapshot.paidAds).toEqual([]);
+    expect(company.fields['Workflow • Evidence Fingerprint']).toBe(expected);
+  });
+
+  it('rejects non-integer or above-cap workflow controls', async () => {
+    const store = repository();
+    const base = {repository: store, runDomainOverview: async () => providerRecords};
+    await expect(runEnrichment({...base, batchSize: 11})).rejects.toThrow('batchSize');
+    await expect(runEnrichment({...base, maxAttempts: Number.NaN})).rejects.toThrow('maxAttempts');
+    await expect(runEnrichment({...base, timeoutMs: 1.5})).rejects.toThrow('timeoutMs');
+    await expect(runEnrichment({...base, timeoutMs: 120_001})).rejects.toThrow('timeoutMs');
   });
 });

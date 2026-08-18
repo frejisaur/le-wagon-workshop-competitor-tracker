@@ -16,12 +16,17 @@ export type ApifyClientOptions = {
   sleep?: (milliseconds: number) => Promise<void>;
   pollDelayMs?: number;
   maxPollAttempts?: number;
+  maxDatasetPages?: number;
   defaultTimeoutMs?: number;
 };
 
 const RUNNING = new Set<ApifyRunStatus>(['READY', 'RUNNING']);
 const TERMINAL = new Set<ApifyRunStatus>(['SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT']);
 const VALID_RUN_STATUSES = new Set<ApifyRunStatus>([...RUNNING, ...TERMINAL]);
+const MAX_POLL_ATTEMPTS = 120;
+const MAX_DATASET_PAGES = 100;
+const MAX_POLL_DELAY_MS = 30_000;
+const MAX_OPERATION_TIMEOUT_MS = 120_000;
 
 function safeEndpoint(value: string): URL {
   let endpoint: URL;
@@ -39,7 +44,7 @@ function safeEndpoint(value: string): URL {
 
 function operationSignal(options: ApifyOperationOptions, defaultTimeoutMs: number): {signal: AbortSignal; cleanup: () => void} {
   const timeoutMs = options.timeoutMs ?? defaultTimeoutMs;
-  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) throw new TypeError('timeoutMs must be a positive integer');
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_OPERATION_TIMEOUT_MS) throw new TypeError(`timeoutMs must be an integer from 1 to ${MAX_OPERATION_TIMEOUT_MS}`);
   const controller = new AbortController();
   const abortFromCaller = () => controller.abort(options.signal?.reason ?? new Error('caller aborted'));
   if (options.signal?.aborted) abortFromCaller();
@@ -75,6 +80,7 @@ export class ApifyClient {
   private readonly sleep: (milliseconds: number) => Promise<void>;
   private readonly pollDelayMs: number;
   private readonly maxPollAttempts: number;
+  private readonly maxDatasetPages: number;
   private readonly defaultTimeoutMs: number;
 
   constructor(private readonly options: ApifyClientOptions) {
@@ -84,9 +90,12 @@ export class ApifyClient {
     this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
     this.pollDelayMs = options.pollDelayMs ?? 1_000;
     this.maxPollAttempts = options.maxPollAttempts ?? 60;
+    this.maxDatasetPages = options.maxDatasetPages ?? 20;
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 60_000;
-    if (!Number.isInteger(this.pollDelayMs) || this.pollDelayMs < 0) throw new TypeError('pollDelayMs must be a non-negative integer');
-    if (!Number.isInteger(this.maxPollAttempts) || this.maxPollAttempts < 1) throw new TypeError('maxPollAttempts must be a positive integer');
+    if (!Number.isInteger(this.pollDelayMs) || this.pollDelayMs < 0 || this.pollDelayMs > MAX_POLL_DELAY_MS) throw new TypeError(`pollDelayMs must be an integer from 0 to ${MAX_POLL_DELAY_MS}`);
+    if (!Number.isInteger(this.maxPollAttempts) || this.maxPollAttempts < 1 || this.maxPollAttempts > MAX_POLL_ATTEMPTS) throw new TypeError(`maxPollAttempts must be an integer from 1 to ${MAX_POLL_ATTEMPTS}`);
+    if (!Number.isInteger(this.maxDatasetPages) || this.maxDatasetPages < 1 || this.maxDatasetPages > MAX_DATASET_PAGES) throw new TypeError(`maxDatasetPages must be an integer from 1 to ${MAX_DATASET_PAGES}`);
+    if (!Number.isInteger(this.defaultTimeoutMs) || this.defaultTimeoutMs < 1 || this.defaultTimeoutMs > MAX_OPERATION_TIMEOUT_MS) throw new TypeError(`defaultTimeoutMs must be an integer from 1 to ${MAX_OPERATION_TIMEOUT_MS}`);
   }
 
   async startRun(actorId: string, input: Record<string, unknown>, options: ApifyOperationOptions = {}): Promise<ApifyRun> {
@@ -131,7 +140,7 @@ export class ApifyClient {
       let offset = 0;
       let pages = 0;
       while (true) {
-        if (pages >= this.maxPollAttempts) throw new ApifyClientError('Apify dataset pagination exceeded maximum attempts');
+        if (pages >= this.maxDatasetPages) throw new ApifyClientError('Apify dataset pagination exceeded maximum pages');
         const query = new URLSearchParams({offset: String(offset), limit: '1000'});
         const raw = await this.request(`datasets/${encodeURIComponent(datasetId)}/items?${query.toString()}`, {method: 'GET'}, operation.signal);
         if (!raw || typeof raw !== 'object') throw new ApifyClientError('Apify dataset response is invalid');

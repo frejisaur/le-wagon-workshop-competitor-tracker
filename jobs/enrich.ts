@@ -1,4 +1,5 @@
 import {readFileSync, writeFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {AirtableClient} from '@/lib/airtable/client';
 import {FixtureCompetitorRepository} from '@/lib/airtable/fixture-repository';
@@ -35,10 +36,16 @@ function safeFailure(): string {
 
 export type EnrichCliResult = {exitCode: number; stdout: string};
 
+/** Refuse the only fixture-mode write that could overwrite its source state. */
+export function assertDistinctFixturePaths(fixtureState: string, outputState: string): void {
+  if (resolve(fixtureState) === resolve(outputState)) throw new TypeError('output-state must not resolve to fixture-state');
+}
+
 /** CLI boundary: fixture state is in memory unless an explicit output path is supplied. */
 export async function runEnrichCli(arguments_: string[]): Promise<EnrichCliResult> {
   try {
     const args = parseArguments(arguments_);
+    if (args.fixtureState && args.outputState) assertDistinctFixturePaths(args.fixtureState, args.outputState);
     let report: EnrichmentReport;
     if (args.providerFixture && args.fixtureState) {
       const records = parseSemrushPayload(JSON.parse(readFileSync(args.providerFixture, 'utf8'))).records;

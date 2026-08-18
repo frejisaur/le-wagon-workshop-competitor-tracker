@@ -47,4 +47,12 @@ describe('ApifyClient', () => {
     await expect(client.getDatasetItems('dataset-1', {timeoutMs: 100})).resolves.toEqual([{domain: 'alpha.example'}, {domain: 'beta.example'}]);
     expect(urls.filter((url) => url.includes('datasets'))).toHaveLength(2);
   });
+
+  it('rejects unsafe polling, pagination, and timeout caps before requesting the provider', () => {
+    expect(() => new ApifyClient({token: 'safe', maxPollAttempts: 121})).toThrow('maxPollAttempts');
+    expect(() => new ApifyClient({token: 'safe', maxDatasetPages: Number.NaN})).toThrow('maxDatasetPages');
+    expect(() => new ApifyClient({token: 'safe', pollDelayMs: 1.5})).toThrow('pollDelayMs');
+    const client = new ApifyClient({token: 'safe', endpoint: 'https://apify.test/v2', fetch: vi.fn()});
+    expect(client.getDatasetItems('dataset', {timeoutMs: 120_001})).rejects.toThrow('timeoutMs');
+  });
 });

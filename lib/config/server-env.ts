@@ -13,8 +13,6 @@ const AirtableEnvSchema = z.object({
 
 const RefreshOnlyEnvSchema = z.object({
   APIFY_TOKEN: z.string().min(1),
-  CACHE_INVALIDATION_SECRET: z.string().min(1),
-  APP_BASE_URL: z.string().url(),
 });
 
 const WebEnvSchema = AirtableEnvSchema;
@@ -37,8 +35,6 @@ function envNameOrder(name: string): number {
     'AIRTABLE_PAT',
     'AIRTABLE_BASE_ID',
     'APIFY_TOKEN',
-    'CACHE_INVALIDATION_SECRET',
-    'APP_BASE_URL',
   ];
   const index = priority.indexOf(name);
   return index === -1 ? priority.length : index;

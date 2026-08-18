@@ -42,13 +42,13 @@ describe('server environment scopes', () => {
         ...airtableEnv,
         APIFY_TOKEN: 'sentinel-apify-token',
         CACHE_INVALIDATION_SECRET: 'sentinel-cache-secret',
-        APP_BASE_URL: 'not a url',
+        AIRTABLE_SYSTEM_TABLE: '',
       });
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
 
-    expect(message).toContain('APP_BASE_URL');
+    expect(message).toContain('AIRTABLE_SYSTEM_TABLE');
     expect(message).not.toContain('sentinel-apify-token');
     expect(message).not.toContain('sentinel-cache-secret');
   });
