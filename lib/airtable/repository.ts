@@ -27,6 +27,10 @@ function emptyResult(): WriteResult {
   return {succeeded: 0, failed: 0, results: []};
 }
 
+function replacementFailure(companyId: string, error: string): WriteResult {
+  return {succeeded: 0, failed: 1, results: [{identity: companyId, error}]};
+}
+
 function firstCompanyId(record: AirtableRecord): string | null {
   const value = record.fields['Identity • Company ID'];
   return typeof value === 'string' && value ? value : null;
@@ -96,6 +100,61 @@ export class AirtableCompetitorRepository implements CompetitorStore {
       } catch (error) {
         written.failed += batch.length;
         written.results.push(...batch.map((identity) => ({identity, error: errorMessage(error)})));
+      }
+    }
+    return written;
+  }
+
+  async replacePaidAds(companyId: string, ads: CuratedPaidAd[]): Promise<WriteResult> {
+    let company: AirtableRecord;
+    let existing: AirtableRecord[];
+    let writes: WriteItem[];
+    try {
+      const companies = await this.client.list(AIRTABLE_TABLES.companies, {filterByFormula: equalityFormula('Identity • Company ID', companyId)});
+      if (!companies.length) return replacementFailure(companyId, 'company_link_missing');
+      if (companies.length !== 1) return replacementFailure(companyId, 'duplicate_company_records');
+      company = companies[0];
+
+      const incomingIds = new Set<string>();
+      for (const ad of ads) {
+        if (ad.calculated.companyId !== companyId) return replacementFailure(companyId, 'paid_ad_company_mismatch');
+        if (!ad.calculated.paidAdId || incomingIds.has(ad.calculated.paidAdId)) return replacementFailure(companyId, 'duplicate_incoming_paid_ad_identity');
+        incomingIds.add(ad.calculated.paidAdId);
+      }
+
+      existing = await this.client.list(AIRTABLE_TABLES.paidAds, {filterByFormula: equalityFormula('Identity • Company ID', companyId)});
+      const existingByIdentity = new Map<string, AirtableRecord>();
+      for (const record of existing) {
+        const identity = record.fields['Identity • Paid Ad ID'];
+        const link = record.fields['Identity • Company Link'];
+        if (firstCompanyId(record) !== companyId || !Array.isArray(link) || link.length !== 1 || link[0] !== company.id) return replacementFailure(companyId, 'paid_ad_company_link_mismatch');
+        if (typeof identity !== 'string' || !identity || existingByIdentity.has(identity)) return replacementFailure(companyId, 'duplicate_existing_paid_ad_identity');
+        existingByIdentity.set(identity, record);
+      }
+
+      // Construct every mapped record before the first write. Invalid timestamps
+      // or mapper inputs therefore leave the previous snapshot intact.
+      writes = ads.map((ad) => {
+        const stored = existingByIdentity.get(ad.calculated.paidAdId);
+        const first = stored?.fields['Observed • First Observed At'];
+        const last = stored?.fields['Observed • Last Observed At'];
+        return {identity: ad.calculated.paidAdId, recordId: stored?.id, fields: toAirtablePaidAdFields(ad, company.id, typeof first === 'string' ? first : undefined, typeof last === 'string' ? last : undefined)};
+      });
+    } catch (error) {
+      return replacementFailure(companyId, errorMessage(error));
+    }
+
+    const written = await this.performWrites(AIRTABLE_TABLES.paidAds, writes, emptyResult());
+    if (written.failed) return written;
+
+    const incomingIds = new Set(ads.map((ad) => ad.calculated.paidAdId));
+    const obsolete = existing.filter((record) => !incomingIds.has(String(record.fields['Identity • Paid Ad ID']))).map((record) => record.id);
+    for (const batch of chunks(obsolete)) {
+      try {
+        await this.client.delete(AIRTABLE_TABLES.paidAds, batch);
+      } catch (error) {
+        written.failed += batch.length;
+        written.results.push(...batch.map((recordId) => ({identity: recordId, error: errorMessage(error)})));
       }
     }
     return written;

@@ -121,6 +121,7 @@ describe('runInitialImport', () => {
     const failingRepository: CompetitorStore = {
       resolveCompanyIdentity: repository.resolveCompanyIdentity.bind(repository),
       replaceKeywords: repository.replaceKeywords.bind(repository),
+      replacePaidAds: repository.replacePaidAds.bind(repository),
       upsertPaidAds: repository.upsertPaidAds.bind(repository),
       getDashboardSnapshot: repository.getDashboardSnapshot.bind(repository),
       getDueInsightInputs: repository.getDueInsightInputs.bind(repository),

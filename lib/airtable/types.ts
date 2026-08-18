@@ -134,6 +134,8 @@ export interface CompetitorStore {
   resolveCompanyIdentity(identity: Pick<CompanyIdentityResolution, 'apolloAccountId' | 'canonicalDomain'>): Promise<{companyId: string; source: 'apollo_account_id' | 'canonical_domain'} | null>;
   upsertCompanies(companies: CompanyPersistenceWrite[]): Promise<WriteResult>;
   replaceKeywords(companyId: string, keywords: CuratedKeyword[]): Promise<WriteResult>;
+  /** Atomically-at-delete-boundary replaces one company's observed paid-ad snapshot. */
+  replacePaidAds(companyId: string, ads: CuratedPaidAd[]): Promise<WriteResult>;
   upsertPaidAds(paidAds: CuratedPaidAd[]): Promise<WriteResult>;
   getDashboardSnapshot(): Promise<DashboardSnapshot>;
   getDueInsightInputs(): Promise<DueInsightInput[]>;

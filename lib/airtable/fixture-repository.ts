@@ -71,6 +71,57 @@ export class FixtureCompetitorRepository implements CompetitorStore {
     return writes;
   }
 
+  async replacePaidAds(companyId: string, ads: CuratedPaidAd[]): Promise<WriteResult> {
+    const companies = this.records('companies').filter((record) => record.fields['Identity • Company ID'] === companyId);
+    if (!companies.length) return replacementFailure(companyId, 'company_link_missing');
+    if (companies.length !== 1) return replacementFailure(companyId, 'duplicate_company_records');
+    const company = companies[0];
+
+    const incomingIds = new Set<string>();
+    for (const ad of ads) {
+      if (ad.calculated.companyId !== companyId) return replacementFailure(companyId, 'paid_ad_company_mismatch');
+      if (!ad.calculated.paidAdId || incomingIds.has(ad.calculated.paidAdId)) return replacementFailure(companyId, 'duplicate_incoming_paid_ad_identity');
+      incomingIds.add(ad.calculated.paidAdId);
+    }
+
+    const existing = this.records('paidAds').filter((record) => record.fields['Identity • Company ID'] === companyId);
+    const existingByIdentity = new Map<string, AirtableRecord>();
+    for (const record of existing) {
+      const identity = record.fields['Identity • Paid Ad ID'];
+      const link = record.fields['Identity • Company Link'];
+      if (!Array.isArray(link) || link.length !== 1 || link[0] !== company.id) return replacementFailure(companyId, 'paid_ad_company_link_mismatch');
+      if (typeof identity !== 'string' || !identity || existingByIdentity.has(identity)) return replacementFailure(companyId, 'duplicate_existing_paid_ad_identity');
+      existingByIdentity.set(identity, record);
+    }
+
+    let staged: Array<{identity: string; recordId?: string; fields: AirtableRecord['fields']}>;
+    try {
+      // Map the complete set before altering fixture state, matching production.
+      staged = ads.map((ad) => {
+        const stored = existingByIdentity.get(ad.calculated.paidAdId);
+        const first = stored?.fields['Observed • First Observed At'];
+        const last = stored?.fields['Observed • Last Observed At'];
+        return {identity: ad.calculated.paidAdId, recordId: stored?.id, fields: toAirtablePaidAdFields(ad, company.id, typeof first === 'string' ? first : undefined, typeof last === 'string' ? last : undefined)};
+      });
+    } catch {
+      // Keep fixture failure semantics aligned with the production adapter,
+      // which intentionally does not expose mapper internals.
+      return replacementFailure(companyId, 'Airtable request failed');
+    }
+
+    const table = this.table('paidAds');
+    for (const write of staged) {
+      const id = write.recordId ?? recordId('paidAds', write.identity);
+      const previous = write.recordId ? table.get(write.recordId) : undefined;
+      const present = Object.fromEntries(Object.entries(write.fields).filter(([, value]) => value !== undefined));
+      table.set(id, {id, fields: clone({...previous?.fields, ...present})});
+    }
+    for (const record of existing) {
+      if (!incomingIds.has(String(record.fields['Identity • Paid Ad ID']))) table.delete(record.id);
+    }
+    return {succeeded: staged.length, failed: 0, results: staged.map((write) => ({identity: write.identity, recordId: write.recordId ?? recordId('paidAds', write.identity)}))};
+  }
+
   async upsertPaidAds(paidAds: CuratedPaidAd[]): Promise<WriteResult> {
     const results: WriteResult['results'] = [];
     const byCompany = new Map<string, CuratedPaidAd[]>();
@@ -193,4 +244,8 @@ export class FixtureCompetitorRepository implements CompetitorStore {
   private records(key: keyof FixtureSnapshot): AirtableRecord[] {
     return [...this.table(key).values()].map(clone);
   }
+}
+
+function replacementFailure(companyId: string, error: string): WriteResult {
+  return {succeeded: 0, failed: 1, results: [{identity: companyId, error}]};
 }
