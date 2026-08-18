@@ -139,4 +139,36 @@ describe('Task 8 hardening', () => {
       expect(readFileSync(source, 'utf8')).toBe(before);
     } finally { rmSync(directory, {recursive: true, force: true}); }
   });
+
+  it('fails closed into the sole injection reason when benign prepared evidence exhausts the character scan budget', async () => {
+    const repository = store();
+    const marker = 'BENIGN_SCAN_BUDGET_PAYLOAD';
+    const oversizedBenignValue = marker.repeat(50_000);
+    const result = await submitInsightCandidate(candidate(), {repository, prepare: prepared({evidence: [{ref: 'company:company-alpha:metric:organic_traffic', classification: 'observed', source: 'semrush', value: oversizedBenignValue}]})});
+
+    expect(result).toMatchObject({status: 'queued', reasons: ['prompt_injection_content']});
+    expect(JSON.stringify(result)).not.toContain(marker);
+    expect(repository.upsertPublishedInsight).not.toHaveBeenCalled();
+  });
+
+  it('keeps an explicit stale fixture output stable across a second reload-style publish invocation', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'insight-stale-reload-'));
+    const source = `${process.cwd()}/tests/fixtures/insights/approved-stale-state.json`;
+    const firstOutput = join(directory, 'stale-first.json');
+    const secondOutput = join(directory, 'stale-second.json');
+    try {
+      const first = await runPublishApprovedInsightsCli(['--fixture-state', source, '--fixture-output-state', firstOutput]);
+      const firstBytes = readFileSync(firstOutput, 'utf8');
+      const second = await runPublishApprovedInsightsCli(['--fixture-state', firstOutput, '--fixture-output-state', secondOutput]);
+      const persisted = JSON.parse(readFileSync(secondOutput, 'utf8'));
+
+      expect(JSON.parse(first.stdout)).toEqual({published: 0, stale: 1, failed: 0, skipped: 0});
+      // A stale review is no longer approved, so the second pass is a stable no-op.
+      expect(JSON.parse(second.stdout)).toEqual({published: 0, stale: 0, failed: 0, skipped: 0});
+      expect(readFileSync(firstOutput, 'utf8')).toBe(firstBytes);
+      expect(persisted.insights).toHaveLength(1);
+      expect(persisted.insights[0].id).toBe('rec-last-published');
+      expect(persisted.reviews[0].fields['Review • Status']).toBe('stale');
+    } finally { rmSync(directory, {recursive: true, force: true}); }
+  });
 });

@@ -67,3 +67,8 @@ Operational limitation: Airtable does not offer a server-side unique constraint 
 - Injection scanning now checks full strings and object keys with one bounded package-wide traversal budget. Exhausting that budget fails closed into `prompt_injection_content`; no tail content is skipped.
 - Candidate text is validated as already trimmed instead of normalized. Accepted claim conclusion/reason bytes are persisted unchanged; whitespace-padded candidate text rejects before writes.
 - Fixture promotion coverage now proves stale approved state is written only to an explicit output file, leaves the source fixture byte-identical, retains its prior published insight, and marks the review stale.
+
+## Fix Round 3 (test-only)
+
+- Added coverage for the character-budget exhaustion branch using benign prepared evidence larger than one million characters. It queues with only `prompt_injection_content`: the fail-closed scan condition is the sole deterministic gate in this fixture, and the result envelope does not expose the oversized input.
+- Added reload-style stale fixture coverage. The first approved-to-stale transition preserves the prior insight; a second invocation reads the first explicit output, produces no publication or second stale transition because the review is no longer approved, preserves the first output bytes, and retains the stale review and prior insight.
