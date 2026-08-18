@@ -38,20 +38,52 @@ function boundedJson<T>(items: T[], maxItems: number): string {
 export type StoredClaimWire = Omit<ClaimWire, 'evidenceRefs'> & {evidenceRefs: string[]; evidenceRefCount: number; evidenceRefsRetainedCount: number};
 type StoredClaimCollection = {json: string; originalCount: number; retainedCount: number};
 
+function byteLength(value: unknown): number {
+  return new TextEncoder().encode(json(value)).byteLength;
+}
+
+function fitsClaimArray(claim: StoredClaimWire): boolean {
+  return byteLength([claim]) <= MAX_AIRTABLE_JSON_BYTES;
+}
+
+function trimClaimTextToFit(claim: StoredClaimWire, field: 'conclusion' | 'confidenceReason'): void {
+  const codePoints = Array.from(claim[field]);
+  let low = 0;
+  let high = codePoints.length;
+  let best = '';
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    claim[field] = codePoints.slice(0, middle).join('');
+    if (fitsClaimArray(claim)) {
+      best = claim[field];
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  claim[field] = best;
+}
+
 function claimWithBoundedEvidence(claim: ClaimWire): StoredClaimWire {
   const evidenceRefs = claim.evidenceRefs.slice(0, JSON_CAPS.evidenceRefs);
   const stored: StoredClaimWire = {...claim, evidenceRefs, evidenceRefCount: claim.evidenceRefs.length, evidenceRefsRetainedCount: evidenceRefs.length};
-  while (stored.evidenceRefs.length > 0 && new TextEncoder().encode(json(stored)).byteLength > MAX_AIRTABLE_JSON_BYTES) {
+  while (stored.evidenceRefs.length > 0 && !fitsClaimArray(stored)) {
     stored.evidenceRefs.pop();
     stored.evidenceRefsRetainedCount = stored.evidenceRefs.length;
   }
+  if (!fitsClaimArray(stored)) trimClaimTextToFit(stored, 'conclusion');
+  if (!fitsClaimArray(stored)) trimClaimTextToFit(stored, 'confidenceReason');
+  if (!fitsClaimArray(stored)) throw new TypeError('claim cannot fit the Airtable JSON byte budget');
   return stored;
 }
 
 function classifiedClaims(claims: ClaimWire[], classification: ClaimWire['classification']): StoredClaimCollection {
   if (claims.some((claim) => claim.classification !== classification)) throw new TypeError(`${classification} claim collection contains another classification`);
-  const bounded = claims.map(claimWithBoundedEvidence).slice(0, JSON_CAPS.claims);
-  while (bounded.length > 0 && new TextEncoder().encode(json(bounded)).byteLength > MAX_AIRTABLE_JSON_BYTES) bounded.pop();
+  const bounded: StoredClaimWire[] = [];
+  for (const claim of claims.slice(0, JSON_CAPS.claims).map(claimWithBoundedEvidence)) {
+    if (byteLength([...bounded, claim]) > MAX_AIRTABLE_JSON_BYTES) break;
+    bounded.push(claim);
+  }
   return {json: json(bounded), originalCount: claims.length, retainedCount: bounded.length};
 }
 
@@ -151,8 +183,24 @@ export function toAirtableKeywordFields(keyword: CuratedKeyword, companyAirtable
   };
 }
 
-export function toAirtablePaidAdFields(ad: CuratedPaidAd, companyAirtableRecordId: string, firstObservedAt = ad.observed.observedAt): AirtableFields {
+function validIsoTimestamp(value: string | undefined): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return null;
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) || new Date(timestamp).toISOString() !== value ? null : value;
+}
+
+/** Selects chronological bounds from valid ISO timestamps; invalid stored values cannot corrupt a refreshed ad. */
+export function paidAdObservationRange(incomingAt: string, storedFirstAt?: string, storedLastAt?: string): {firstObservedAt: string; lastObservedAt: string} {
+  const incoming = validIsoTimestamp(incomingAt);
+  if (!incoming) throw new TypeError('paid ad observedAt must be a valid ISO timestamp');
+  const firstCandidates = [incoming, validIsoTimestamp(storedFirstAt)].filter((value): value is string => value !== null);
+  const lastCandidates = [incoming, validIsoTimestamp(storedLastAt)].filter((value): value is string => value !== null);
+  return {firstObservedAt: firstCandidates.sort()[0], lastObservedAt: lastCandidates.sort().at(-1)!};
+}
+
+export function toAirtablePaidAdFields(ad: CuratedPaidAd, companyAirtableRecordId: string, storedFirstAt?: string, storedLastAt?: string): AirtableFields {
   const {observed, calculated} = ad;
+  const observationRange = paidAdObservationRange(observed.observedAt, storedFirstAt, storedLastAt);
   return {
     'Identity • Paid Ad ID': calculated.paidAdId, 'Identity • Company ID': calculated.companyId, 'Identity • Company Link': [companyAirtableRecordId],
     'Observed • Source': observed.source, 'Observed • At': observed.observedAt, 'Observed • Database': observed.database,
@@ -161,7 +209,7 @@ export function toAirtablePaidAdFields(ad: CuratedPaidAd, companyAirtableRecordI
     'Observed • Previous Position': observed.previousPosition, 'Observed • Volume': observed.volume, 'Observed • CPC USD': observed.cpcUsd,
     'Observed • Keyword Difficulty': observed.keywordDifficulty, 'Observed • Competition': observed.competition,
     'Observed • Traffic': observed.traffic, 'Observed • Traffic Share Pct': observed.trafficSharePct, 'Observed • Traffic Cost USD': observed.trafficCostUsd,
-    'Observed • First Observed At': firstObservedAt, 'Observed • Last Observed At': observed.observedAt,
+    'Observed • First Observed At': observationRange.firstObservedAt, 'Observed • Last Observed At': observationRange.lastObservedAt,
     'Calculated • Normalized Landing URL': calculated.normalizedLandingUrl, 'Calculated • At': calculated.calculatedAt,
   };
 }

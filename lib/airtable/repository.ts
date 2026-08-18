@@ -118,11 +118,14 @@ export class AirtableCompetitorRepository implements CompetitorStore {
           result.results.push(...ads.map((ad) => ({identity: ad.calculated.paidAdId, error: 'company_link_missing'})));
           continue;
         }
+        const groupWrites: WriteItem[] = [];
         for (const ad of ads) {
           const existing = await this.client.list(AIRTABLE_TABLES.paidAds, {filterByFormula: equalityFormula('Identity • Paid Ad ID', ad.calculated.paidAdId)});
           const firstObservedAt = existing[0]?.fields['Observed • First Observed At'];
-          writes.push({identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, companyRecord.id, typeof firstObservedAt === 'string' ? firstObservedAt : undefined), recordId: existing[0]?.id});
+          const lastObservedAt = existing[0]?.fields['Observed • Last Observed At'];
+          groupWrites.push({identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, companyRecord.id, typeof firstObservedAt === 'string' ? firstObservedAt : undefined, typeof lastObservedAt === 'string' ? lastObservedAt : undefined), recordId: existing[0]?.id});
         }
+        writes.push(...groupWrites);
       } catch (error) {
         result.failed += ads.length;
         result.results.push(...ads.map((ad) => ({identity: ad.calculated.paidAdId, error: errorMessage(error)})));

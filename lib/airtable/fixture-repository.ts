@@ -88,7 +88,8 @@ export class FixtureCompetitorRepository implements CompetitorStore {
       for (const ad of ads) {
         const existing = [...this.table('paidAds').values()].find((record) => record.fields['Identity • Paid Ad ID'] === ad.calculated.paidAdId);
         const firstObservedAt = existing?.fields['Observed • First Observed At'];
-        const written = await this.upsertMany('paidAds', [{identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, company.id, typeof firstObservedAt === 'string' ? firstObservedAt : undefined), lookupField: 'Identity • Paid Ad ID'}]);
+        const lastObservedAt = existing?.fields['Observed • Last Observed At'];
+        const written = await this.upsertMany('paidAds', [{identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, company.id, typeof firstObservedAt === 'string' ? firstObservedAt : undefined, typeof lastObservedAt === 'string' ? lastObservedAt : undefined), lookupField: 'Identity • Paid Ad ID'}]);
         results.push(...written.results);
       }
     }

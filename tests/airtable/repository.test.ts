@@ -18,7 +18,9 @@ let failSecondKeywordBatch = false;
 const keywordBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
 let companyLookupCount = 0;
 let paidAdWriteCount = 0;
+let paidAdIdentityLookupCount = 0;
 const paidAdPatchBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
+const paidAdPostBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
 const server = setupServer(
   http.get(`${endpoint}/v0/base/Companies`, ({request}) => {
     const formula = new URL(request.url).searchParams.get('filterByFormula') ?? '';
@@ -27,6 +29,7 @@ const server = setupServer(
       companyLookupCount += 1;
       return HttpResponse.json({records: [{id: 'rec-company-alpha', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example'}}]});
     }
+    if (formula.includes("'company-beta'")) return HttpResponse.json({records: [{id: 'rec-company-beta', fields: {'Identity • Company ID': 'company-beta', 'Identity • Canonical Domain': 'beta.example'}}]});
     return HttpResponse.json({records: []});
   }),
   http.post(`${endpoint}/v0/base/Companies`, async ({request}) => {
@@ -54,13 +57,16 @@ const server = setupServer(
     return HttpResponse.json({records: deletedKeywordIds.map((id) => ({id, fields: {}}))});
   }),
   http.get(`${endpoint}/v0/base/Paid%20Ads`, ({request}) => {
+    paidAdIdentityLookupCount += 1;
     const formula = new URL(request.url).searchParams.get('filterByFormula') ?? '';
-    if (formula.includes("'ad-existing'")) return HttpResponse.json({records: [{id: 'rec-ad-existing', fields: {'Identity • Paid Ad ID': 'ad-existing', 'Observed • First Observed At': '2025-01-01T00:00:00.000Z'}}]});
+    if (formula.includes("'ad-fail'")) return HttpResponse.json({error: {type: 'SERVER_ERROR'}}, {status: 500});
+    if (formula.includes("'ad-existing'")) return HttpResponse.json({records: [{id: 'rec-ad-existing', fields: {'Identity • Paid Ad ID': 'ad-existing', 'Observed • First Observed At': '2025-01-01T00:00:00.000Z', 'Observed • Last Observed At': '2026-03-03T00:00:00.000Z'}}]});
     return HttpResponse.json({records: []});
   }),
   http.post(`${endpoint}/v0/base/Paid%20Ads`, async ({request}) => {
     paidAdWriteCount += 1;
     const body = await request.json() as {records: Array<{fields: Record<string, unknown>}>};
+    paidAdPostBodies.push(body);
     return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-ad-${index}`, fields: {}}))});
   }),
   http.patch(`${endpoint}/v0/base/Paid%20Ads`, async ({request}) => {
@@ -72,7 +78,7 @@ const server = setupServer(
 );
 
 beforeAll(() => server.listen({onUnhandledRequest: 'error'}));
-afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; companyLookupCount = 0; paidAdWriteCount = 0; paidAdPatchBodies.length = 0; });
+afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; companyLookupCount = 0; paidAdWriteCount = 0; paidAdIdentityLookupCount = 0; paidAdPatchBodies.length = 0; paidAdPostBodies.length = 0; });
 afterAll(() => server.close());
 
 function makeCompanies(count: number): CompanyWrite[] {
@@ -200,7 +206,20 @@ describe('AirtableCompetitorRepository', () => {
 
     expect(result).toMatchObject({succeeded: 16, failed: 0});
     expect(companyLookupCount).toBe(1);
+    expect(paidAdIdentityLookupCount).toBe(16);
     expect(paidAdWriteCount).toBe(2);
+  });
+
+  it('keeps a failed paid-ad group out of writes while another company group succeeds', async () => {
+    const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
+    const failedGroup = makePaidAds(2);
+    failedGroup[1].calculated.paidAdId = 'ad-fail';
+    const successfulGroup = makePaidAds(1, 'company-beta');
+    successfulGroup[0].calculated.paidAdId = 'ad-beta';
+
+    const result = await repository.upsertPaidAds([...failedGroup, ...successfulGroup]);
+    expect(result).toMatchObject({succeeded: 1, failed: 2});
+    expect(paidAdPostBodies.flatMap((body) => body.records).map((record) => record.fields['Identity • Paid Ad ID'])).toEqual(['ad-beta']);
   });
 
   it('fails a missing paid-ad company group without issuing paid-ad writes', async () => {
@@ -229,6 +248,22 @@ describe('AirtableCompetitorRepository', () => {
 
     const snapshot = await repository.getDashboardSnapshot();
     expect(snapshot.paidAds[0].fields).toMatchObject({'Observed • First Observed At': '2025-01-01T00:00:00.000Z', 'Observed • Last Observed At': '2026-03-03T00:00:00.000Z'});
+  });
+
+  it('uses chronological min/max paid timestamps for older retries in production and fixture', async () => {
+    const production = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
+    const incoming = makePaidAds(1, 'company-alpha', '2024-01-01T00:00:00.000Z')[0];
+    incoming.calculated.paidAdId = 'ad-existing';
+    await production.upsertPaidAds([incoming]);
+    expect(paidAdPatchBodies[0].records[0].fields).toMatchObject({'Observed • First Observed At': '2024-01-01T00:00:00.000Z', 'Observed • Last Observed At': '2026-03-03T00:00:00.000Z'});
+
+    const fixture = FixtureCompetitorRepository.fromSnapshot(`${process.cwd()}/tests/fixtures/airtable/base-snapshot.json`);
+    const newer = makePaidAds(1, 'company-alpha', '2026-03-03T00:00:00.000Z')[0];
+    const older = makePaidAds(1, 'company-alpha', '2024-01-01T00:00:00.000Z')[0];
+    await fixture.upsertPaidAds([newer]);
+    await fixture.upsertPaidAds([older]);
+    await fixture.upsertPaidAds([older]);
+    expect((await fixture.getDashboardSnapshot()).paidAds[0].fields).toMatchObject({'Observed • First Observed At': '2024-01-01T00:00:00.000Z', 'Observed • Last Observed At': '2026-03-03T00:00:00.000Z'});
   });
 
   it('escapes formula literals without interpolating newlines, quotes, or backslashes', () => {

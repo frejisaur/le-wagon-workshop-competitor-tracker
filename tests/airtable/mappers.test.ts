@@ -108,6 +108,17 @@ describe('Airtable mappers', () => {
     expect(JSON.parse(fields['Observed • Themes JSON'] as string)).toHaveLength(100);
   });
 
+  it('retains the first multibyte near-boundary claim within its actual JSON array budget', () => {
+    const claim: ClaimWire = {claimId: 'claim-multibyte', conclusion: 'é'.repeat(50_000), classification: 'observed', confidence: 'high', confidenceReason: '理由'.repeat(5_000), evidenceRefs: []};
+    const insight: InsightWireInput = {insightId: 'insight-boundary', companyId: 'company-alpha', observedThemes: [claim, {...claim, claimId: 'tail-claim'}], inferredClaims: [], recommendations: [], agentHarness: 'test', model: 'test', skillVersion: '1', evidenceFingerprint: 'fingerprint', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z'};
+    const fields = toAirtableInsightFields(insight, 'rec-company-alpha');
+    const json = fields['Observed • Themes JSON'] as string;
+
+    expect(JSON.parse(json)[0]).toMatchObject({claimId: 'claim-multibyte'});
+    expect(new TextEncoder().encode(json).byteLength).toBeLessThanOrEqual(90_000);
+    expect(fields).toMatchObject({'Observed • Themes Claim Count': 2, 'Observed • Themes Claims Retained Count': 1});
+  });
+
   it('uses a sanitized fixture snapshot only', () => {
     const path = resolve(process.cwd(), 'tests/fixtures/airtable/base-snapshot.json');
     const before = readFileSync(path, 'utf8');
