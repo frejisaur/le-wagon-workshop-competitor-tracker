@@ -1,0 +1,82 @@
+:root {
+  /* Color */
+  --color-canvas: #f3f6f7;
+  --color-surface: #fcfdfd;
+  --color-surface-raised: #ffffff;
+  --color-surface-subtle: #e9eef0;
+  --color-ink: #172126;
+  --color-text-secondary: #5d6b72;
+  --color-text-quiet: #77868d;
+  --color-rule: #d5dee1;
+  --color-rule-strong: #aab8be;
+  --color-accent: #245eb5;
+  --color-accent-subtle: #e8f0fb;
+  --color-positive: #2e7254;
+  --color-warning: #8a621b;
+  --color-negative: #a54640;
+  --color-neutral: #66767d;
+
+  /* Typography. IBM Plex is preferred when installed; browser-safe fallbacks
+     avoid a build-time or runtime font-network dependency. */
+  --font-interface: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-data: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --type-page-size: 24px;
+  --type-page-line: 30px;
+  --type-section-size: 16px;
+  --type-section-line: 22px;
+  --type-panel-size: 13px;
+  --type-panel-line: 18px;
+  --type-body-size: 14px;
+  --type-body-line: 21px;
+  --type-compact-size: 12px;
+  --type-compact-line: 18px;
+  --type-label-size: 11px;
+  --type-label-line: 16px;
+  --type-data-large-size: 24px;
+  --type-data-large-line: 28px;
+  --type-data-size: 12px;
+  --type-data-line: 18px;
+  --type-metadata-size: 11px;
+  --type-metadata-line: 16px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* Shape and layers */
+  --radius-control: 4px;
+  --radius-panel: 6px;
+  --radius-tag: 999px;
+  --layer-base: 0;
+  --layer-sticky: 20;
+  --layer-popover: 40;
+  --layer-overlay: 60;
+  --layer-modal: 80;
+
+  /* Layout. Breakpoint tokens are documented for consumers; media queries use
+     their literal values because CSS custom properties cannot be evaluated in
+     media-query conditions. */
+  --header-height: 48px;
+  --sidebar-width: 192px;
+  --content-max-width: 1600px;
+  --content-gutter: 24px;
+  --content-gutter-wide: 32px;
+  --breakpoint-mobile-max: 767px;
+  --breakpoint-tablet-min: 768px;
+  --breakpoint-desktop-min: 1280px;
+  --breakpoint-wide-min: 1440px;
+  --touch-target-min: 44px;
+
+  /* Motion */
+  --motion-fast: 120ms;
+  --motion-evidence: 160ms;
+  --motion-ease: ease;
+}

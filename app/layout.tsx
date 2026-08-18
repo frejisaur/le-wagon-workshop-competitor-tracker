@@ -1,5 +1,7 @@
 import type {Metadata} from 'next';
 import type {ReactNode} from 'react';
+import {Theme} from '@carbon/react';
+import '@/styles/globals.scss';
 
 export const metadata: Metadata = {
   title: 'Competitor Intelligence',
@@ -7,5 +9,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({children}: Readonly<{children: ReactNode}>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body><Theme theme="white">{children}</Theme></body></html>;
 }
