@@ -95,3 +95,15 @@ Fix Round 2 validation: 43 focused tests; full suite 199 passed; `npx tsc
 --noEmit`, production build, schema drift check, browser scan including raw
 dataset markers, fixture CLI, and diff check all passed. Fixture output retained
 `cacheInvalidated: false`.
+
+## Fix Round 3
+
+- Removed the production `setLoaderForTest` mutation seam. `DashboardService`
+  now receives a readonly loader in its constructor; the real module singleton
+  is constructed with the repository loader. Tests model sequential load phases
+  through a local mutable closure passed into a newly constructed service.
+- The shared landscape/company cache and generation behavior remain covered.
+
+Fix Round 3 validation: focused API suite and full suite (199 passed),
+`npx tsc --noEmit`, production build, `git diff --check`, and
+`rg -n setLoaderForTest lib tests` (no matches) all passed.

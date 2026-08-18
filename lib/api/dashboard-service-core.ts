@@ -8,9 +8,7 @@ const emptySnapshot: DashboardSnapshot = {companies: [], keywords: [], paidAds: 
 /** Shared cache façade used by both server routes; loader injection keeps its singleton behavior testable. */
 export class DashboardService {
   private readonly cache = new DashboardCache<DashboardSnapshot>();
-  private loader: () => Promise<DashboardSnapshot>;
-  constructor(loader: () => Promise<DashboardSnapshot>) { this.loader = loader; }
-  setLoaderForTest(loader: () => Promise<DashboardSnapshot>): void { this.loader = loader; }
+  constructor(private readonly loader: () => Promise<DashboardSnapshot>) {}
   invalidate(): void { this.cache.invalidate(); }
   peek(): CacheResult<DashboardSnapshot> { return this.cache.peek(); }
   getCache(): DashboardCache<DashboardSnapshot> { return this.cache; }

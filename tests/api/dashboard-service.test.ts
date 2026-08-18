@@ -13,7 +13,8 @@ describe('DashboardService singleton contract', () => {
   it('shares one snapshot load across concurrent landscape and company reads, including stale revalidation', async () => {
     let resolve!: (value: DashboardSnapshot) => void;
     const load = vi.fn(() => new Promise<DashboardSnapshot>((done) => { resolve = done; }));
-    const service = new DashboardService(load);
+    let activeLoader: () => Promise<DashboardSnapshot> = load;
+    const service = new DashboardService(() => activeLoader());
     const landscape = service.landscape(); const company = service.company('company-alpha');
     expect(load).toHaveBeenCalledTimes(1);
     resolve(snapshot);
@@ -23,7 +24,7 @@ describe('DashboardService singleton contract', () => {
     service.invalidate();
     let resolveReload!: (value: DashboardSnapshot) => void;
     const reload = vi.fn(() => new Promise<DashboardSnapshot>((done) => { resolveReload = done; }));
-    service.setLoaderForTest(reload);
+    activeLoader = reload;
     const staleLandscape = await service.landscape(); const staleCompany = await service.company('company-alpha');
     expect(staleLandscape.status).toBe('stale'); expect(staleCompany?.status).toBe('stale'); expect(reload).toHaveBeenCalledTimes(1);
     resolveReload(snapshot);
