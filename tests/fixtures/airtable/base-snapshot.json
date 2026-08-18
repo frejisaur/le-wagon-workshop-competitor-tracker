@@ -9,6 +9,14 @@
         "Observed • Organic Traffic": 200,
         "Workflow • Evidence Fingerprint": "fixture-fingerprint-alpha"
       }
+    },
+    {
+      "id": "rec-company-existing",
+      "fields": {
+        "Identity • Company ID": "company-existing",
+        "Identity • Canonical Domain": "existing.example",
+        "Observed • Apollo Account ID": "acct-1"
+      }
     }
   ],
   "keywords": [],

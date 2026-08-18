@@ -1,9 +1,10 @@
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {toAirtableCompanyFields, toAirtableKeywordFields} from '@/lib/airtable/mappers';
-import type {CompanyWrite} from '@/lib/airtable/types';
+import {toAirtableCompanyFields, toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields} from '@/lib/airtable/mappers';
+import type {ClaimWire, CompanyWrite, InsightWireInput, ReviewWireInput} from '@/lib/airtable/types';
 import {FixtureCompetitorRepository} from '@/lib/airtable/fixture-repository';
+import type {CuratedPaidAd} from '@/lib/domain/metrics';
 
 const company: CompanyWrite = {
   companyId: 'company-alpha',
@@ -43,9 +44,38 @@ describe('Airtable mappers', () => {
     const fields = toAirtableKeywordFields({
       observed: {classification: 'observed', source: 'semrush', observedAt: '2026-03-03T00:00:00.000Z', database: 'us', keyword: 'alpha topic', landingUrl: 'https://alpha.example/page', position: 1, previousPosition: 2, positionDifference: 1, volume: 10, cpcUsd: 2, keywordDifficulty: 3, competition: 0.2, traffic: 4, trafficSharePct: 5, trafficCostUsd: 6, intents: ['informational'], rawSerpCodes: [999], results: 7},
       calculated: {classification: 'calculated', inputs: ['companyId'], calculatedAt: '2026-03-03T00:00:00.000Z', companyId: 'company-alpha', keywordId: 'company-alpha\u0000alpha topic\u0000https://alpha.example/page', normalizedLandingUrl: 'https://alpha.example/page'},
-    });
+    }, 'rec-company-alpha');
 
-    expect(fields).toMatchObject({'Identity • Keyword ID': 'company-alpha\u0000alpha topic\u0000https://alpha.example/page', 'Observed • Keyword': 'alpha topic', 'Calculated • Normalized Landing URL': 'https://alpha.example/page'});
+    expect(fields).toMatchObject({'Identity • Keyword ID': 'company-alpha\u0000alpha topic\u0000https://alpha.example/page', 'Identity • Company Link': ['rec-company-alpha'], 'Observed • Keyword': 'alpha topic', 'Calculated • Normalized Landing URL': 'https://alpha.example/page'});
+  });
+
+  it('uses field-specific cardinality and byte bounds without truncating JSON text', () => {
+    const oversized = structuredClone(company);
+    oversized.observed.organicCompetitors = Array.from({length: 11}, (_, index) => ({domain: `competitor-${index}.example`, commonKeywords: null, competitionLevel: null, organicKeywords: null, organicTraffic: null, organicTrafficCostUsd: null, paidKeywords: null, paidTraffic: null, paidTrafficCostUsd: null, serpFeatureKeywords: null, serpFeatureTraffic: null, totalTraffic: null, totalTrafficCostUsd: null}));
+    oversized.observed.aiByLlm = Array.from({length: 5}, (_, index) => ({llm: `model-${index}`, llmCode: `m-${index}`, mentions: 1, selfMentions: 0, citedPages: 1}));
+    oversized.observed.rawSerpCodes = Array.from({length: 100}, () => 'x'.repeat(2_000));
+    oversized.calculated.compactOrganicTrend = Array.from({length: 30}, (_, index) => ({date: `2026-01-${String((index % 28) + 1).padStart(2, '0')}`, organicTraffic: index}));
+    const fields = toAirtableCompanyFields(oversized);
+
+    expect(JSON.parse(fields['Observed • Organic Competitors JSON'] as string)).toHaveLength(10);
+    expect(fields['Observed • Organic Competitors Observed Count']).toBe(11);
+    expect(JSON.parse(fields['Observed • AI by LLM JSON'] as string)).toHaveLength(4);
+    expect(JSON.parse(fields['Calculated • Compact Organic Trend JSON'] as string)).toHaveLength(24);
+    const serpJsonBytes = new TextEncoder().encode(fields['Observed • SERP Codes JSON'] as string).byteLength;
+    expect(serpJsonBytes).toBeGreaterThan(0);
+    expect(serpJsonBytes).toBeLessThanOrEqual(90_000);
+  });
+
+  it('maps native company links and classifies observed and inferred claims separately', () => {
+    const observedClaim: ClaimWire = {claimId: 'claim-observed', conclusion: 'Observed traffic rose', classification: 'observed', confidence: 'high', confidenceReason: 'direct metric', evidenceRefs: ['evidence-1']};
+    const inferredClaim: ClaimWire = {claimId: 'claim-inferred', conclusion: 'Prioritize response', classification: 'inferred', confidence: 'medium', confidenceReason: 'cross-signal inference', evidenceRefs: ['evidence-1', 'evidence-2']};
+    const insight: InsightWireInput = {insightId: 'insight-1', companyId: 'company-alpha', observedThemes: [observedClaim], inferredClaims: [inferredClaim], recommendations: [inferredClaim], paidMessageSummary: null, aiSearchSummary: null, agentHarness: 'test', model: 'test', skillVersion: '1', evidenceFingerprint: 'fingerprint', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z'};
+    const review: ReviewWireInput = {companyId: 'company-alpha', observedThemes: [observedClaim], inferredClaims: [inferredClaim], summary: 'review', recommendations: [inferredClaim], reviewReasons: ['needs human review'], evidenceFingerprint: 'fingerprint', agentHarness: 'test', model: 'test', skillVersion: '1', workflowVersion: '1', runId: 'run', generatedAt: '2026-03-03T00:00:00.000Z', status: 'needs_review'};
+    const paidAd = {observed: {classification: 'observed', source: 'semrush', observedAt: '2026-03-03T00:00:00.000Z', database: 'us', keyword: 'alpha', title: 'title', description: 'description', visibleUrl: 'alpha.example', landingUrl: 'https://alpha.example/ad', position: 1, previousPosition: null, volume: null, cpcUsd: null, keywordDifficulty: null, competition: null, traffic: null, trafficSharePct: null, trafficCostUsd: null}, calculated: {classification: 'calculated', inputs: ['companyId'], calculatedAt: '2026-03-03T00:00:00.000Z', companyId: 'company-alpha', paidAdId: 'ad-1', normalizedLandingUrl: 'https://alpha.example/ad'}} satisfies CuratedPaidAd;
+
+    expect(toAirtablePaidAdFields(paidAd, 'rec-company-alpha')).toMatchObject({'Identity • Company ID': 'company-alpha', 'Identity • Company Link': ['rec-company-alpha'], 'Observed • First Observed At': '2026-03-03T00:00:00.000Z', 'Observed • Last Observed At': '2026-03-03T00:00:00.000Z'});
+    expect(toAirtableInsightFields(insight, 'rec-company-alpha')).toMatchObject({'Identity • Company Link': ['rec-company-alpha'], 'Observed • Themes JSON': JSON.stringify([observedClaim]), 'Inferred • Claims JSON': JSON.stringify([inferredClaim])});
+    expect(toAirtableReviewFields(review, 'rec-company-alpha')).toMatchObject({'Identity • Company Link': ['rec-company-alpha'], 'Observed • Themes JSON': JSON.stringify([observedClaim]), 'Inferred • Claims JSON': JSON.stringify([inferredClaim])});
   });
 
   it('uses a sanitized fixture snapshot only', () => {

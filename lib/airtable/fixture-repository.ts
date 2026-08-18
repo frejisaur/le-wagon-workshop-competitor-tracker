@@ -1,13 +1,9 @@
 import {readFileSync} from 'node:fs';
 import type {CuratedKeyword, CuratedPaidAd} from '@/lib/domain/metrics';
 import {toAirtableCompanyFields, toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields, toAirtableSystemFields} from './mappers';
-import {AIRTABLE_TABLES, type AirtableRecord, type CompanyWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
+import {type AirtableRecord, type CompanyWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
 
 type FixtureSnapshot = Partial<Record<'companies' | 'keywords' | 'paidAds' | 'insights' | 'reviews' | 'system', AirtableRecord[]>>;
-
-function result(identity: string, recordId: string): WriteResult {
-  return {succeeded: 1, failed: 0, results: [{identity, recordId}]};
-}
 
 function recordId(table: string, identity: string): string {
   return `fixture-${table.toLowerCase().replace(/\s+/g, '-')}-${encodeURIComponent(identity)}`;
@@ -49,11 +45,24 @@ export class FixtureCompetitorRepository implements CompetitorStore {
   }
 
   async upsertCompanies(companies: CompanyWrite[]): Promise<WriteResult> {
-    return this.upsertMany('companies', companies.map((company) => ({identity: company.companyId, fields: toAirtableCompanyFields(company), lookupField: 'Identity • Company ID'})));
+    const results: WriteResult['results'] = [];
+    for (const company of companies) {
+      const existing = this.findCompanyRecord(company);
+      if (existing && existing.fields['Identity • Company ID'] !== company.companyId) {
+        results.push({identity: company.companyId, error: 'identity_conflict'});
+        continue;
+      }
+      const id = existing?.id ?? recordId('companies', company.companyId);
+      this.table('companies').set(id, {id, fields: clone(toAirtableCompanyFields(company))});
+      results.push({identity: company.companyId, recordId: id});
+    }
+    return {succeeded: results.filter((item) => !item.error).length, failed: results.filter((item) => item.error).length, results};
   }
 
   async replaceKeywords(companyId: string, keywords: CuratedKeyword[]): Promise<WriteResult> {
-    const writes = await this.upsertMany('keywords', keywords.map((keyword) => ({identity: keyword.calculated.keywordId, fields: toAirtableKeywordFields(keyword), lookupField: 'Identity • Keyword ID'})));
+    const company = this.findCompanyRecordById(companyId);
+    if (!company) return {succeeded: 0, failed: keywords.length, results: keywords.map((keyword) => ({identity: keyword.calculated.keywordId, error: 'company_link_missing'}))};
+    const writes = await this.upsertMany('keywords', keywords.map((keyword) => ({identity: keyword.calculated.keywordId, fields: toAirtableKeywordFields(keyword, company.id), lookupField: 'Identity • Keyword ID'})));
     if (writes.failed) return writes;
     const incoming = new Set(keywords.map((keyword) => keyword.calculated.keywordId));
     for (const [id, record] of this.table('keywords')) {
@@ -63,7 +72,17 @@ export class FixtureCompetitorRepository implements CompetitorStore {
   }
 
   async upsertPaidAds(paidAds: CuratedPaidAd[]): Promise<WriteResult> {
-    return this.upsertMany('paidAds', paidAds.map((ad) => ({identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad), lookupField: 'Identity • Paid Ad ID'})));
+    const results: WriteResult['results'] = [];
+    for (const ad of paidAds) {
+      const company = this.findCompanyRecordById(ad.calculated.companyId);
+      if (!company) {
+        results.push({identity: ad.calculated.paidAdId, error: 'company_link_missing'});
+        continue;
+      }
+      const written = await this.upsertMany('paidAds', [{identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, company.id), lookupField: 'Identity • Paid Ad ID'}]);
+      results.push(...written.results);
+    }
+    return {succeeded: results.filter((item) => !item.error).length, failed: results.filter((item) => item.error).length, results};
   }
 
   async getDashboardSnapshot(): Promise<DashboardSnapshot> {
@@ -85,11 +104,13 @@ export class FixtureCompetitorRepository implements CompetitorStore {
   }
 
   async upsertReview(review: ReviewWireInput): Promise<WriteResult> {
-    return this.upsertMany('reviews', [{identity: review.companyId, fields: toAirtableReviewFields(review), lookupField: 'Identity • Company ID'}]);
+    const company = this.findCompanyRecordById(review.companyId);
+    return company ? this.upsertMany('reviews', [{identity: review.companyId, fields: toAirtableReviewFields(review, company.id), lookupField: 'Identity • Company ID'}]) : {succeeded: 0, failed: 1, results: [{identity: review.companyId, error: 'company_link_missing'}]};
   }
 
   async upsertPublishedInsight(insight: InsightWireInput): Promise<WriteResult> {
-    return this.upsertMany('insights', [{identity: insight.insightId, fields: toAirtableInsightFields(insight), lookupField: 'Identity • Insight ID'}]);
+    const company = this.findCompanyRecordById(insight.companyId);
+    return company ? this.upsertMany('insights', [{identity: insight.insightId, fields: toAirtableInsightFields(insight, company.id), lookupField: 'Identity • Insight ID'}]) : {succeeded: 0, failed: 1, results: [{identity: insight.insightId, error: 'company_link_missing'}]};
   }
 
   async updateSystem(system: SystemWireInput): Promise<WriteResult> {
@@ -105,6 +126,19 @@ export class FixtureCompetitorRepository implements CompetitorStore {
       return {identity: write.identity, recordId: id};
     });
     return {succeeded: results.length, failed: 0, results};
+  }
+
+  private findCompanyRecord(company: CompanyWrite): AirtableRecord | undefined {
+    if (company.identity.apolloAccountId) {
+      const byAccount = this.records('companies').find((record) => record.fields['Observed • Apollo Account ID'] === company.identity.apolloAccountId);
+      if (byAccount) return byAccount;
+    }
+    const byDomain = this.records('companies').find((record) => record.fields['Identity • Canonical Domain'] === company.identity.canonicalDomain);
+    return byDomain ?? this.findCompanyRecordById(company.companyId);
+  }
+
+  private findCompanyRecordById(companyId: string): AirtableRecord | undefined {
+    return this.records('companies').find((record) => record.fields['Identity • Company ID'] === companyId);
   }
 
   private table(key: keyof FixtureSnapshot): Map<string, AirtableRecord> {

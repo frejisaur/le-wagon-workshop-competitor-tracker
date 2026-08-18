@@ -3,6 +3,7 @@ import {setupServer} from 'msw/node';
 import {afterAll, afterEach, beforeAll, describe, expect, it} from 'vitest';
 import {AirtableClient} from '@/lib/airtable/client';
 import {AirtableCompetitorRepository, escapeFormulaLiteral} from '@/lib/airtable/repository';
+import {FixtureCompetitorRepository} from '@/lib/airtable/fixture-repository';
 import type {CompanyWrite} from '@/lib/airtable/types';
 import type {CuratedKeyword} from '@/lib/domain/metrics';
 
@@ -11,10 +12,15 @@ const requestBodies: Array<{records: unknown[]}> = [];
 let rateLimitedRequestCount = 0;
 let failCompanyWrites = false;
 let deletedKeywordIds: string[] = [];
+let companyUpdateCount = 0;
+let keywordPostCount = 0;
+let failSecondKeywordBatch = false;
+const keywordBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
 const server = setupServer(
   http.get(`${endpoint}/v0/base/Companies`, ({request}) => {
     const formula = new URL(request.url).searchParams.get('filterByFormula') ?? '';
     if (formula.includes("'acct-1'")) return HttpResponse.json({records: [{id: 'rec-company-existing', fields: {'Identity • Company ID': 'company-existing', 'Observed • Apollo Account ID': 'acct-1', 'Identity • Canonical Domain': 'existing.example'}}]});
+    if (formula.includes("'company-alpha'")) return HttpResponse.json({records: [{id: 'rec-company-alpha', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example'}}]});
     return HttpResponse.json({records: []});
   }),
   http.post(`${endpoint}/v0/base/Companies`, async ({request}) => {
@@ -24,9 +30,17 @@ const server = setupServer(
     requestBodies.push(body);
     return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-${index}`, fields: {}}))});
   }),
+  http.patch(`${endpoint}/v0/base/Companies`, async ({request}) => {
+    companyUpdateCount += 1;
+    const body = await request.json() as {records: unknown[]};
+    return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-update-${index}`, fields: {}}))});
+  }),
   http.get(`${endpoint}/v0/base/Keywords`, () => HttpResponse.json({records: [{id: 'rec-old-keyword', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Keyword ID': 'company-alpha\u0000old\u0000https://alpha.example/old'}}]})),
   http.post(`${endpoint}/v0/base/Keywords`, async ({request}) => {
-    const body = await request.json() as {records: unknown[]};
+    const body = await request.json() as {records: Array<{fields: Record<string, unknown>}>};
+    keywordPostCount += 1;
+    if (failSecondKeywordBatch && keywordPostCount === 2) return HttpResponse.json({error: {type: 'UNPROCESSABLE_ENTITY'}}, {status: 422});
+    keywordBodies.push(body);
     return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-keyword-${index}`, fields: {}}))});
   }),
   http.delete(`${endpoint}/v0/base/Keywords`, ({request}) => {
@@ -36,7 +50,7 @@ const server = setupServer(
 );
 
 beforeAll(() => server.listen({onUnhandledRequest: 'error'}));
-afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; });
+afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; });
 afterAll(() => server.close());
 
 function makeCompanies(count: number): CompanyWrite[] {
@@ -54,7 +68,38 @@ function makeKeyword(): CuratedKeyword {
   };
 }
 
+function makeKeywords(count: number): CuratedKeyword[] {
+  return Array.from({length: count}, (_, index) => {
+    const keyword = makeKeyword();
+    keyword.observed.keyword = `new-${index}`;
+    keyword.observed.landingUrl = `https://alpha.example/new-${index}`;
+    keyword.calculated.keywordId = `company-alpha\u0000new-${index}\u0000https://alpha.example/new-${index}`;
+    keyword.calculated.normalizedLandingUrl = `https://alpha.example/new-${index}`;
+    return keyword;
+  });
+}
+
 describe('AirtableCompetitorRepository', () => {
+  it('caps Retry-After waits, rejects invalid attempt counts, and rejects repeated page offsets', async () => {
+    expect(() => new AirtableClient({baseId: 'base', apiToken: 'token', maxAttempts: 0})).toThrow('maxAttempts');
+    const waits: number[] = [];
+    let attempts = 0;
+    const rateLimited = new AirtableClient({baseId: 'base', apiToken: 'token', maxAttempts: 2, jitter: () => 0, sleep: async (milliseconds) => { waits.push(milliseconds); }, fetch: async () => {
+      attempts += 1;
+      return attempts === 1 ? new Response('{}', {status: 429, headers: {'Retry-After': '86400'}}) : new Response(JSON.stringify({records: []}));
+    }});
+    await expect(rateLimited.list('Companies')).resolves.toEqual([]);
+    expect(waits).toEqual([30_000]);
+
+    let pageCalls = 0;
+    const repeatedOffset = new AirtableClient({baseId: 'base', apiToken: 'token', fetch: async () => {
+      pageCalls += 1;
+      if (pageCalls > 3) throw new Error('stop test');
+      return new Response(JSON.stringify({records: [], offset: 'same-offset'}));
+    }});
+    await expect(repeatedOffset.list('Companies')).rejects.toThrow('repeated offset');
+  });
+
   it('batches Airtable writes in groups of ten and retries a 429', async () => {
     const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, maxAttempts: 2, jitter: () => 0}));
     const result = await repository.upsertCompanies(makeCompanies(11));
@@ -68,6 +113,29 @@ describe('AirtableCompetitorRepository', () => {
     const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
     await expect(repository.resolveCompanyIdentity({apolloAccountId: 'acct-1', canonicalDomain: 'new.example'}))
       .resolves.toEqual({companyId: 'company-existing', source: 'apollo_account_id'});
+  });
+
+  it('rejects an immutable company ID conflict in production without updating the existing row', async () => {
+    const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
+    const incoming = makeCompanies(1)[0];
+    incoming.companyId = 'company-new';
+    incoming.identity.apolloAccountId = 'acct-1';
+
+    await expect(repository.upsertCompanies([incoming])).resolves.toMatchObject({succeeded: 0, failed: 1, results: [{identity: 'company-new', error: 'identity_conflict'}]});
+    expect(companyUpdateCount).toBe(0);
+    expect(requestBodies).toEqual([]);
+  });
+
+  it('rejects the same immutable identity conflict in the fixture and retains its original company row', async () => {
+    const repository = FixtureCompetitorRepository.fromSnapshot(`${process.cwd()}/tests/fixtures/airtable/base-snapshot.json`);
+    const incoming = makeCompanies(1)[0];
+    incoming.companyId = 'company-new';
+    incoming.identity.apolloAccountId = 'acct-1';
+
+    await expect(repository.upsertCompanies([incoming])).resolves.toMatchObject({succeeded: 0, failed: 1, results: [{identity: 'company-new', error: 'identity_conflict'}]});
+    const snapshot = await repository.getDashboardSnapshot();
+    expect(snapshot.companies.filter((record) => record.fields['Identity • Company ID'] === 'company-existing')).toHaveLength(1);
+    expect(snapshot.companies).toHaveLength(2);
   });
 
   it('returns per-record failures without losing successfully written record results', async () => {
@@ -85,6 +153,16 @@ describe('AirtableCompetitorRepository', () => {
 
     expect(result).toMatchObject({succeeded: 1, failed: 0});
     expect(deletedKeywordIds).toEqual(['rec-old-keyword']);
+    expect(keywordBodies[0].records[0].fields['Identity • Company Link']).toEqual(['rec-company-alpha']);
+  });
+
+  it('retains obsolete keyword records when a later new-write batch fails', async () => {
+    failSecondKeywordBatch = true;
+    const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0, maxAttempts: 1}));
+    const result = await repository.replaceKeywords('company-alpha', makeKeywords(11));
+
+    expect(result).toMatchObject({succeeded: 10, failed: 1});
+    expect(deletedKeywordIds).toEqual([]);
   });
 
   it('escapes formula literals without interpolating newlines, quotes, or backslashes', () => {

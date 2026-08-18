@@ -1,10 +1,12 @@
 import type {AirtableListResponse, AirtableRecord, AirtableTable, AirtableWriteRecord, AirtableWriteResponse} from './types';
 
 const MAX_BATCH_SIZE = 10;
+const MAX_RETRY_WAIT_MS = 30_000;
+const MAX_PAGES = 1_000;
 
 export class AirtableClientError extends Error {
-  constructor(readonly operation: 'list' | 'create' | 'update' | 'delete', readonly table: AirtableTable, readonly status?: number) {
-    super(`Airtable ${operation} failed for ${table}${status ? ` (HTTP ${status})` : ''}`);
+  constructor(readonly operation: 'list' | 'create' | 'update' | 'delete', readonly table: AirtableTable, readonly status?: number, detail?: string) {
+    super(`Airtable ${operation} failed for ${table}${status ? ` (HTTP ${status})` : ''}${detail ? `: ${detail}` : ''}`);
     this.name = 'AirtableClientError';
   }
 }
@@ -41,10 +43,12 @@ export class AirtableClient {
   private readonly sleep: (milliseconds: number) => Promise<void>;
 
   constructor(private readonly options: AirtableClientOptions) {
+    const maxAttempts = options.maxAttempts ?? 3;
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) throw new TypeError('maxAttempts must be an integer between 1 and 10');
     this.endpoint = (options.endpoint ?? 'https://api.airtable.com').replace(/\/$/, '');
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? 10_000;
-    this.maxAttempts = options.maxAttempts ?? 3;
+    this.maxAttempts = maxAttempts;
     this.jitter = options.jitter ?? Math.random;
     this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   }
@@ -52,13 +56,19 @@ export class AirtableClient {
   async list(table: AirtableTable, options: {filterByFormula?: string} = {}): Promise<AirtableRecord[]> {
     const records: AirtableRecord[] = [];
     let offset: string | undefined;
+    const seenOffsets = new Set<string>();
+    let pageCount = 0;
     do {
+      if (pageCount >= MAX_PAGES) throw new AirtableClientError('list', table, undefined, 'pagination exceeded 1000 pages');
+      if (offset && seenOffsets.has(offset)) throw new AirtableClientError('list', table, undefined, 'pagination repeated offset');
+      if (offset) seenOffsets.add(offset);
       const query = new URLSearchParams();
       if (options.filterByFormula) query.set('filterByFormula', options.filterByFormula);
       if (offset) query.set('offset', offset);
       const response = await this.request<AirtableListResponse>('list', table, `?${query.toString()}`, {method: 'GET'});
       records.push(...response.records);
       offset = response.offset;
+      pageCount += 1;
     } while (offset);
     return records;
   }
@@ -102,7 +112,7 @@ export class AirtableClient {
         if (response.status === 429 && attempt < this.maxAttempts) {
           const retryAfter = retryAfterMilliseconds(response.headers.get('Retry-After'));
           const exponential = Math.min(5_000, 100 * 2 ** (attempt - 1));
-          await this.sleep(Math.max(retryAfter ?? 0, exponential) + Math.floor(this.jitter() * 100));
+          await this.sleep(Math.min(MAX_RETRY_WAIT_MS, Math.max(retryAfter ?? 0, exponential) + Math.floor(this.jitter() * 100)));
           continue;
         }
         throw new AirtableClientError(operation, table, response.status);

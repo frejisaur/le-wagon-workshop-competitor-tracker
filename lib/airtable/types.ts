@@ -34,17 +34,24 @@ export type CompanyWrite = {
   nextInsightDueAt?: string;
 };
 
+/** A claim remains traceable to its evidence and never crosses observed/inferred layers. */
+export type ClaimWire = {
+  claimId: string;
+  conclusion: string;
+  classification: 'observed' | 'inferred';
+  confidence: 'high' | 'medium' | 'low';
+  confidenceReason: string;
+  evidenceRefs: string[];
+};
+
 export type InsightWireInput = {
   insightId: string;
   companyId: string;
-  observedThemes: string[];
-  searchStrengths: string[];
-  vulnerabilities: string[];
+  observedThemes: ClaimWire[];
+  inferredClaims: ClaimWire[];
   paidMessageSummary?: string | null;
   aiSearchSummary?: string | null;
-  recommendedResponse: string[];
-  evidenceRefs: string[];
-  confidence: 'high' | 'medium' | 'low';
+  recommendations: ClaimWire[];
   agentHarness: string;
   model: string;
   skillVersion: string;
@@ -57,11 +64,10 @@ export type InsightWireInput = {
 export type ReviewStatus = 'needs_review' | 'approved' | 'rejected' | 'stale' | 'published';
 export type ReviewWireInput = {
   companyId: string;
-  candidateThemes: string[];
+  observedThemes: ClaimWire[];
+  inferredClaims: ClaimWire[];
   summary: string;
-  recommendations: string[];
-  evidenceRefs: string[];
-  confidence: 'high' | 'medium' | 'low';
+  recommendations: ClaimWire[];
   reviewReasons: string[];
   evidenceFingerprint: string;
   agentHarness: string;
