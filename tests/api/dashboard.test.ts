@@ -42,4 +42,24 @@ describe('dashboard response and cache', () => {
     const recovered = await cache.getOrLoad(async () => snapshot);
     expect(recovered.state.status).toBe('succeeded');
   });
+
+  it('returns stale cached content immediately while a single background revalidation is pending', async () => {
+    const cache = new DashboardCache<typeof snapshot>();
+    cache.seed(snapshot);
+    cache.invalidate();
+    let resolve!: (value: typeof snapshot) => void;
+    const loader = vi.fn(() => new Promise<typeof snapshot>((done) => { resolve = done; }));
+    const stale = await cache.getOrLoad(loader, {background: true});
+    expect(stale).toMatchObject({snapshot, state: {status: 'stale'}});
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(await cache.getOrLoad(loader, {background: true})).toMatchObject({state: {status: 'stale'}});
+    resolve(snapshot);
+    await vi.waitFor(() => expect(cache.peek().state.status).toBe('succeeded'));
+  });
+
+  it('keeps aggregate metrics null and reports coverage when an unenriched record is present', () => {
+    const response = shapeDashboardSnapshot({...snapshot, companies: [...snapshot.companies, {id: 'rec-unenriched', fields: {'Identity • Company ID': 'company-empty', 'Identity • Canonical Domain': 'empty.example'}}]}).landscape;
+    expect(response.kpis.combinedOrganicTraffic).toMatchObject({value: null, coverage: {available: 1, total: 2}});
+    expect(response.companies.find((company) => company.companyId === 'company-empty')?.paidActivity.value).toBeNull();
+  });
 });

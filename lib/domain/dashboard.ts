@@ -15,6 +15,7 @@ export const DashboardValueSchema = z.object({
   database: z.string().min(1).optional(),
   observedAt: IsoTimestampSchema.optional(),
   calculatedAt: IsoTimestampSchema.optional(),
+  coverage: z.object({available: z.number().int().nonnegative(), total: z.number().int().positive()}).strict().optional(),
 }).strict();
 export type DashboardValue = z.infer<typeof DashboardValueSchema>;
 
@@ -75,6 +76,7 @@ export const CompanyResponseSchema = z.object({
   ai: z.object({visibility: DashboardValueSchema, benchmark: DashboardValueSchema, byLlm: z.array(z.object({llm: z.string().min(1), mentions: z.number().finite().nullable(), selfMentions: z.number().finite().nullable(), citedPages: z.number().finite().nullable()}).strict())}).strict(),
   authority: z.object({backlinks: DashboardValueSchema, referringDomains: DashboardValueSchema, followBacklinks: DashboardValueSchema, noFollowBacklinks: DashboardValueSchema}).strict(),
   paid: z.object({traffic: DashboardValueSchema, keywords: DashboardValueSchema, ads: z.array(z.object({paidAdId: z.string().min(1), keyword: z.string().nullable(), title: z.string().nullable(), landingUrl: z.string().url(), position: z.number().finite().nullable()}).strict())}).strict().optional(),
+  publishedInsightState: z.enum(['current', 'stale', 'absent']),
   publishedInsight: z.object({overallConfidence: z.enum(['high', 'medium', 'low']).optional(), claims: z.array(ClaimSchema), generatedAt: IsoTimestampSchema.optional(), evidenceFingerprint: z.string().min(1).optional()}).strict().optional(),
   reviewCandidate: z.object({status: z.enum(['needs_review', 'approved', 'rejected', 'stale', 'published']), reasons: z.array(z.string().min(1))}).strict().optional(),
   evidence: z.array(EvidenceSchema),

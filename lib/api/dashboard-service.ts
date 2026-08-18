@@ -20,13 +20,13 @@ async function loadSnapshot(): Promise<DashboardSnapshot> { return repository().
 export function getDashboardCache(): DashboardCache<DashboardSnapshot> { return dashboardCache; }
 
 export async function getLandscapeResponse(): Promise<LandscapeResponse> {
-  const result = await dashboardCache.getOrLoad(loadSnapshot);
+  const result = await dashboardCache.getOrLoad(loadSnapshot, {background: true});
   const state = result.state.status === 'succeeded' ? {cachedAt: result.state.cachedAt} : {status: result.state.status, cachedAt: result.state.cachedAt};
   return shapeDashboardSnapshot(result.snapshot ?? emptySnapshot, state).landscape;
 }
 
 export async function getCompanyResponse(companyId: string): Promise<CompanyResponse | undefined> {
-  const result = await dashboardCache.getOrLoad(loadSnapshot);
+  const result = await dashboardCache.getOrLoad(loadSnapshot, {background: true});
   if (!result.snapshot) return undefined;
   const state = result.state.status === 'succeeded' ? {cachedAt: result.state.cachedAt} : {status: result.state.status, cachedAt: result.state.cachedAt};
   return shapeDashboardSnapshot(result.snapshot, state).companies.get(companyId);

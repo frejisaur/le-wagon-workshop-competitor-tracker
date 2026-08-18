@@ -1,5 +1,6 @@
 import type {AirtableFields, AirtableRecord, DashboardSnapshot} from '@/lib/airtable/types';
 import {buildEvidencePackage} from '@/lib/agents/evidence/build-package';
+import {fingerprintEvidence} from '@/lib/agents/evidence/fingerprint';
 import {CompanyResponseSchema, type CompanyResponse, type DashboardValue, type Freshness} from '@/lib/domain/dashboard';
 
 type JsonRecord = Record<string, unknown>;
@@ -56,9 +57,14 @@ export function shapeCompany(snapshot: DashboardSnapshot, company: AirtableRecor
   const landingPages = parsedArray(fields, 'Calculated • Landing Page Portfolio JSON').flatMap((item) => { const normalizedLandingUrl = string(item.normalizedLandingUrl); const keywordCount = finite(item.keywordCount); const keywordsForPage = Array.isArray(item.keywords) && item.keywords.every((keyword) => typeof keyword === 'string') ? item.keywords : []; return normalizedLandingUrl && URL.canParse(normalizedLandingUrl) && keywordCount !== null ? [{normalizedLandingUrl, keywordCount, estimatedTraffic: finite(item.estimatedTraffic), keywords: keywordsForPage}] : []; }).sort((left, right) => left.normalizedLandingUrl.localeCompare(right.normalizedLandingUrl));
   const published = snapshot.publishedInsights.find((record) => record.fields['Identity • Company ID'] === companyId);
   const review = snapshot.reviews.find((record) => record.fields['Identity • Company ID'] === companyId);
-  const evidence = buildEvidencePackage({company, keywords: snapshot.keywords.filter((record) => record.fields['Identity • Company ID'] === companyId), paidAds: snapshot.paidAds.filter((record) => record.fields['Identity • Company ID'] === companyId), publishedInsight: published, review}).evidence;
+  const evidencePackage = buildEvidencePackage({company, keywords: snapshot.keywords.filter((record) => record.fields['Identity • Company ID'] === companyId), paidAds: snapshot.paidAds.filter((record) => record.fields['Identity • Company ID'] === companyId), publishedInsight: published, review});
+  const evidence = evidencePackage.evidence;
   const resolvable = new Set(evidence.map((item) => item.ref));
   const publishedClaims = published ? [...claims(published, 'Observed • Themes JSON'), ...claims(published, 'Inferred • Claims JSON'), ...claims(published, 'Inferred • Recommendations JSON')].filter((claim) => claim.evidenceRefs.every((ref) => resolvable.has(ref))) : [];
+  // Task 7's canonical hash deliberately ignores publication metadata, so only
+  // the current curated company/keyword/ad evidence determines freshness.
+  const currentFingerprint = fingerprintEvidence(evidencePackage);
+  const publishedIsCurrent = published && text(published.fields, 'Workflow • Evidence Fingerprint') === currentFingerprint;
   const reviewStatus = review ? text(review.fields, 'Review • Status') : undefined;
   const paidPresent = bool(fields, 'Calculated • Paid Activity Present') === true && (number(fields, 'Observed • Paid Traffic') !== null || number(fields, 'Observed • Paid Keywords') !== null || paidAds.length > 0);
   return CompanyResponseSchema.parse({
@@ -69,7 +75,8 @@ export function shapeCompany(snapshot: DashboardSnapshot, company: AirtableRecor
     ai: {visibility: observed(fields, 'AI Visibility'), benchmark: observed(fields, 'AI Visibility Benchmark'), byLlm},
     authority: {backlinks: observed(fields, 'Backlinks'), referringDomains: observed(fields, 'Referring Domains'), followBacklinks: observed(fields, 'Follow Backlinks'), noFollowBacklinks: observed(fields, 'No-follow Backlinks')},
     ...(paidPresent ? {paid: {traffic: observed(fields, 'Paid Traffic'), keywords: observed(fields, 'Paid Keywords'), ads: paidAds}} : {}),
-    ...(published ? {publishedInsight: {overallConfidence: text(published.fields, 'Inferred • Overall Confidence') as 'high' | 'medium' | 'low' | undefined, claims: publishedClaims, ...(iso(text(published.fields, 'Workflow • Generated At')) ? {generatedAt: iso(text(published.fields, 'Workflow • Generated At'))} : {}), ...(text(published.fields, 'Workflow • Evidence Fingerprint') ? {evidenceFingerprint: text(published.fields, 'Workflow • Evidence Fingerprint')} : {})}} : {}),
+    publishedInsightState: published ? publishedIsCurrent ? 'current' : 'stale' : 'absent',
+    ...(publishedIsCurrent ? {publishedInsight: {overallConfidence: text(published!.fields, 'Inferred • Overall Confidence') as 'high' | 'medium' | 'low' | undefined, claims: publishedClaims, ...(iso(text(published!.fields, 'Workflow • Generated At')) ? {generatedAt: iso(text(published!.fields, 'Workflow • Generated At'))} : {}), evidenceFingerprint: currentFingerprint}} : {}),
     ...(reviewStatus === 'needs_review' || reviewStatus === 'approved' || reviewStatus === 'rejected' || reviewStatus === 'stale' || reviewStatus === 'published' ? {reviewCandidate: {status: reviewStatus, reasons: reviewReasons(review!)}} : {}),
     evidence,
   });

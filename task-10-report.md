@@ -34,7 +34,7 @@
 - `npm test -- --run tests/api tests/config/server-env.test.ts tests/workflows/enrich.test.ts tests/jobs/enrich.test.ts` — 32 passed.
 - `npx tsc --noEmit` — passed.
 - `npm run build` — passed; server routes compiled.
-- `npm test` — 186 passed.
+- `npm test` — 187 passed before Fix Round 1 additions.
 - `node .agents/skills/competitor-data-contracts/scripts/generate-semrush-schema.mjs --check` — current.
 - Fixture CLI refresh passed with `cacheInvalidated: false`, proving fixture mode did not call the live adapter.
 - Browser artifact scan of `.next/static` found no server environment variable names, raw-payload marker, or test-only untrusted reviewer text.
@@ -46,3 +46,30 @@ None. The current curated tables supply the fields needed by the Version 1 respo
 ## Commit
 
 Committed as `feat: serve cached competitor dashboard data`.
+
+## Fix Round 1
+
+- Published claims now use a freshly rebuilt Task 7 evidence package and
+  `fingerprintEvidence`, never the legacy Company fingerprint. A published
+  record whose stored workflow fingerprint differs is represented as
+  `publishedInsightState: "stale"` and its claims are withheld.
+- Invalidation v1 now includes a cryptographic nonce. The route incrementally
+  reads and cancels request streams exceeding 1 KiB, authenticates exact raw
+  bytes, then stores the nonce/signature only after successful validation.
+  The bounded replay store returns `409` for a duplicate valid request. It is
+  intentionally per-process; separate serverless instances require shared
+  durable replay protection if cross-instance replay prevention becomes a
+  requirement.
+- Portfolio totals are nullable when any member lacks the required value and
+  include `{available,total}` coverage. Missing paid activity remains `null`,
+  not `false`.
+- An invalidation now returns retained content as `stale` immediately while one
+  cache-owned background revalidation runs. It has no unhandled rejection;
+  success replaces the snapshot and failure marks the retained snapshot failed.
+- The adapter rejects unsafe destinations. Production requires a root-path
+  HTTPS origin without credentials, query, or fragment. HTTP is allowed only
+  for explicit loopback development/test use.
+
+Fix Round 1 validation: 38 focused tests; full suite 193 passed; `npx tsc
+--noEmit`, production build, schema drift check, browser scan, and fixture CLI
+all passed. Fixture output retained `cacheInvalidated: false`.

@@ -18,10 +18,11 @@ export class DashboardCache<T> {
   invalidate(): void { this.needsLoad = true; if (this.snapshot) this.markRefreshState({status: 'stale'}); }
   peek(): CacheResult<T> { return {snapshot: this.snapshot, state: {...this.state}}; }
 
-  async getOrLoad(loader: () => Promise<T>): Promise<CacheResult<T>> {
+  async getOrLoad(loader: () => Promise<T>, options: {background?: boolean} = {}): Promise<CacheResult<T>> {
     if (!this.needsLoad && this.snapshot) return this.peek();
-    if (this.loading) return this.loading;
-    this.state = {...this.state, status: this.snapshot ? 'running' : 'loading', error: false};
+    if (this.loading) return options.background && this.snapshot ? this.peek() : this.loading;
+    // An invalidated snapshot stays visibly stale until the in-flight replacement succeeds.
+    if (!this.snapshot) this.state = {...this.state, status: 'loading', error: false};
     this.loading = (async () => {
       let succeeded = false;
       try {
@@ -38,6 +39,6 @@ export class DashboardCache<T> {
       }
       return this.peek();
     })();
-    return this.loading;
+    return options.background && this.snapshot ? this.peek() : this.loading;
   }
 }

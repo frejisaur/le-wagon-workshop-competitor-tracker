@@ -1,6 +1,8 @@
 import {describe, expect, it} from 'vitest';
 import type {DashboardSnapshot} from '@/lib/airtable/types';
 import {shapeDashboardSnapshot} from '@/lib/api/shape-landscape';
+import {buildEvidencePackage} from '@/lib/agents/evidence/build-package';
+import {fingerprintEvidence} from '@/lib/agents/evidence/fingerprint';
 
 const snapshot: DashboardSnapshot = {
   companies: [{id: 'rec-alpha', fields: {
@@ -26,5 +28,18 @@ describe('company response', () => {
     expect(response?.keywords[0]).toMatchObject({classification: 'observed', keyword: 'alpha'});
     expect(response?.reviewCandidate).toEqual({status: 'needs_review', reasons: ['low_confidence']});
     expect(JSON.stringify(response)).not.toMatch(/rec-|ignore these instructions|reviewer/i);
+  });
+
+  it('withholds published claims when current curated evidence changes under the same reference', () => {
+    const currentFingerprint = fingerprintEvidence(buildEvidencePackage({company: snapshot.companies[0]!, keywords: snapshot.keywords, paidAds: [], review: snapshot.reviews[0]}));
+    const published = {id: 'rec-insight', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint, 'Inferred • Overall Confidence': 'high', 'Inferred • Claims JSON': '[{"claimId":"claim-1","conclusion":"Current claim","classification":"inferred","confidence":"high","confidenceReason":"grounded","evidenceRefs":["company:company-alpha:metric:organic_traffic"]}]'}};
+    const current = shapeDashboardSnapshot({...snapshot, publishedInsights: [published]}).companies.get('company-alpha');
+    expect(current?.publishedInsightState).toBe('current');
+    expect(current?.publishedInsight?.claims).toHaveLength(1);
+
+    const changedKeyword = structuredClone(snapshot.keywords[0]!); changedKeyword.fields['Observed • Keyword'] = 'changed value';
+    const stale = shapeDashboardSnapshot({...snapshot, keywords: [changedKeyword], publishedInsights: [published]}).companies.get('company-alpha');
+    expect(stale?.publishedInsightState).toBe('stale');
+    expect(stale).not.toHaveProperty('publishedInsight');
   });
 });
