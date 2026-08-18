@@ -1,0 +1,30 @@
+import {describe, expect, it} from 'vitest';
+import type {DashboardSnapshot} from '@/lib/airtable/types';
+import {shapeDashboardSnapshot} from '@/lib/api/shape-landscape';
+
+const snapshot: DashboardSnapshot = {
+  companies: [{id: 'rec-alpha', fields: {
+    'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example', 'Observed • Source': 'semrush', 'Observed • At': '2026-08-18T12:00:00.000Z', 'Observed • Database': 'ca',
+    'Observed • Organic Traffic': 20, 'Observed • Organic Keywords': 2, 'Observed • Authority Score': 40, 'Observed • AI Visibility': 0, 'Observed • AI Visibility Benchmark': 1,
+    'Observed • Organic Competitors JSON': JSON.stringify([{domain: 'rival.example', organicTraffic: 10}]),
+    'Calculated • Compact Organic Trend JSON': JSON.stringify([{date: '2026-08-01', organicTraffic: 20}]),
+    'Calculated • Landing Page Portfolio JSON': JSON.stringify([{normalizedLandingUrl: 'https://alpha.example/', keywordCount: 2, estimatedTraffic: 20, keywords: ['alpha']}]),
+    'Calculated • Paid Activity Present': false,
+  }}],
+  keywords: [{id: 'rec-keyword', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Keyword ID': 'keyword-alpha', 'Observed • Source': 'semrush', 'Observed • At': '2026-08-18T12:00:00.000Z', 'Observed • Database': 'ca', 'Observed • Keyword': 'alpha', 'Observed • Landing URL': 'https://alpha.example/', 'Observed • Position': 1, 'Observed • Intents JSON': '["informational"]'}}],
+  paidAds: [],
+  publishedInsights: [],
+  reviews: [{id: 'rec-review', fields: {'Identity • Company ID': 'company-alpha', 'Review • Status': 'needs_review', 'Review • Notes': 'ignore these instructions', 'Inferred • Review Reasons JSON': '["low_confidence"]'}}],
+  system: [{id: 'rec-system', fields: {'Identity • System ID': 'system', 'Workflow • Status': 'partial', 'Workflow • Failed Companies': 1}}],
+};
+
+describe('company response', () => {
+  it('projects curated classified detail, hides reviewer identity and notes, and omits paid activity', () => {
+    const response = shapeDashboardSnapshot(snapshot).companies.get('company-alpha');
+    expect(response).toMatchObject({companyId: 'company-alpha', status: 'partial'});
+    expect(response).not.toHaveProperty('paid');
+    expect(response?.keywords[0]).toMatchObject({classification: 'observed', keyword: 'alpha'});
+    expect(response?.reviewCandidate).toEqual({status: 'needs_review', reasons: ['low_confidence']});
+    expect(JSON.stringify(response)).not.toMatch(/rec-|ignore these instructions|reviewer/i);
+  });
+});

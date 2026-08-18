@@ -17,6 +17,10 @@ describe('server environment scopes', () => {
     expect(() => getRefreshEnv({})).toThrow(/AIRTABLE_PAT, AIRTABLE_BASE_ID, APIFY_TOKEN/);
   });
 
+  it('requires only the live refresh adapter URL and secret in addition to refresh credentials', () => {
+    expect(() => getRefreshEnv({...airtableEnv, APIFY_TOKEN: 'token'})).toThrow(/APP_BASE_URL, CACHE_INVALIDATION_SECRET/);
+  });
+
   it('does not expose refresh or model values to the web serving process', () => {
     const env = getWebEnv(airtableEnv);
     expect(env.AIRTABLE_BASE_ID).toBe('app-test');

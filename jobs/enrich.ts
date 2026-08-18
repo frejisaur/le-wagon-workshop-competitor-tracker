@@ -5,6 +5,7 @@ import {AirtableClient} from '@/lib/airtable/client';
 import {FixtureCompetitorRepository} from '@/lib/airtable/fixture-repository';
 import {AirtableCompetitorRepository} from '@/lib/airtable/repository';
 import {ApifyClient} from '@/lib/apify/client';
+import {createCacheInvalidationAdapter} from '@/lib/cache/invalidation-client';
 import {runDomainOverview} from '@/lib/apify/run-domain-overview';
 import {getRefreshEnv} from '@/lib/config/server-env';
 import {parseSemrushPayload} from '@/lib/schemas/semrush';
@@ -61,7 +62,12 @@ export async function runEnrichCli(arguments_: string[]): Promise<EnrichCliResul
       const env = getRefreshEnv();
       const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT}));
       const apify = new ApifyClient({token: env.APIFY_TOKEN});
-      report = await runEnrichment({repository, runDomainOverview: (domains, options) => runDomainOverview(apify, domains, {...options, actorId})});
+      report = await runEnrichment({
+        repository,
+        runDomainOverview: (domains, options) => runDomainOverview(apify, domains, {...options, actorId}),
+        // Live only: fixture mode remains self-contained and never needs a URL or secret.
+        cache: createCacheInvalidationAdapter({baseUrl: env.APP_BASE_URL, secret: env.CACHE_INVALIDATION_SECRET}),
+      });
     }
     // A partial refresh retains successfully persisted companies and is safe to
     // retry. Only a fully failed run gets a non-zero Railway exit status.

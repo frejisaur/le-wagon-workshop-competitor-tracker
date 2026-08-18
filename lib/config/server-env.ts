@@ -13,15 +13,19 @@ const AirtableEnvSchema = z.object({
 
 const RefreshOnlyEnvSchema = z.object({
   APIFY_TOKEN: z.string().min(1),
+  APP_BASE_URL: z.string().url(),
+  CACHE_INVALIDATION_SECRET: z.string().min(1),
 });
 
 const WebEnvSchema = AirtableEnvSchema;
 const RefreshEnvSchema = AirtableEnvSchema.extend(RefreshOnlyEnvSchema.shape);
 const InsightEnvSchema = AirtableEnvSchema;
+const CacheInvalidationEnvSchema = z.object({CACHE_INVALIDATION_SECRET: z.string().min(1)});
 
 export type WebEnv = z.infer<typeof WebEnvSchema>;
 export type RefreshEnv = z.infer<typeof RefreshEnvSchema>;
 export type InsightEnv = z.infer<typeof InsightEnvSchema>;
+export type CacheInvalidationEnv = z.infer<typeof CacheInvalidationEnvSchema>;
 type EnvSource = NodeJS.Dict<string>;
 
 function formatEnvError(error: z.ZodError): string {
@@ -58,4 +62,9 @@ export function getRefreshEnv(source: EnvSource = process.env): RefreshEnv {
 
 export function getInsightEnv(source: EnvSource = process.env): InsightEnv {
   return parseEnv(InsightEnvSchema, source);
+}
+
+/** The signed internal endpoint needs only its own secret, never refresh credentials. */
+export function getCacheInvalidationEnv(source: EnvSource = process.env): CacheInvalidationEnv {
+  return parseEnv(CacheInvalidationEnvSchema, source);
 }
