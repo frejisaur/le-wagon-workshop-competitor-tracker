@@ -65,3 +65,9 @@ test('rejects a non-array root payload', () => {
     /root must be an array/i,
   );
 });
+
+test('uses the stable local provider path when no source label is supplied', () => {
+  const document = buildSchemaDocument([], {sourceBytes: 0, sourceSha256: 'empty'});
+
+  assert.match(document, /\| Source \| `data\/apify\/apollo-accounts-semrush-scraper\.json` \|/);
+});

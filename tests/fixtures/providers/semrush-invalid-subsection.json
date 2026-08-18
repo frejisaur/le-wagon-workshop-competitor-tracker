@@ -1,0 +1,17 @@
+[
+  {
+    "domain": "alpha.example", "database": "us", "is_root_domain": false,
+    "authority_score": 42, "backlinks": 1000, "referring_domains": 100, "follow_backlinks": 400, "nofollow_backlinks": 200,
+    "organic_traffic": 300, "total_traffic": 320, "organic_keywords": 40, "organic_traffic_cost_usd": 50, "organic_competitors_count": 2,
+    "paid_traffic": 0, "paid_keywords": 0, "paid_traffic_cost_usd": 0, "paid_competitors_count": 0,
+    "ai_visibility": 2, "ai_visibility_benchmark": 1, "ai_mentions": 3, "ai_cited_pages": 1,
+    "top_country": "US", "top_country_traffic": 300, "moz_domain_authority": "1.6k", "moz_spam_score": "3%",
+    "authority": {"backlinks": 1000, "health": 1, "link_power": 1, "naturalness": 1, "referring_domains": 100, "score": 42, "search_traffic_factor": 1},
+    "backlinks_detail": {"domains": 100, "follow": 400, "forms": 0, "frames": 0, "images": 0, "ips": 10, "links": 1000, "nofollow": 200, "total_backlinks": 1000, "top_anchors": [], "sample_backlinks": []},
+    "organic": {"competitors_total": 2, "country_summary": null, "top_keywords": [], "competitors": [], "trend_country_daily": [], "trend_country_monthly": [], "trend_global_daily": [], "trend_global_monthly": [], "summary_by_country_daily": [], "summary_by_country_monthly": []},
+    "paid": {"competitors_total": 0, "competitors": [], "top_ads": []},
+    "ai_search": {"ai_visibility": 2, "ai_visibility_benchmark": 1, "total_mentions": 3, "total_cited_pages": 1, "by_llm": [], "by_country": [], "top_cited_sources": []},
+    "serp_features": {"total_positions": 1, "keywords_by_feature": {"999": 1}, "positions_by_feature": {"999": 1}},
+    "moz": {"domain_authority": "1.6k", "spam_score": "3%", "linking_root_domains": "bad", "ranking_keywords": "2", "linking_domains_trend": {"discovered_60d": [], "lost_60d": [], "net_30d": 0}, "top_linking_domains": [], "top_pages": [{"url": "not-a-url", "page_authority": 2}]}
+  }
+]

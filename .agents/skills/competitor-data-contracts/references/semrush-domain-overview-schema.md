@@ -15,7 +15,7 @@
 
 | Property | Value |
 |---|---:|
-| Source | `apollo-accounts-semrush-scraper.json` |
+| Source | `data/apify/apollo-accounts-semrush-scraper.json` |
 | SHA-256 | `52b4f5e8a2401f69a6a2ba97c283b46da569e3974212e998f610a4d1e85d2fe7` |
 | Bytes | 38552987 |
 | Records analyzed | 52 |

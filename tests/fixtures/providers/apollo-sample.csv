@@ -1,0 +1,4 @@
+Company Name,Website,Apollo Account Id,Apollo Record Id
+Alpha,https://alpha.example,acct-alpha,rec-alpha
+Beta,https://beta.example,acct-beta,rec-beta
+Missing Website,,acct-missing,rec-missing

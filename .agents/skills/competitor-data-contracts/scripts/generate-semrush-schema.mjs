@@ -133,7 +133,7 @@ export function buildSchemaDocument(records, source = {}) {
 
   const recordCount = records.length;
   const {arrays, nodes, objectShapes, scalarPaths, topLevelFields} = collectSchema(records);
-  const sourceName = source.sourceName ?? 'apollo-accounts-semrush-scraper.json';
+  const sourceName = source.sourceName ?? 'data/apify/apollo-accounts-semrush-scraper.json';
   const sourceBytes = source.sourceBytes ?? 'unknown';
   const sourceSha256 = source.sourceSha256 ?? 'unknown';
   const lines = [
@@ -241,7 +241,7 @@ function runCli() {
   const scriptDirectory = dirname(fileURLToPath(import.meta.url));
   const repositoryRoot = resolve(scriptDirectory, '../../../..');
   const defaults = [
-    resolve(repositoryRoot, 'apollo-accounts-semrush-scraper.json'),
+    resolve(repositoryRoot, 'data/apify/apollo-accounts-semrush-scraper.json'),
     resolve(scriptDirectory, '../references/semrush-domain-overview-schema.md'),
   ];
   const {check, positional} = parseCli(process.argv.slice(2));
