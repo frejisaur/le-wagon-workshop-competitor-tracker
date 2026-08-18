@@ -65,8 +65,6 @@ export type InsightWireInput = {
   companyId: string;
   observedThemes: ClaimWire[];
   inferredClaims: ClaimWire[];
-  paidMessageSummary?: string | null;
-  aiSearchSummary?: string | null;
   recommendations: ClaimWire[];
   overallConfidence?: 'high' | 'medium' | 'low';
   agentHarness: string;
@@ -83,10 +81,7 @@ export type ReviewWireInput = {
   companyId: string;
   observedThemes: ClaimWire[];
   inferredClaims: ClaimWire[];
-  summary: string;
   recommendations: ClaimWire[];
-  paidMessageSummary?: string | null;
-  aiSearchSummary?: string | null;
   overallConfidence?: 'high' | 'medium' | 'low';
   reviewReasons: string[];
   evidenceFingerprint: string;

@@ -1,4 +1,4 @@
-import {CandidateClaimSchema, InsightCandidateSchema, type CandidateReviewReason} from '@/lib/schemas/insight-candidate';
+import {CandidateClaimSchema, CandidateReviewReasonSchema, type CandidateReviewReason} from '@/lib/schemas/insight-candidate';
 import {validateInsightCandidate} from '@/lib/agents/candidates/validate';
 import {prepareInsights, type PrepareInsightsOptions} from '@/lib/agents/manifests/prepare';
 import {lifecycleWire} from './submit';
@@ -30,8 +30,9 @@ function reasons(record: AirtableRecord): CandidateReviewReason[] | null {
   if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed) || !parsed.every((reason) => typeof reason === 'string')) return null;
-    return parsed.filter((reason): reason is CandidateReviewReason => ['prompt_injection_content', 'unresolved_refs', 'conflicting_evidence', 'suspicious_provider_data', 'ambiguous_identity', 'insufficient_evidence', 'reviewer_requested_regeneration'].includes(reason));
+    if (!Array.isArray(parsed)) return null;
+    const validated = CandidateReviewReasonSchema.array().safeParse(parsed);
+    return validated.success ? validated.data : null;
   } catch {
     return null;
   }
@@ -43,7 +44,6 @@ function reviewCandidate(record: AirtableRecord, prepared: PreparedCompany): unk
   const recommendations = claims(record, 'Inferred • Recommendations JSON');
   const reviewReasons = reasons(record);
   const companyId = stringField(record, 'Identity • Company ID');
-  const summary = stringField(record, 'Inferred • Summary');
   const evidenceFingerprint = stringField(record, 'Workflow • Evidence Fingerprint');
   const agentHarness = stringField(record, 'Workflow • Agent Harness');
   const model = stringField(record, 'Workflow • Model');
@@ -51,13 +51,10 @@ function reviewCandidate(record: AirtableRecord, prepared: PreparedCompany): unk
   const workflowVersion = stringField(record, 'Workflow • Version');
   const runId = stringField(record, 'Workflow • Run ID');
   const generatedAt = stringField(record, 'Workflow • Generated At');
-  if (!observedThemes || !inferredClaims || !recommendations || !reviewReasons || !companyId || !summary || !evidenceFingerprint || !agentHarness || !model || !skillVersion || !workflowVersion || !runId || !generatedAt) return null;
+  if (!observedThemes || !inferredClaims || !recommendations || !reviewReasons || !companyId || !evidenceFingerprint || !agentHarness || !model || !skillVersion || !workflowVersion || !runId || !generatedAt) return null;
   // Parse stored claims before reusing them. Stored data is untrusted, including reviewer edits.
   if (![...observedThemes, ...inferredClaims, ...recommendations].every((claim) => CandidateClaimSchema.safeParse(claim).success)) return null;
-  return {companyId, canonicalDomain: prepared.canonicalDomain, evidenceFingerprint, provenance: {agentHarness, model, skillVersion, workflowVersion, runId, generatedAt}, summary,
-    ...(stringField(record, 'Inferred • Paid Message Summary') ? {paidMessageSummary: stringField(record, 'Inferred • Paid Message Summary')} : {}),
-    ...(stringField(record, 'Inferred • AI Search Summary') ? {aiSearchSummary: stringField(record, 'Inferred • AI Search Summary')} : {}),
-    observedThemes, inferredClaims, recommendations, reviewReasons};
+  return {companyId, canonicalDomain: prepared.canonicalDomain, evidenceFingerprint, provenance: {agentHarness, model, skillVersion, workflowVersion, runId, generatedAt}, observedThemes, inferredClaims, recommendations, reviewReasons};
 }
 
 /** Reprepares each approved review and promotes it only if the authoritative package is unchanged. */

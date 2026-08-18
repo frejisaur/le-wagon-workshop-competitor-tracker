@@ -40,4 +40,13 @@ describe('publishApprovedInsights', () => {
     expect(store.upsertPublishedInsight).not.toHaveBeenCalled();
     expect(store.upsertReview).toHaveBeenCalledWith(expect.objectContaining({status: 'stale'}));
   });
+
+  it('fails closed on an unknown stored review reason', async () => {
+    const state = snapshot();
+    state.reviews[0].fields['Inferred • Review Reasons JSON'] = '["unknown_reason"]';
+    const store = storeFor(state);
+    const result = await publishApprovedInsights({repository: store, prepare: async () => ({companies: [{companyId: 'company-alpha', canonicalDomain: 'alpha.example', evidenceFingerprint: CURRENT, dueReasons: [], evidence: [{ref: 'company:company-alpha:metric:organic_traffic', classification: 'observed', source: 'semrush', value: 200}]}]} as never)});
+    expect(result).toEqual({published: 0, stale: 0, failed: 1, skipped: 0});
+    expect(store.upsertPublishedInsight).not.toHaveBeenCalled();
+  });
 });

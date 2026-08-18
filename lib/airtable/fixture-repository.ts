@@ -3,7 +3,7 @@ import type {CuratedKeyword, CuratedPaidAd} from '@/lib/domain/metrics';
 import {toAirtableCompanyFields, toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields, toAirtableSystemFields} from './mappers';
 import {type AirtableRecord, type CompanyPersistenceWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
 
-type FixtureSnapshot = Partial<Record<'companies' | 'keywords' | 'paidAds' | 'insights' | 'reviews' | 'system', AirtableRecord[]>>;
+export type FixtureSnapshot = Partial<Record<'companies' | 'keywords' | 'paidAds' | 'insights' | 'reviews' | 'system', AirtableRecord[]>>;
 
 function recordId(table: string, identity: string): string {
   return `fixture-${table.toLowerCase().replace(/\s+/g, '-')}-${encodeURIComponent(identity)}`;
@@ -105,6 +105,11 @@ export class FixtureCompetitorRepository implements CompetitorStore {
     return {companies: this.records('companies'), keywords: this.records('keywords'), paidAds: this.records('paidAds'), publishedInsights: this.records('insights'), reviews: this.records('reviews'), system: this.records('system')};
   }
 
+  /** Sanitized fixture state for explicit CLI write-back; source fixture files are never mutated implicitly. */
+  toSnapshot(): FixtureSnapshot {
+    return {companies: this.records('companies'), keywords: this.records('keywords'), paidAds: this.records('paidAds'), insights: this.records('insights'), reviews: this.records('reviews'), system: this.records('system')};
+  }
+
   async getDueInsightInputs(): Promise<DueInsightInput[]> {
     const insights = new Map(this.records('insights').map((record) => [String(record.fields['Identity • Company ID']), record]));
     const reviews = new Map(this.records('reviews').map((record) => [String(record.fields['Identity • Company ID']), record]));
@@ -121,6 +126,7 @@ export class FixtureCompetitorRepository implements CompetitorStore {
 
   async upsertReview(review: ReviewWireInput): Promise<WriteResult> {
     const company = this.findCompanyRecordById(review.companyId);
+    if (this.records('reviews').filter((record) => record.fields['Identity • Company ID'] === review.companyId).length > 1) return {succeeded: 0, failed: 1, results: [{identity: review.companyId, error: 'duplicate_review_records'}]};
     return company ? this.upsertMany('reviews', [{identity: review.companyId, fields: toAirtableReviewFields(review, company.id), lookupField: 'Identity • Company ID'}]) : {succeeded: 0, failed: 1, results: [{identity: review.companyId, error: 'company_link_missing'}]};
   }
 

@@ -159,7 +159,13 @@ export class AirtableCompetitorRepository implements CompetitorStore {
   }
 
   async upsertReview(review: ReviewWireInput): Promise<WriteResult> {
-    return this.upsertCompanyLinked(AIRTABLE_TABLES.reviews, 'Identity • Company ID', review.companyId, (companyRecordId) => toAirtableReviewFields(review, companyRecordId));
+    try {
+      const existing = await this.client.list(AIRTABLE_TABLES.reviews, {filterByFormula: equalityFormula('Identity • Company ID', review.companyId)});
+      if (existing.length > 1) return {succeeded: 0, failed: 1, results: [{identity: review.companyId, error: 'duplicate_review_records'}]};
+      return this.upsertCompanyLinked(AIRTABLE_TABLES.reviews, 'Identity • Company ID', review.companyId, (companyRecordId) => toAirtableReviewFields(review, companyRecordId));
+    } catch (error) {
+      return {succeeded: 0, failed: 1, results: [{identity: review.companyId, error: errorMessage(error)}]};
+    }
   }
 
   async upsertPublishedInsight(insight: InsightWireInput): Promise<WriteResult> {

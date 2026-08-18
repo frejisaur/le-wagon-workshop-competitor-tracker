@@ -2,16 +2,16 @@ import {z} from 'zod';
 
 export const ConfidenceSchema = z.enum(['high', 'medium', 'low']);
 export const CandidateReviewReasonSchema = z.enum([
-  'prompt_injection_content', 'unresolved_refs', 'conflicting_evidence', 'suspicious_provider_data',
-  'ambiguous_identity', 'insufficient_evidence', 'reviewer_requested_regeneration',
+  'prompt_injection_content', 'unresolved_evidence_reference', 'conflicting_sources', 'suspicious_provider_data',
+  'ambiguous_company_identity', 'insufficient_evidence', 'reviewer_requested_regeneration',
 ]);
 
 export const CandidateClaimSchema = z.object({
   claimId: z.string().min(1).max(200),
-  conclusion: z.string().trim().min(1).max(5_000),
+  conclusion: z.string().trim().min(1).max(2_000),
   classification: z.enum(['observed', 'inferred']),
   confidence: ConfidenceSchema,
-  confidenceReason: z.string().trim().min(1).max(2_000),
+  confidenceReason: z.string().trim().min(1).max(1_000),
   evidenceRefs: z.array(z.string().min(1).max(500)).min(1).max(100).refine((refs) => new Set(refs).size === refs.length, 'evidence refs must be unique'),
 }).strict();
 
@@ -34,9 +34,6 @@ export const InsightCandidateSchema = z.object({
   canonicalDomain: z.string().min(1).max(255),
   evidenceFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   provenance: CandidateProvenanceSchema,
-  summary: z.string().trim().min(1).max(5_000),
-  paidMessageSummary: z.string().trim().min(1).max(5_000).optional(),
-  aiSearchSummary: z.string().trim().min(1).max(5_000).optional(),
   observedThemes: collection('observed'),
   inferredClaims: collection('inferred'),
   recommendations: collection('inferred'),

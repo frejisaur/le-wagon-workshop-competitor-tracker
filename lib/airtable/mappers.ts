@@ -42,50 +42,16 @@ function byteLength(value: unknown): number {
   return new TextEncoder().encode(json(value)).byteLength;
 }
 
-function trimClaimTextToFit(claims: StoredClaimWire[], claimIndex: number, field: 'conclusion' | 'confidenceReason'): void {
-  const claim = claims[claimIndex];
-  const codePoints = Array.from(claim[field]);
-  let low = 0;
-  let high = codePoints.length;
-  let best = '';
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-    claim[field] = codePoints.slice(0, middle).join('');
-    if (byteLength(claims) <= MAX_AIRTABLE_JSON_BYTES) {
-      best = claim[field];
-      low = middle + 1;
-    } else {
-      high = middle - 1;
-    }
-  }
-  claim[field] = best;
-}
-
 function claimWithBoundedEvidence(claim: ClaimWire): StoredClaimWire {
   if (claim.evidenceRefs.length === 0) throw new TypeError('claim requires at least one evidence ref');
-  const evidenceRefs = claim.evidenceRefs.slice(0, JSON_CAPS.evidenceRefs);
-  return {...claim, evidenceRefs, evidenceRefCount: claim.evidenceRefs.length, evidenceRefsRetainedCount: evidenceRefs.length};
+  if (claim.evidenceRefs.length > JSON_CAPS.evidenceRefs) throw new TypeError('claim evidence refs exceed Airtable cap');
+  return {...claim, evidenceRefs: [...claim.evidenceRefs], evidenceRefCount: claim.evidenceRefs.length, evidenceRefsRetainedCount: claim.evidenceRefs.length};
 }
 
 function classifiedClaims(claims: ClaimWire[], classification: ClaimWire['classification']): StoredClaimCollection {
   if (claims.some((claim) => claim.classification !== classification)) throw new TypeError(`${classification} claim collection contains another classification`);
-  const bounded = claims.slice(0, JSON_CAPS.claims).map(claimWithBoundedEvidence);
-  while (byteLength(bounded) > MAX_AIRTABLE_JSON_BYTES) {
-    let claimWithExtraEvidence: StoredClaimWire | undefined;
-    for (let index = bounded.length - 1; index >= 0; index -= 1) {
-      if (bounded[index].evidenceRefs.length > 1) {
-        claimWithExtraEvidence = bounded[index];
-        break;
-      }
-    }
-    if (!claimWithExtraEvidence) break;
-    claimWithExtraEvidence.evidenceRefs.pop();
-    claimWithExtraEvidence.evidenceRefsRetainedCount = claimWithExtraEvidence.evidenceRefs.length;
-  }
-  for (let index = bounded.length - 1; index >= 0 && byteLength(bounded) > MAX_AIRTABLE_JSON_BYTES; index -= 1) {
-    trimClaimTextToFit(bounded, index, 'conclusion');
-    if (byteLength(bounded) > MAX_AIRTABLE_JSON_BYTES) trimClaimTextToFit(bounded, index, 'confidenceReason');
-  }
+  if (claims.length > JSON_CAPS.claims) throw new TypeError('claim collection exceeds Airtable cap');
+  const bounded = claims.map(claimWithBoundedEvidence);
   if (byteLength(bounded) > MAX_AIRTABLE_JSON_BYTES) throw new TypeError('claim cannot retain evidence within Airtable JSON byte budget');
   return {json: json(bounded), originalCount: claims.length, retainedCount: bounded.length};
 }
@@ -226,14 +192,14 @@ export function toAirtableInsightFields(insight: InsightWireInput, companyAirtab
   const observedThemes = classifiedClaims(insight.observedThemes, 'observed');
   const inferredClaims = classifiedClaims(insight.inferredClaims, 'inferred');
   const recommendations = classifiedClaims(insight.recommendations, 'inferred');
-  return {'Identity • Insight ID': insight.insightId, 'Identity • Company ID': insight.companyId, 'Identity • Company Link': [companyAirtableRecordId], 'Observed • Themes JSON': observedThemes.json, 'Observed • Themes Claim Count': observedThemes.originalCount, 'Observed • Themes Claims Retained Count': observedThemes.retainedCount, 'Inferred • Claims JSON': inferredClaims.json, 'Inferred • Claims Claim Count': inferredClaims.originalCount, 'Inferred • Claims Retained Count': inferredClaims.retainedCount, 'Inferred • Paid Message Summary': insight.paidMessageSummary, 'Inferred • AI Search Summary': insight.aiSearchSummary, 'Inferred • Recommendations JSON': recommendations.json, 'Inferred • Recommendations Claim Count': recommendations.originalCount, 'Inferred • Recommendations Claims Retained Count': recommendations.retainedCount, 'Inferred • Overall Confidence': insight.overallConfidence, 'Workflow • Agent Harness': insight.agentHarness, 'Workflow • Model': insight.model, 'Workflow • Skill Version': insight.skillVersion, 'Workflow • Evidence Fingerprint': insight.evidenceFingerprint, 'Workflow • Version': insight.workflowVersion, 'Workflow • Run ID': insight.runId, 'Workflow • Generated At': insight.generatedAt};
+  return {'Identity • Insight ID': insight.insightId, 'Identity • Company ID': insight.companyId, 'Identity • Company Link': [companyAirtableRecordId], 'Observed • Themes JSON': observedThemes.json, 'Observed • Themes Claim Count': observedThemes.originalCount, 'Observed • Themes Claims Retained Count': observedThemes.retainedCount, 'Inferred • Claims JSON': inferredClaims.json, 'Inferred • Claims Claim Count': inferredClaims.originalCount, 'Inferred • Claims Retained Count': inferredClaims.retainedCount, 'Inferred • Recommendations JSON': recommendations.json, 'Inferred • Recommendations Claim Count': recommendations.originalCount, 'Inferred • Recommendations Claims Retained Count': recommendations.retainedCount, 'Inferred • Overall Confidence': insight.overallConfidence, 'Workflow • Agent Harness': insight.agentHarness, 'Workflow • Model': insight.model, 'Workflow • Skill Version': insight.skillVersion, 'Workflow • Evidence Fingerprint': insight.evidenceFingerprint, 'Workflow • Version': insight.workflowVersion, 'Workflow • Run ID': insight.runId, 'Workflow • Generated At': insight.generatedAt};
 }
 
 export function toAirtableReviewFields(review: ReviewWireInput, companyAirtableRecordId: string): AirtableFields {
   const observedThemes = classifiedClaims(review.observedThemes, 'observed');
   const inferredClaims = classifiedClaims(review.inferredClaims, 'inferred');
   const recommendations = classifiedClaims(review.recommendations, 'inferred');
-  return {'Identity • Company ID': review.companyId, 'Identity • Company Link': [companyAirtableRecordId], 'Observed • Themes JSON': observedThemes.json, 'Observed • Themes Claim Count': observedThemes.originalCount, 'Observed • Themes Claims Retained Count': observedThemes.retainedCount, 'Inferred • Claims JSON': inferredClaims.json, 'Inferred • Claims Claim Count': inferredClaims.originalCount, 'Inferred • Claims Retained Count': inferredClaims.retainedCount, 'Inferred • Summary': review.summary, 'Inferred • Paid Message Summary': review.paidMessageSummary, 'Inferred • AI Search Summary': review.aiSearchSummary, 'Inferred • Recommendations JSON': recommendations.json, 'Inferred • Recommendations Claim Count': recommendations.originalCount, 'Inferred • Recommendations Claims Retained Count': recommendations.retainedCount, 'Inferred • Overall Confidence': review.overallConfidence, 'Inferred • Review Reasons JSON': boundedJson(review.reviewReasons, JSON_CAPS.reviewReasons), 'Workflow • Evidence Fingerprint': review.evidenceFingerprint, 'Workflow • Agent Harness': review.agentHarness, 'Workflow • Model': review.model, 'Workflow • Skill Version': review.skillVersion, 'Workflow • Version': review.workflowVersion, 'Workflow • Run ID': review.runId, 'Workflow • Generated At': review.generatedAt, 'Review • Status': review.status, 'Review • Notes': review.reviewerNotes, 'Review • Identity': review.reviewerIdentity, 'Review • At': review.reviewedAt};
+  return {'Identity • Company ID': review.companyId, 'Identity • Company Link': [companyAirtableRecordId], 'Observed • Themes JSON': observedThemes.json, 'Observed • Themes Claim Count': observedThemes.originalCount, 'Observed • Themes Claims Retained Count': observedThemes.retainedCount, 'Inferred • Claims JSON': inferredClaims.json, 'Inferred • Claims Claim Count': inferredClaims.originalCount, 'Inferred • Claims Retained Count': inferredClaims.retainedCount, 'Inferred • Recommendations JSON': recommendations.json, 'Inferred • Recommendations Claim Count': recommendations.originalCount, 'Inferred • Recommendations Claims Retained Count': recommendations.retainedCount, 'Inferred • Overall Confidence': review.overallConfidence, 'Inferred • Review Reasons JSON': boundedJson(review.reviewReasons, JSON_CAPS.reviewReasons), 'Workflow • Evidence Fingerprint': review.evidenceFingerprint, 'Workflow • Agent Harness': review.agentHarness, 'Workflow • Model': review.model, 'Workflow • Skill Version': review.skillVersion, 'Workflow • Version': review.workflowVersion, 'Workflow • Run ID': review.runId, 'Workflow • Generated At': review.generatedAt, 'Review • Status': review.status, 'Review • Notes': review.reviewerNotes, 'Review • Identity': review.reviewerIdentity, 'Review • At': review.reviewedAt};
 }
 
 export function toAirtableSystemFields(system: SystemWireInput): AirtableFields {

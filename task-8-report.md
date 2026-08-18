@@ -48,3 +48,15 @@ Initial lifecycle tests failed because `lib/agents/publication/submit` and `publ
 ## Commit
 
 `feat: gate and publish evidence-backed insights`
+
+## Fix Round 1
+
+- Removed free-form candidate, review, and published summary fields. Published content now consists only of classified claims with validated evidence references; unsupported paid or AI prose is rejected by the strict candidate boundary.
+- Replaced legacy reason aliases with the versioned rubric names: `unresolved_evidence_reference`, `conflicting_sources`, and `ambiguous_company_identity`. Unknown stored reasons now fail promotion closed.
+- Submission now computes fresh preparation state before replay matching, serializes same-company submissions in-process, rejects duplicate review rows, and permits a reviewer-requested regeneration to replace the reusable candidate while retaining reviewer metadata.
+- Removed mapper truncation of claims, reasons, and references. Candidates that exceed retained Airtable JSON/cardinality limits reject before writes, so stored validated claims remain byte-identical.
+- Fixture commands support `--fixture-output-state`; state is atomically written only to an explicit path different from the input. Reload-style tests cover submit, idempotent retry, and promotion.
+- Prepared evidence values and reviewer notes receive bounded recursive injection scanning. They are routed with `prompt_injection_content` and never emitted by the result envelope.
+- Submit results now always expose `status`, `companyId`, `runId`, and `reasons` (with typed idempotency/confidence metadata).
+
+Operational limitation: Airtable does not offer a server-side unique constraint for the company-linked review row. The adapters and lifecycle fail closed on duplicates, and concurrent writers from separate processes still require a serialized operational run/migration policy.

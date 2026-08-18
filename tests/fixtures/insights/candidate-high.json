@@ -3,7 +3,6 @@
   "canonicalDomain": "alpha.example",
   "evidenceFingerprint": "ce0045d4fc2e0a351988dc56459a65dcd3651e8d475858e3a475af6413b3e656",
   "provenance": {"runId": "fixture-run-high", "agentHarness": "fixture", "model": "sanitized-model", "skillVersion": "1.0.0", "workflowVersion": "1.0.0", "generatedAt": "2026-08-18T12:00:00.000Z"},
-  "summary": "A measured organic demand signal is present.",
   "observedThemes": [{"claimId": "organic-traffic", "conclusion": "Organic traffic is 200 in the prepared evidence.", "classification": "observed", "confidence": "high", "confidenceReason": "The current curated provider metric directly reports the value.", "evidenceRefs": ["company:company-alpha:metric:organic_traffic"]}],
   "inferredClaims": [],
   "recommendations": [],
