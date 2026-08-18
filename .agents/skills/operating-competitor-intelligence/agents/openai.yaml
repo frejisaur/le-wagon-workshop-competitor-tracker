@@ -1,0 +1,4 @@
+interface:
+  display_name: "Operate Competitor Intelligence"
+  short_description: "Run and recover intelligence workflows"
+  default_prompt: "Use $operating-competitor-intelligence to check freshness and safely recover the latest workflow."

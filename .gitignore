@@ -1,1 +1,10 @@
 .superpowers/
+
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example
+
+# Local source exports may contain unsanitized provider data.
+data/apollo/*.csv
+data/apify/*.json

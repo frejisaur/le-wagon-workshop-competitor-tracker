@@ -1,0 +1,4 @@
+interface:
+  display_name: "Competitor Data Contracts"
+  short_description: "Maintain validated competitor data contracts"
+  default_prompt: "Use $competitor-data-contracts to implement or review this competitor-data transformation safely."

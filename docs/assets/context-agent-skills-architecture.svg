@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Project context, focused agents, and canonical skills</title>
+  <desc id="desc">A three-layer diagram showing project context feeding focused build agents, which load canonical repository skills just in time. The dashboard design-system path is highlighted in blue.</desc>
+  <defs>
+    <style>
+      .title { font: 700 34px 'IBM Plex Sans', Arial, sans-serif; fill: #172126; letter-spacing: .5px; }
+      .section { font: 700 26px 'IBM Plex Sans', Arial, sans-serif; fill: #172126; letter-spacing: .4px; }
+      .node { font: 600 21px 'IBM Plex Sans', Arial, sans-serif; fill: #172126; }
+      .small { font: 500 16px 'IBM Plex Mono', monospace; fill: #46575f; }
+      .caption { font: 500 19px 'IBM Plex Sans', Arial, sans-serif; fill: #245eb5; }
+      .panel { fill: #fcfdfd; stroke: #d5dee1; stroke-width: 2; }
+      .box { fill: #ffffff; stroke: #899aa2; stroke-width: 2; }
+      .box-blue { fill: #e8f0fb; stroke: #245eb5; stroke-width: 4; }
+      .pill { fill: #e9eef0; }
+      .line { fill: none; stroke: #5d6b72; stroke-width: 2.5; marker-end: url(#arrow); }
+      .line-blue { fill: none; stroke: #245eb5; stroke-width: 4; marker-end: url(#arrow-blue); }
+      .line-dash { fill: none; stroke: #77868d; stroke-width: 2; stroke-dasharray: 7 7; marker-end: url(#arrow); }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5d6b72"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#245eb5"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="900" fill="#f3f6f7"/>
+
+  <rect class="panel" x="24" y="24" width="1552" height="196" rx="12"/>
+  <text class="section" x="52" y="68">PROJECT CONTEXT</text>
+
+  <rect class="box" x="52" y="96" width="330" height="84" rx="6"/>
+  <text class="node" x="217" y="147" text-anchor="middle">AGENTS.md</text>
+
+  <rect class="box-blue" x="438" y="96" width="330" height="84" rx="6"/>
+  <text class="node" x="603" y="147" text-anchor="middle">Design System</text>
+
+  <rect class="box" x="824" y="96" width="330" height="84" rx="6"/>
+  <text class="node" x="989" y="147" text-anchor="middle">Product Spec</text>
+
+  <rect class="box" x="1210" y="96" width="330" height="84" rx="6"/>
+  <text class="node" x="1375" y="147" text-anchor="middle">CLAUDE.md</text>
+
+  <rect class="panel" x="24" y="254" width="1552" height="266" rx="12"/>
+  <text class="section" x="52" y="302">FOCUSED AGENTS</text>
+
+  <rect class="pill" x="565" y="278" width="188" height="44" rx="6"/>
+  <text class="small" x="659" y="306" text-anchor="middle">.codex/agents</text>
+  <rect class="pill" x="774" y="278" width="196" height="44" rx="6"/>
+  <text class="small" x="872" y="306" text-anchor="middle">.claude/agents</text>
+
+  <rect class="box" x="78" y="364" width="390" height="94" rx="6"/>
+  <text class="node" x="273" y="420" text-anchor="middle">pipeline-builder</text>
+
+  <rect class="box-blue" x="605" y="364" width="390" height="94" rx="6"/>
+  <text class="node" x="800" y="420" text-anchor="middle">dashboard-builder</text>
+
+  <rect class="box" x="1132" y="364" width="390" height="94" rx="6"/>
+  <text class="node" x="1327" y="420" text-anchor="middle">evidence-reviewer</text>
+
+  <path class="line" d="M217 180 V264 H273 V358"/>
+  <path class="line-blue" d="M603 180 V264 H800 V358"/>
+  <path class="line" d="M989 180 V264 H800 V358"/>
+  <path class="line" d="M1375 180 V264 H1327 V358"/>
+
+  <rect class="panel" x="24" y="554" width="1552" height="270" rx="12"/>
+  <text class="section" x="52" y="604">CANONICAL SKILLS</text>
+  <text class="small" x="327" y="604">.agents/skills</text>
+
+  <rect class="box" x="42" y="670" width="350" height="102" rx="6"/>
+  <text class="node" x="217" y="728" text-anchor="middle">competitor-data-contracts</text>
+
+  <rect class="box-blue" x="430" y="670" width="350" height="102" rx="6"/>
+  <text class="node" x="605" y="716" text-anchor="middle">building-competitor-</text>
+  <text class="node" x="605" y="744" text-anchor="middle">dashboard</text>
+
+  <rect class="box" x="818" y="670" width="350" height="102" rx="6"/>
+  <text class="node" x="993" y="716" text-anchor="middle">generating-gtm-</text>
+  <text class="node" x="993" y="744" text-anchor="middle">battlecards</text>
+
+  <rect class="box" x="1206" y="670" width="350" height="102" rx="6"/>
+  <text class="node" x="1381" y="716" text-anchor="middle">operating-competitor-</text>
+  <text class="node" x="1381" y="744" text-anchor="middle">intelligence</text>
+
+  <path class="line" d="M273 458 V664"/>
+  <path class="line" d="M704 458 C635 530 400 548 245 664"/>
+  <path class="line-blue" d="M800 458 V564 H605 V664"/>
+  <path class="line" d="M1327 458 C1185 520 1100 570 1015 664"/>
+  <path class="line" d="M1248 458 C1010 520 660 548 310 664"/>
+
+  <path class="line-dash" d="M1375 180 V236 H1510 V646 H1381 V664"/>
+  <text class="small" x="1268" y="644">operational tasks</text>
+
+  <rect x="500" y="842" width="600" height="42" rx="21" fill="#e8f0fb"/>
+  <text class="caption" x="800" y="869" text-anchor="middle">Single source of truth  •  loaded just in time</text>
+</svg>
