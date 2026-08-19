@@ -298,7 +298,7 @@ The application uses separate runtime variables:
 | `AIRTABLE_BASE_ID` | No, but sensitive metadata | `.env.local` | Required | Required |
 | Airtable table-name variables | No | `.env.local` | Required | Required |
 | `APIFY_TOKEN` | Yes | `.env.local` when refreshing | Not present | Required |
-| `APIFY_TASK_ID` | No | `.env.local` when refreshing | Not present | Required |
+| `APIFY_ACTOR_ID` | No | `.env.local` when refreshing | Not present | Required |
 | `CACHE_INVALIDATION_SECRET` | Yes | `.env.local` | Required | Required |
 | `APP_BASE_URL` | No | `.env.local` | Required | Required |
 
