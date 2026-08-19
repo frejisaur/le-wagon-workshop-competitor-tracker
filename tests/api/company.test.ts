@@ -33,10 +33,12 @@ describe('company response', () => {
 
   it('withholds published claims when current curated evidence changes under the same reference', () => {
     const currentFingerprint = fingerprintEvidence(buildEvidencePackage({company: snapshot.companies[0]!, keywords: snapshot.keywords, paidAds: [], review: snapshot.reviews[0]}));
-    const published = {id: 'rec-insight', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint, 'Inferred • Overall Confidence': 'high', 'Inferred • Claims JSON': '[{"claimId":"claim-1","conclusion":"Current claim","classification":"inferred","confidence":"high","confidenceReason":"grounded","evidenceRefs":["company:company-alpha:metric:organic_traffic"]}]'}};
+    const published = {id: 'rec-insight', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint, 'Workflow • Run ID': 'run-safe', 'Workflow • Agent Harness': 'fixture', 'Workflow • Model': 'safe-model', 'Workflow • Skill Version': '1.0.0', 'Workflow • Version': '1.0.0', 'Review • Notes': 'never expose', 'Review • Identity': 'never expose', 'Inferred • Overall Confidence': 'high', 'Inferred • Claims JSON': '[{"claimId":"claim-1","conclusion":"Current claim","classification":"inferred","confidence":"high","confidenceReason":"grounded","evidenceRefs":["company:company-alpha:metric:organic_traffic"]}]'}};
     const current = shapeDashboardSnapshot({...snapshot, publishedInsights: [published]}).companies.get('company-alpha');
     expect(current?.publishedInsightState).toBe('current');
     expect(current?.publishedInsight?.claims).toHaveLength(1);
+    expect(current?.publishedInsight?.workflow).toEqual({evidenceFingerprint: currentFingerprint, runId: 'run-safe', harness: 'fixture', model: 'safe-model', skillVersion: '1.0.0', workflowVersion: '1.0.0'});
+    expect(JSON.stringify(current)).not.toMatch(/rec-insight|never expose|Review •/);
 
     const changedKeyword = structuredClone(snapshot.keywords[0]!); changedKeyword.fields['Observed • Keyword'] = 'changed value';
     const stale = shapeDashboardSnapshot({...snapshot, keywords: [changedKeyword], publishedInsights: [published]}).companies.get('company-alpha');

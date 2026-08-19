@@ -36,10 +36,45 @@
 :global(.company-table thead th) { position: sticky; z-index: var(--layer-sticky); top: 0; background: var(--color-surface-raised); color: var(--color-ink); font-weight: var(--weight-semibold); }
 :global(.company-table__numeric) { text-align: right !important; font-family: var(--font-data); }
 
+.battlecard, .evidenceWorkspace { display: grid; gap: var(--space-5); max-width: 920px; }
+.battlecard h2, .evidenceWorkspace h2, .battlecard h3 { margin: 0; }
+.battlecardLead { border-left: var(--selection-edge-width) solid var(--color-accent); padding: var(--space-4); background: var(--color-accent-subtle); }
+.battlecardLead h3 { margin-top: var(--space-2); font-size: var(--type-section-size); line-height: var(--type-section-line); }
+.eyebrow, .claimMeta, .claimReason, .battlecardMetadata, .evidenceDetails, .evidenceWorkflow { color: var(--color-text-secondary); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+.battlecardClaims { display: grid; gap: var(--space-3); }
+.battlecardClaim { display: grid; gap: var(--space-2); border-top: var(--rule-width) solid var(--color-rule); padding-top: var(--space-3); scroll-margin-top: var(--space-6); }
+.battlecardClaim p { margin: 0; }
+.battlecardClaim a { width: fit-content; min-height: var(--touch-target-min); display: inline-flex; align-items: center; color: var(--color-accent); font-weight: var(--weight-semibold); }
+.battlecardClaim:focus-visible { outline: var(--focus-width) solid var(--color-accent); outline-offset: var(--focus-offset); }
+.claimMeta { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.insightReview, .insightStale { border-left: var(--selection-edge-width) solid var(--color-warning); padding: var(--space-3); background: var(--color-surface-subtle); color: var(--color-warning); }
+.insightReview p { margin: var(--space-1) 0 0; }
+.battlecardMetadata { border-top: var(--rule-width) solid var(--color-rule); padding-top: var(--space-3); }
+.battlecardMetadata p { margin: var(--space-1) 0; overflow-wrap: anywhere; }
+.evidenceWorkspace > header { display: grid; gap: var(--space-2); }
+.evidenceWorkspace > header p { margin: 0; color: var(--color-text-secondary); }
+.evidenceWorkspace button { width: fit-content; min-height: var(--touch-target-min); }
+.evidenceRows { display: grid; gap: var(--space-3); }
+.evidenceRow { display: grid; gap: var(--space-3); border: var(--rule-width) solid var(--color-rule); border-left-width: var(--selection-edge-width); padding: var(--space-4); background: var(--color-surface-raised); scroll-margin-top: var(--space-6); }
+.evidenceRowHighlighted { border-color: var(--color-accent); background: var(--color-accent-subtle); transition: background-color var(--motion-evidence) var(--motion-ease), border-color var(--motion-evidence) var(--motion-ease); }
+.evidenceRowHeader { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); }
+.evidenceRowHeader code { overflow-wrap: anywhere; font-family: var(--font-data); }
+.evidenceDetails, .evidenceWorkflow { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-2); margin: 0; }
+.evidenceDetails div, .evidenceWorkflow div { min-width: 0; }
+.evidenceDetails dt, .evidenceWorkflow dt { color: var(--color-text-quiet); }
+.evidenceDetails dd, .evidenceWorkflow dd { margin: 0; overflow-wrap: anywhere; color: var(--color-ink); }
+.evidenceValue { max-width: 100%; margin: 0; overflow: auto; border: var(--rule-width) solid var(--color-rule); padding: var(--space-3); background: var(--color-surface); font-family: var(--font-data); font-size: var(--type-data-size); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@media (prefers-reduced-motion: reduce) {
+  .evidenceRowHighlighted { transition: none; }
+}
+
 @media (max-width: 767px) {
   :global(.company-workspace__ledger .kpi-ledger) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   :global(.company-module__heading) { display: grid; }
   :global(.historical-chart__canvas) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   :global(.historical-chart__comparison-series) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .battlecard, .evidenceWorkspace { gap: var(--space-4); }
+  .evidenceDetails, .evidenceWorkflow { grid-template-columns: 1fr; }
 }
 }
