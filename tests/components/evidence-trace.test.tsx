@@ -54,7 +54,8 @@ describe('battlecard evidence trace', () => {
     const knownClaims = new Set(['claim-observed']); const knownRefs = new Set(['company:alpha:traffic', 'keyword:alpha:one']);
     expect(parseEvidenceNavigation('?tab=evidence&claim=claim-observed&evidence=keyword%3Aalpha%3Aone,foreign,keyword%3Aalpha%3Aone&x=1', knownClaims, knownRefs)).toEqual({tab: 'evidence', claimId: 'claim-observed', evidenceRefs: ['keyword:alpha:one']});
     expect(parseEvidenceNavigation('?tab=evidence&claim=missing&evidence=missing', knownClaims, knownRefs)).toEqual({tab: 'evidence', evidenceRefs: []});
-    expect(serializeEvidenceNavigation({tab: 'evidence', claimId: 'claim-observed', evidenceRefs: Array.from({length: 101}, (_, index) => `r${index}`)}, knownClaims, new Set(Array.from({length: 101}, (_, index) => `r${index}`)))).toContain('evidence=r0%2Cr1');
+    expect(serializeEvidenceNavigation({tab: 'evidence', claimId: 'claim-observed', evidenceRefs: Array.from({length: 101}, (_, index) => `r${index}`)}, knownClaims, new Set(Array.from({length: 101}, (_, index) => `r${index}`)))).toBe('tab=evidence&claim=claim-observed');
+    expect(serializeEvidenceNavigation({tab: 'evidence', claimId: 'claim-observed', evidenceRefs: ['company:alpha:traffic', 'company:alpha:traffic']}, knownClaims, knownRefs)).toBe('tab=evidence&claim=claim-observed');
   });
 
   it('losslessly traces candidate-length references containing commas and falls back to claim-only under the URL budget', async () => {

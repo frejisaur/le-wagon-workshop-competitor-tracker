@@ -43,12 +43,14 @@ export function parseEvidenceNavigation(search: string, claimIds?: ReadonlySet<s
 export function serializeEvidenceNavigation(navigation: EvidenceNavigation, claimIds?: ReadonlySet<string>, evidenceRefs?: ReadonlySet<string>): string {
   const claimId = navigation.claimId && safe(navigation.claimId, MAX_CLAIM_ID_LENGTH) && (!claimIds || claimIds.has(navigation.claimId)) ? navigation.claimId : undefined;
   const refs = orderedMembers(navigation.evidenceRefs, evidenceRefs);
+  const refsAreComplete = refs.length === navigation.evidenceRefs.length && refs.every((ref, index) => ref === navigation.evidenceRefs[index]);
+  const fallback = new URLSearchParams(); fallback.set('tab', 'evidence'); if (claimId) fallback.set('claim', claimId);
+  const claimOnly = fallback.toString();
+  if (!refsAreComplete) return byteLength(claimOnly) <= MAX_EVIDENCE_TRACE_QUERY_BYTES ? claimOnly : 'tab=evidence';
   const params = new URLSearchParams(); params.set('tab', 'evidence'); if (claimId) params.set('claim', claimId);
   if (refs.length) params.set('evidence', refs.map(encodeURIComponent).join(','));
   const serialized = params.toString();
   if (byteLength(serialized) <= MAX_EVIDENCE_TRACE_QUERY_BYTES) return serialized;
-  const fallback = new URLSearchParams(); fallback.set('tab', 'evidence'); if (claimId) fallback.set('claim', claimId);
-  const claimOnly = fallback.toString();
   return byteLength(claimOnly) <= MAX_EVIDENCE_TRACE_QUERY_BYTES ? claimOnly : 'tab=evidence';
 }
 

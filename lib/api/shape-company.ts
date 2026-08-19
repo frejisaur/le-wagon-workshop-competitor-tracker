@@ -23,13 +23,33 @@ function calculatedWithObservedProvenance(fields: AirtableFields, field: string)
 
 function reviewReasons(record: AirtableRecord): CandidateReviewReason[] { return [...new Set(stringList(record.fields, 'Inferred • Review Reasons JSON').flatMap((reason) => CandidateReviewReasonSchema.safeParse(reason).success ? [reason as CandidateReviewReason] : []))].sort().slice(0, 7) as CandidateReviewReason[]; }
 type PublishedClaim = CandidateClaim;
+const STORED_CLAIM_KEYS = new Set(['claimId', 'conclusion', 'classification', 'confidence', 'confidenceReason', 'evidenceRefs', 'evidenceRefCount', 'evidenceRefsRetainedCount']);
+
+function storedClaim(value: unknown, classification: PublishedClaim['classification']): PublishedClaim | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const stored = value as Record<string, unknown>;
+  if (Object.keys(stored).some((key) => !STORED_CLAIM_KEYS.has(key))) return undefined;
+  const evidenceRefCount = stored.evidenceRefCount;
+  const evidenceRefsRetainedCount = stored.evidenceRefsRetainedCount;
+  const candidate = {
+    claimId: stored.claimId, conclusion: stored.conclusion, classification: stored.classification,
+    confidence: stored.confidence, confidenceReason: stored.confidenceReason, evidenceRefs: stored.evidenceRefs,
+  };
+  const result = CandidateClaimSchema.safeParse(candidate);
+  if (!result.success || result.data.classification !== classification) return undefined;
+  if (!Number.isInteger(evidenceRefCount) || evidenceRefCount !== result.data.evidenceRefs.length) return undefined;
+  if (!Number.isInteger(evidenceRefsRetainedCount) || evidenceRefsRetainedCount !== result.data.evidenceRefs.length) return undefined;
+  return result.data;
+}
+
 function claims(record: AirtableRecord, field: string, classification: PublishedClaim['classification']): {claims: PublishedClaim[]; complete: boolean} {
-  const serialized = text(record.fields, field);
-  if (!serialized) return {claims: [], complete: true};
+  const raw = record.fields[field];
+  if (raw === undefined || raw === null) return {claims: [], complete: true};
+  if (typeof raw !== 'string' || raw.length === 0) return {claims: [], complete: false};
   let parsed: unknown;
-  try { parsed = JSON.parse(serialized); } catch { return {claims: [], complete: false}; }
+  try { parsed = JSON.parse(raw); } catch { return {claims: [], complete: false}; }
   if (!Array.isArray(parsed) || parsed.length > 100) return {claims: [], complete: false};
-  const valid = parsed.flatMap((claim) => { const result = CandidateClaimSchema.safeParse(claim); return result.success && result.data.classification === classification ? [result.data] : []; });
+  const valid = parsed.flatMap((claim) => { const result = storedClaim(claim, classification); return result ? [result] : []; });
   return {claims: valid, complete: parsed.length === valid.length};
 }
 

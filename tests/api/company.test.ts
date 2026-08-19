@@ -1,5 +1,7 @@
 import {describe, expect, it} from 'vitest';
 import type {DashboardSnapshot} from '@/lib/airtable/types';
+import {toAirtableInsightFields} from '@/lib/airtable/mappers';
+import type {InsightWireInput} from '@/lib/airtable/types';
 import {shapeDashboardSnapshot} from '@/lib/api/shape-landscape';
 import {buildEvidencePackage} from '@/lib/agents/evidence/build-package';
 import {fingerprintEvidence} from '@/lib/agents/evidence/fingerprint';
@@ -20,6 +22,10 @@ const snapshot: DashboardSnapshot = {
   system: [{id: 'rec-system', fields: {'Identity • System ID': 'system', 'Workflow • Status': 'partial', 'Workflow • Failed Companies': 1}}],
 };
 
+function persistedClaim<T extends {evidenceRefs: string[]}>(claim: T): T & {evidenceRefCount: number; evidenceRefsRetainedCount: number} {
+  return {...claim, evidenceRefCount: claim.evidenceRefs.length, evidenceRefsRetainedCount: claim.evidenceRefs.length};
+}
+
 describe('company response', () => {
   it('projects curated classified detail, hides reviewer identity and notes, and omits paid activity', () => {
     const response = shapeDashboardSnapshot(snapshot).companies.get('company-alpha');
@@ -39,7 +45,7 @@ describe('company response', () => {
 
   it('withholds published claims when current curated evidence changes under the same reference', () => {
     const currentFingerprint = fingerprintEvidence(buildEvidencePackage({company: snapshot.companies[0]!, keywords: snapshot.keywords, paidAds: [], review: snapshot.reviews[0]}));
-    const published = {id: 'rec-insight', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint, 'Workflow • Run ID': 'run-safe', 'Workflow • Agent Harness': 'fixture', 'Workflow • Model': 'safe-model', 'Workflow • Skill Version': '1.0.0', 'Workflow • Version': '1.0.0', 'Review • Notes': 'never expose', 'Review • Identity': 'never expose', 'Inferred • Overall Confidence': 'high', 'Inferred • Claims JSON': '[{"claimId":"claim-1","conclusion":"Current claim","classification":"inferred","confidence":"high","confidenceReason":"grounded","evidenceRefs":["company:company-alpha:metric:organic_traffic"]}]'}};
+    const published = {id: 'rec-insight', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint, 'Workflow • Run ID': 'run-safe', 'Workflow • Agent Harness': 'fixture', 'Workflow • Model': 'safe-model', 'Workflow • Skill Version': '1.0.0', 'Workflow • Version': '1.0.0', 'Review • Notes': 'never expose', 'Review • Identity': 'never expose', 'Inferred • Overall Confidence': 'high', 'Inferred • Claims JSON': JSON.stringify([persistedClaim({claimId: 'claim-1', conclusion: 'Current claim', classification: 'inferred', confidence: 'high', confidenceReason: 'grounded', evidenceRefs: ['company:company-alpha:metric:organic_traffic']})])}};
     const current = shapeDashboardSnapshot({...snapshot, publishedInsights: [published]}).companies.get('company-alpha');
     expect(current?.publishedInsightState).toBe('current');
     expect(current?.publishedInsight?.claims).toHaveLength(1);
@@ -54,7 +60,10 @@ describe('company response', () => {
 
   it('fails closed when a matching published fingerprint has unresolved or malformed stored claims', () => {
     const currentFingerprint = fingerprintEvidence(buildEvidencePackage({company: snapshot.companies[0]!, keywords: snapshot.keywords, paidAds: [], review: snapshot.reviews[0]}));
-    const unresolved = {id: 'rec-insight', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint, 'Inferred • Claims JSON': '[{"claimId":"valid","conclusion":"Valid","classification":"inferred","confidence":"high","confidenceReason":"grounded","evidenceRefs":["company:company-alpha:metric:organic_traffic"]},{"claimId":"bad","conclusion":"Bad","classification":"inferred","confidence":"high","confidenceReason":"grounded","evidenceRefs":["foreign"]}]'}};
+    const unresolved = {id: 'rec-insight', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint, 'Inferred • Claims JSON': JSON.stringify([
+      persistedClaim({claimId: 'valid', conclusion: 'Valid', classification: 'inferred', confidence: 'high', confidenceReason: 'grounded', evidenceRefs: ['company:company-alpha:metric:organic_traffic']}),
+      persistedClaim({claimId: 'bad', conclusion: 'Bad', classification: 'inferred', confidence: 'high', confidenceReason: 'grounded', evidenceRefs: ['foreign']}),
+    ])}};
     const response = shapeDashboardSnapshot({...snapshot, publishedInsights: [unresolved]}).companies.get('company-alpha');
     expect(response?.publishedInsightState).toBe('stale');
     expect(response).not.toHaveProperty('publishedInsight');
@@ -62,19 +71,57 @@ describe('company response', () => {
     expect(shapeDashboardSnapshot({...snapshot, publishedInsights: [malformed]}).companies.get('company-alpha')?.publishedInsightState).toBe('stale');
   });
 
+  it('round-trips canonical mapper claim storage through a matching snapshot', () => {
+    const currentFingerprint = fingerprintEvidence(buildEvidencePackage({company: snapshot.companies[0]!, keywords: snapshot.keywords, paidAds: [], review: snapshot.reviews[0]}));
+    const insight: InsightWireInput = {
+      insightId: 'insight-alpha', companyId: 'company-alpha', observedThemes: [], recommendations: [],
+      inferredClaims: [{claimId: 'claim-round-trip', conclusion: 'Current claim survives persistence.', classification: 'inferred', confidence: 'high', confidenceReason: 'Supported by current traffic evidence.', evidenceRefs: ['company:company-alpha:metric:organic_traffic']}],
+      agentHarness: 'fixture', model: 'safe-model', skillVersion: '1.0.0', evidenceFingerprint: currentFingerprint, workflowVersion: '1.0.0', runId: 'run-round-trip', generatedAt: '2026-08-18T12:00:00.000Z',
+    };
+    const fields = toAirtableInsightFields(insight, 'rec-alpha');
+    const response = shapeDashboardSnapshot({...snapshot, publishedInsights: [{id: 'rec-insight', fields}]}).companies.get('company-alpha');
+
+    expect(response?.publishedInsightState).toBe('current');
+    expect(response?.publishedInsight?.claims).toEqual(insight.inferredClaims);
+
+    const storedClaims = JSON.parse(fields['Inferred • Claims JSON'] as string) as Array<Record<string, unknown>>;
+    for (const malformedClaim of [
+      {...storedClaims[0], evidenceRefCount: 2},
+      {...storedClaims[0], evidenceRefsRetainedCount: 0},
+      {...storedClaims[0], unexpected: 'not canonical'},
+    ]) {
+      const malformed = {...fields, 'Inferred • Claims JSON': JSON.stringify([malformedClaim])};
+      const withheld = shapeDashboardSnapshot({...snapshot, publishedInsights: [{id: 'rec-insight', fields: malformed}]}).companies.get('company-alpha');
+      expect(withheld?.publishedInsightState).toBe('stale');
+      expect(withheld).not.toHaveProperty('publishedInsight');
+    }
+  });
+
+  it('treats a present non-string published claim collection as malformed', () => {
+    const currentFingerprint = fingerprintEvidence(buildEvidencePackage({company: snapshot.companies[0]!, keywords: snapshot.keywords, paidAds: [], review: snapshot.reviews[0]}));
+    const published = {id: 'rec-insight', fields: {
+      'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint,
+      'Observed • Themes JSON': 42,
+      'Inferred • Claims JSON': JSON.stringify([persistedClaim({claimId: 'valid', conclusion: 'Valid', classification: 'inferred', confidence: 'high', confidenceReason: 'grounded', evidenceRefs: ['company:company-alpha:metric:organic_traffic']})]),
+    }};
+    const response = shapeDashboardSnapshot({...snapshot, publishedInsights: [published]}).companies.get('company-alpha');
+    expect(response?.publishedInsightState).toBe('stale');
+    expect(response).not.toHaveProperty('publishedInsight');
+  });
+
   it('applies every canonical claim invariant to persisted collections and derives the lowest confidence', () => {
     const currentFingerprint = fingerprintEvidence(buildEvidencePackage({company: snapshot.companies[0]!, keywords: snapshot.keywords, paidAds: [], review: snapshot.reviews[0]}));
     const valid = {claimId: 'claim-valid', conclusion: 'A trimmed supported conclusion.', classification: 'inferred', confidence: 'low', confidenceReason: 'A trimmed evidence reason.', evidenceRefs: ['company:company-alpha:metric:organic_traffic']};
-    const base = {id: 'rec-insight', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint, 'Inferred • Overall Confidence': 'high', 'Inferred • Claims JSON': JSON.stringify([valid])}};
+    const base = {id: 'rec-insight', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint, 'Inferred • Overall Confidence': 'high', 'Inferred • Claims JSON': JSON.stringify([persistedClaim(valid)])}};
     const current = shapeDashboardSnapshot({...snapshot, publishedInsights: [base]}).companies.get('company-alpha');
     expect(current?.publishedInsightState).toBe('current');
     expect(current?.publishedInsight?.overallConfidence).toBe('low');
     const invalids = [
-      {...base, fields: {...base.fields, 'Observed • Themes JSON': JSON.stringify([{...valid, claimId: 'observed-wrong', classification: 'inferred'}])}},
-      {...base, fields: {...base.fields, 'Observed • Themes JSON': JSON.stringify([{...valid, classification: 'observed'}])}},
-      {...base, fields: {...base.fields, 'Observed • Themes JSON': JSON.stringify([{...valid, classification: 'observed'}]), 'Inferred • Claims JSON': JSON.stringify([{...valid}])}},
-      {...base, fields: {...base.fields, 'Inferred • Claims JSON': JSON.stringify([{...valid, evidenceRefs: [valid.evidenceRefs[0], valid.evidenceRefs[0]]}])}},
-      {...base, fields: {...base.fields, 'Inferred • Claims JSON': JSON.stringify([{...valid, conclusion: ` ${valid.conclusion}`}])}},
+      {...base, fields: {...base.fields, 'Observed • Themes JSON': JSON.stringify([persistedClaim({...valid, claimId: 'observed-wrong', classification: 'inferred'})])}},
+      {...base, fields: {...base.fields, 'Observed • Themes JSON': JSON.stringify([persistedClaim({...valid, classification: 'observed'})])}},
+      {...base, fields: {...base.fields, 'Observed • Themes JSON': JSON.stringify([persistedClaim({...valid, classification: 'observed'})]), 'Inferred • Claims JSON': JSON.stringify([persistedClaim({...valid})])}},
+      {...base, fields: {...base.fields, 'Inferred • Claims JSON': JSON.stringify([persistedClaim({...valid, evidenceRefs: [valid.evidenceRefs[0], valid.evidenceRefs[0]]})])}},
+      {...base, fields: {...base.fields, 'Inferred • Claims JSON': JSON.stringify([persistedClaim({...valid, conclusion: ` ${valid.conclusion}`})])}},
     ];
     for (const published of invalids) {
       const response = shapeDashboardSnapshot({...snapshot, publishedInsights: [published]}).companies.get('company-alpha');
