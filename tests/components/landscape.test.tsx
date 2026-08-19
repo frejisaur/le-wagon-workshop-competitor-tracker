@@ -1,6 +1,6 @@
 import {readFileSync} from 'node:fs';
 import userEvent from '@testing-library/user-event';
-import {cleanup, render, screen, within} from '@testing-library/react';
+import {cleanup, render, screen, waitFor, within} from '@testing-library/react';
 import {afterEach, describe, expect, it} from 'vitest';
 import type {LandscapeResponse} from '@/lib/domain/dashboard';
 import {LandscapeScreen} from '@/components/landscape/LandscapeScreen';
@@ -72,7 +72,51 @@ describe('competitive landscape', () => {
     expect(screen.getByTestId('market-map')).toHaveTextContent(/organic traffic \(logarithmic scale\)/i);
     expect(screen.getByRole('table', {name: /market map accessible data/i})).toBeInTheDocument();
     expect(within(screen.getByRole('table', {name: /market map accessible data/i})).queryByText(/charlie/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/unavailable values.*excluded/i)).toBeInTheDocument();
+    expect(screen.getByText(/unavailable axis values.*zero organic traffic.*excluded/i)).toBeInTheDocument();
+  });
+
+  it('derives map shares and eligible signals from the filtered cohort instead of global pre-capped response rows', async () => {
+    const user = userEvent.setup();
+    const cohort: LandscapeResponse = {...fixture, signals: [], companies: fixture.companies.map((company) => company.companyId === 'bravo' ? {...company, organicTraffic30DayMovement: calculated(0.12), nonBrandShare: calculated(0.8), paidActivity: calculated(true), aiBenchmarkGap: calculated(0.3)} : company)};
+    render(<LandscapeScreen initialData={cohort} />);
+    expect(screen.getByRole('link', {name: /bravo.*organic traffic growing/i})).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Country'), 'Canada');
+    expect(within(screen.getByRole('table', {name: /market map accessible data/i})).getByText('100%')).toBeInTheDocument();
+  });
+
+  it('keeps every mobile-hidden value in the details disclosure and exposes map source and exact freshness', async () => {
+    const user = userEvent.setup();
+    render(<LandscapeScreen initialData={fixture} />);
+    const details = screen.getAllByText('Details')[0]!;
+    await user.click(details);
+    const disclosure = details.closest('details')!;
+    expect(within(disclosure).getByText('Non-brand share')).toBeInTheDocument();
+    expect(within(disclosure).getByText('Keywords')).toBeInTheDocument();
+    expect(within(disclosure).getByText('Paid activity')).toBeInTheDocument();
+    expect(within(disclosure).getByText('Referring domains')).toBeInTheDocument();
+    const point = screen.getByRole('button', {name: /alpha.*authority/i});
+    expect(point).toHaveAccessibleDescription(/source: semrush.*last successful refresh: 2026-08-18 12:00 utc/i);
+    expect(screen.getByText(/zero organic traffic/i)).toBeInTheDocument();
+  });
+
+  it('synchronizes all numeric drafts after clear and popstate without focusing a URL-selected row', async () => {
+    const user = userEvent.setup();
+    render(<LandscapeScreen initialData={fixture} initialSearch="?trafficMin=10000&trafficMax=13000&authorityMin=40&authorityMax=70&selectedCompany=alpha&sort=traffic-desc" />);
+    const selectedRow = screen.getByRole('row', {name: /alpha.*alpha\.example/i});
+    expect(selectedRow).toHaveAttribute('aria-selected', 'true');
+    expect(selectedRow).not.toHaveFocus();
+    expect(screen.getByLabelText('Traffic minimum')).toHaveValue('10000');
+    await user.click(screen.getByRole('button', {name: /clear filters/i}));
+    expect(screen.getByLabelText('Traffic minimum')).toHaveValue('');
+    expect(screen.getByLabelText('Authority maximum')).toHaveValue('');
+    window.history.pushState(null, '', '?trafficMin=8000&trafficMax=13000&authorityMin=40&authorityMax=70&sort=traffic-desc&selectedCompany=alpha');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await waitFor(() => expect(screen.getByLabelText('Traffic minimum')).toHaveValue('8000'));
+    expect(screen.getByLabelText('Traffic maximum')).toHaveValue('13000');
+    expect(screen.getByLabelText('Authority minimum')).toHaveValue('40');
+    expect(screen.getByLabelText('Authority maximum')).toHaveValue('70');
+    await user.click(screen.getByRole('button', {name: /apply numeric filters/i}));
+    expect(window.location.search).toContain('trafficMin=8000');
   });
 
   it('shows missing values, range validation, constraint-specific empty state, and clear only for active filters', async () => {
@@ -95,7 +139,7 @@ describe('competitive landscape', () => {
     expect(container.querySelector('.company-leaderboard')).toHaveClass('company-leaderboard');
     expect(container.querySelector('.company-leaderboard__mobile-disclosure')).toBeInTheDocument();
     expect(readFileSync('styles/globals.scss', 'utf8')).toContain('.company-leaderboard__mobile-disclosure');
-    expect(container.innerHTML).not.toMatch(/rec[A-Za-z0-9]|airtable|apiToken/i);
+    expect(container.innerHTML).not.toMatch(/\brec-[\w-]+|rawProviderPayload|airtable|apiToken/i);
   });
 
   it('maps loading, empty, partial, stale, and failed response states through the shared screen state', () => {

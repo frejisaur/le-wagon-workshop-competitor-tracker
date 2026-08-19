@@ -64,3 +64,38 @@
 
 None. The minimal country/segment association correction is now covered by the
 dashboard response test and remains entirely inside the curated allow-list.
+
+## Fix Round 1
+
+### RED → GREEN
+
+- RED: three new focused landscape regressions exposed global pre-capped map and
+  signal use, incomplete mobile details/map metadata, and URL-state draft
+  desynchronization.
+- GREEN: the focused landscape/API suites now pass 17 tests.
+
+### Corrections
+
+- Added one pure landscape selector module. It filters/sorts the summary cohort,
+  recalculates map traffic share from known positive filtered traffic, and derives
+  deterministic eligible attention signals before applying the five-item cap.
+  Null/zero traffic, missing axes, and unavailable share are counted and named
+  separately in the map exclusion note.
+- Mobile details now contain the fields actually hidden outside the priority row:
+  non-brand share, keywords, paid activity, and referring domains. Explicit
+  unavailable values remain visible after opening the disclosure.
+- Recorded and implemented the identity ruling: country is Apollo company
+  domicile only. Semrush top-country data never substitutes for a missing Apollo
+  country and is not exposed as a landscape filter option.
+- Numeric drafts reset whenever URL-derived filter state changes, including clear
+  and browser history restoration. Map-triggered selection carries an explicit
+  focus request; initial and popstate URL selection only changes `aria-selected`.
+- Map point descriptions and the adjacent accessible table include curated source
+  and the exact last-successful-refresh timestamp without exposing record refs.
+
+### Fix Round 1 validation
+
+- `npm test -- tests/components/landscape.test.tsx tests/api/dashboard.test.ts` — 17 passed.
+- `npm test` — 27 files / 228 tests passed.
+- `npx tsc --noEmit`, `git diff --check`, and `npm run build -- --webpack` — passed.
+- Default Turbopack build remains restricted by the sandbox Sass helper’s local-port bind.
