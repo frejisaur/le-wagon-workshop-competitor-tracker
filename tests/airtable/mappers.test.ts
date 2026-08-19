@@ -14,7 +14,7 @@ const company: CompanyWrite = {
     domain: 'alpha.example', authorityScore: 20, backlinks: 100, referringDomains: 10, followBacklinks: 60, noFollowBacklinks: 40,
     organicTraffic: 200, totalTraffic: 240, organicKeywords: 12, organicTrafficCostUsd: 10, paidTraffic: 0, paidKeywords: 0, paidTrafficCostUsd: 0,
     aiVisibility: 1, aiVisibilityBenchmark: 2, aiMentions: 3, aiCitedPages: 4, topCountry: 'us', topCountryTraffic: 100,
-    mozDomainAuthorityRaw: '1.6k', mozSpamScoreRaw: '3%', organicCompetitors: [], paidCompetitors: [], aiCountries: [], aiByLlm: [], rawSerpCodes: [999], mozTopPagesObserved: [{url: 'alpha.example', pageAuthority: 2}],
+    mozDomainAuthorityRaw: '1.6k', mozSpamScoreRaw: '3%', organicCompetitors: [], paidCompetitors: [], aiCountries: [], aiByLlm: [], aiTopCitedSources: [{domain: 'source.example', mentions: 7}], rawSerpCodes: [999], mozTopPagesObserved: [{url: 'alpha.example', pageAuthority: 2}],
   },
   calculated: {
     classification: 'calculated', inputs: ['example'], calculatedAt: '2026-03-03T00:00:00.000Z',
@@ -34,7 +34,9 @@ describe('Airtable mappers', () => {
       'Calculated • Non-brand Share': 0.3,
       'Observed • Moz Domain Authority Raw': '1.6k',
       'Calculated • Moz Domain Authority': 1600,
+      'Observed • AI Top Cited Sources Observed Count': 1,
     });
+    expect(JSON.parse(fields['Observed • AI Top Cited Sources JSON'] as string)).toEqual([{domain: 'source.example', mentions: 7}]);
     expect(JSON.parse(fields['Quality • Issues JSON'] as string)).toHaveLength(25);
     expect(JSON.stringify(fields)).not.toContain('not persisted');
     expect(JSON.stringify(fields)).not.toContain('raw provider');

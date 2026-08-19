@@ -1,4 +1,4 @@
-export const companyTabs = ['overview', 'search', 'ai', 'authority', 'paid', 'battlecard', 'evidence'] as const;
+export const companyTabs = ['overview', 'ai', 'search', 'authority', 'paid', 'battlecard', 'evidence'] as const;
 export type CompanyTab = (typeof companyTabs)[number];
 
 export function parseCompanyTab(search: string, paidAvailable: boolean): CompanyTab {

@@ -2,6 +2,7 @@ import userEvent from '@testing-library/user-event';
 import {cleanup, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {CompanyWorkspace} from '@/components/company/CompanyWorkspace';
+import {companyDestination} from '@/components/company/CompanySwitcher';
 import {LandscapeScreen} from '@/components/landscape/LandscapeScreen';
 import {ScreenState} from '@/components/shared/ScreenState';
 import {companyStates} from '@/tests/fixtures/api/company-states';
@@ -76,7 +77,8 @@ describe('dashboard state matrix', () => {
 
   it('provides same-origin company navigation that preserves the active workspace tab', () => {
     render(<CompanyWorkspace company={companyStates.current} comparison={[companyStates.noPaid, companyStates.fingerprintMismatch]} initialTab="authority" />);
-    expect(screen.getByRole('link', {name: /view bravo/i})).toHaveAttribute('href', '/companies/bravo?tab=authority');
-    expect(screen.getByRole('link', {name: /view charlie/i})).toHaveAttribute('href', '/companies/charlie?tab=authority');
+    expect(screen.getByRole('combobox', {name: /change company/i})).toBeInTheDocument();
+    expect(companyDestination('bravo', 'authority')).toBe('/companies/bravo?tab=authority');
+    expect(companyDestination('charlie', 'authority')).toBe('/companies/charlie?tab=authority');
   });
 });

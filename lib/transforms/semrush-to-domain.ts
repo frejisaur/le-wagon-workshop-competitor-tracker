@@ -179,6 +179,7 @@ export function transformSemrushCompany(record: SemrushDomainOverview, context: 
     organicCompetitors: (organic?.competitors ?? []).map(toCuratedOrganicCompetitor),
     paidCompetitors: (paid?.competitors ?? []).map(toCuratedPaidCompetitor), aiCountries,
     aiByLlm: (record.ai_search?.by_llm ?? []).map((llm) => ({llm: llm.llm, llmCode: llm.llm_code, mentions: llm.mentions, selfMentions: llm.self_mentions, citedPages: llm.cited_pages})),
+    aiTopCitedSources: (record.ai_search?.top_cited_sources ?? []).map((source) => ({domain: source.domain, mentions: source.mentions})),
     rawSerpCodes, mozTopPagesObserved, ...observedMetadata(context, record.database),
   };
   const calculated = {

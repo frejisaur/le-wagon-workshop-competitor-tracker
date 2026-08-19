@@ -1,6 +1,12 @@
 @use 'sass:meta';
 @use '@carbon/styles/scss/reset';
 @use '@carbon/styles/scss/theme';
+@use '@carbon/styles/scss/components/button';
+@use '@carbon/styles/scss/components/data-table';
+@use '@carbon/styles/scss/components/dropdown';
+@use '@carbon/styles/scss/components/select';
+@use '@carbon/styles/scss/components/tabs';
+@use '@carbon/styles/scss/components/text-input';
 
 @include reset.reset();
 

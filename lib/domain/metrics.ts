@@ -21,6 +21,7 @@ export type CuratedCompetitor = {
 
 export type CuratedAiCountry = {country: string | null; mentions: number | null; visibility: number | null};
 export type CuratedAiLlm = {llm: string | null; llmCode: string | null; mentions: number | null; selfMentions: number | null; citedPages: number | null};
+export type CuratedAiCitedSource = {domain: string | null; mentions: number | null};
 export type CuratedMozTopPage = {url: string; normalizedUrl: string; pageAuthority: number | null};
 export type CuratedMozTopPageSummary = {url: string; pageAuthority: number | null};
 
@@ -60,6 +61,7 @@ export type CuratedCompanyObserved = {
   paidCompetitors: CuratedCompetitor[];
   aiCountries: CuratedAiCountry[];
   aiByLlm: CuratedAiLlm[];
+  aiTopCitedSources: CuratedAiCitedSource[];
   rawSerpCodes: Array<string | number>;
   mozTopPagesObserved: CuratedMozTopPageSummary[];
 };

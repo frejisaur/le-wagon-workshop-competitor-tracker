@@ -54,6 +54,11 @@ describe('shared dashboard components', () => {
     const main = screen.getByRole('main');
     expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(screen.getAllByRole('navigation', {name: /primary/i})).toHaveLength(1);
+    expect(screen.getByRole('link', {name: 'All companies'})).toHaveAttribute('href', '/');
+    expect(screen.queryByRole('link', {name: 'Saved views'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', {name: 'Insight reviews'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', {name: 'Evidence sources'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', {name: 'Refresh status'})).not.toBeInTheDocument();
     const skipLink = screen.getByRole('link', {name: /skip to content/i});
     expect(skipLink).toHaveAttribute('href', '#main-content');
     await user.tab();
@@ -174,6 +179,14 @@ describe('shared dashboard components', () => {
     const compiled = compile('styles/globals.scss', {loadPaths: ['node_modules']}).css;
     expect(compiled).toMatch(/\.cds--white\s*\{[^}]*--cds-background:/s);
     expect(compiled).not.toContain('.cds--theme--white');
+  });
+
+  it('compiles the Carbon component styles used by dashboard controls', () => {
+    const compiled = compile('styles/globals.scss', {loadPaths: ['node_modules']}).css;
+    expect(compiled).toContain('.cds--combo-box');
+    expect(compiled).toContain('.cds--tabs');
+    expect(compiled).toContain('.cds--btn');
+    expect(compiled).toContain('.cds--select');
   });
 
   it('applies the approved tokenized page title style after Carbon reset', () => {

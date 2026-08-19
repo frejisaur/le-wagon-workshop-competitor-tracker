@@ -20,8 +20,8 @@ test('shares filters, links map selection to rows, and navigates with workspace 
   await expect.poll(() => authorityTab.evaluate((element) => Object.keys(element).some((key) => key.startsWith('__reactProps')))).toBe(true);
   await authorityTab.click();
   await expect(page).toHaveURL('/companies/alpha?tab=authority');
-  await page.getByText('Change company').click();
-  await page.getByRole('link', {name: 'View Bravo'}).click();
+  await page.getByRole('combobox', {name: 'Change company'}).fill('Bravo');
+  await page.getByRole('option', {name: 'Bravo'}).click();
   await expect(page).toHaveURL('/companies/bravo?tab=authority');
   await expect(page.getByRole('tab', {name: 'Authority'})).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tab', {name: /Paid activity/i})).toHaveCount(0);
