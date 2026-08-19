@@ -31,14 +31,14 @@ After a non-production deployment, open a fresh browser session and verify lands
 ## Terminating weekly refresh service
 
 Create a separate Railway cron service from the same repository revision and set
-its **configuration path** to `railway.cron.toml`. The root `railway.toml` stays
+its **configuration path** to `/railway.cron.toml`. The root `railway.toml` stays
 build-only for the web service. Railway alone owns the cadence; each invocation
 starts the Apify actor through the REST API and this project creates no Apify
 schedule.
 
 - Image: the exact same revision and `Dockerfile` as web.
 - Workload command: `npm run enrich`.
-- Railway start command (hard timeout): `/usr/bin/timeout --signal=TERM --kill-after=30s 15m npm run enrich -- --actor-id "$APIFY_ACTOR_ID"`.
+- Railway start command (hard timeout): `/usr/bin/timeout --signal=TERM --kill-after=30s 15m npm run enrich`.
 - Cron schedule: `0 15 * * 1` (Monday 15:00 UTC).
 - Public networking: **no public domain**.
 - Restart policy: `NEVER`; failed scheduled runs require operator review. The command must exit after success or failure so schedules cannot overlap. The job installs a 14-minute internal deadline so it can publish a bounded terminal state before Railway's 15-minute outer termination.

@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import {assertDistinctFixturePaths, runEnrichCli} from '@/jobs/enrich';
+import {assertDistinctFixturePaths, resolveLiveActorId, runEnrichCli} from '@/jobs/enrich';
 
 describe('enrich CLI fixture safety', () => {
   it('rejects resolved-equal fixture input and output paths before any write', () => {
@@ -13,5 +13,10 @@ describe('enrich CLI fixture safety', () => {
     ]);
     expect(JSON.parse(result.stdout)).toMatchObject({status: 'partial'});
     expect(result.exitCode).toBe(1);
+  });
+
+  it('uses the validated server actor ID unless an operator passes an explicit override', () => {
+    expect(resolveLiveActorId(undefined, {APIFY_ACTOR_ID: 'owner/default'})).toBe('owner/default');
+    expect(resolveLiveActorId('owner/override', {APIFY_ACTOR_ID: 'owner/default'})).toBe('owner/override');
   });
 });

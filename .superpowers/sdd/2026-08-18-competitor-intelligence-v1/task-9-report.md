@@ -1,149 +1,70 @@
-# Task 9 report — Apify refresh and Railway cron
+# Task 9 report — TypeScript Apify refresh and Railway cron
 
-## Implementation
+## Authoritative implementation
 
-Implemented the Node ESM refresh path under `src/` and `scripts/`:
+The staged TypeScript/Next.js implementation is authoritative; the earlier Node
+ESM prototype is superseded and is not described as an active implementation.
 
-- `ApifyClient` calls the documented REST flow with Authorization headers only:
-  start actor run, poll the run, then retrieve default-dataset items. All three
-  accept an `AbortSignal`.
-- Domain Overview requests use exactly `mode: "domain"`, `database:
-  "worldwide"`, `include_moz: false`, and `concurrency: 5`; workflow batches
-  are limited to at most 100 domains.
-- Raw dataset items are validated at `src/refresh/provider-record.mjs` before
-  the transform. The repository receives only a normalized, field-mapped
-  Company update, never an unvalidated provider object.
-- The deterministic transform persists observed Domain Overview metrics plus a
-  stable SHA-256 evidence fingerprint over the transformed observed fields. It
-  does not change GTM Insights, Insight Reviews, or agent workflow columns.
-- Airtable Company writes are PATCHed by established record ID in groups of 10.
-  System updates include only Railway fields. Rate-limits honor `retry-after`.
-- `runEnrichment` has a Railway run ID, hard abort timer, bounded batch retry,
-  per-company safe error codes, partial-success counts, terminal System status,
-  and post-write/post-terminal-status cache invalidation ordering.
-- `npm run enrich` has a fixture-first mode and a live preflight that prints
-  only missing environment-variable names. The fixture command does not load
-  or mutate insight data.
-- `railway.toml` configures `0 15 * * 1` UTC, `restartPolicyType = "NEVER"`,
-  no public-domain declaration, and a terminating 15-minute `timeout` wrapper.
-  Railway is the only scheduler: an invocation calls Apify's REST actor API and
-  exits after persistence; this implementation creates no Apify schedule.
+- `lib/apify/run-domain-overview.ts` starts the configured actor with bearer
+  authentication, polls the run, then fetches default-dataset items. The exact
+  actor input is `{mode: "domain", domains, database: "worldwide",
+  include_moz: false, concurrency: 5}`. Railway starts each run; this code never
+  creates an Apify schedule.
+- Raw provider items are schema-validated and transformed before repository
+  access. The refresh workflow persists observed Company, Keyword, and Paid Ad
+  records through the existing repository contract, keeping provider payloads
+  outside the storage boundary.
+- The workflow retains committed records after partial batches, replaces the
+  current keyword snapshot, upserts stable paid-ad identities, derives its
+  fingerprint from the canonical curated evidence package, and does not modify
+  inferred or agent workflow fields.
+- A terminal status is published before concrete cache-version invalidation.
+  Failed terminal/cache work makes the run unsuccessful; the workflow has
+  bounded abort and cleanup handling.
+- Fixture mode uses the same mutable repository contract and leaves existing
+  insight and review snapshots intact. Partial and failed CLI reports exit
+  nonzero, preserving successful writes for retry.
+- `APIFY_ACTOR_ID` is a validated refresh-only server variable. `--actor-id`
+  remains an explicit operator override; live Railway execution otherwise uses
+  the validated environment value. No secret is printed by the preflight.
+
+## Railway contract
+
+The web-safe root `railway.toml` remains Dockerfile-build-only. The separate
+cron service must use custom configuration path `/railway.cron.toml`.
+
+- same `Dockerfile` image as the web service;
+- `startCommand = "/usr/bin/timeout --signal=TERM --kill-after=30s 15m npm run enrich"`;
+- `cronSchedule = "0 15 * * 1"` (Monday 15:00 UTC);
+- `restartPolicyType = "NEVER"` and no public-domain configuration;
+- Railway alone owns cadence. It invokes Apify through REST and exits; no Apify
+  schedule is created or configured.
+
+The process-level 15-minute termination is intentionally interpolation-free.
+The job installs its own 14-minute deadline, allowing bounded terminal cleanup
+before Railway sends TERM.
 
 ## Contract decisions
 
 | Contract | Decision |
 | --- | --- |
-| Provider boundary | Require a valid normalized domain and database; reject any supplied derived metric with a non-finite numeric value. |
-| Provider input | Actor ID `pro100chok/semrush-scraper`; 1–100 domains; exact documented Domain Overview input shape. |
-| Company identity | Existing Airtable record ID performs the write; immutable `Company ID` and canonical domain are read only for matching/reporting. |
-| Data layers | Persisted refresh values are observed provider fields or the deterministic evidence fingerprint; no inferred fields are read or written. |
-| Partial failure | Successful Company updates persist; failures are recorded as `{companyId, code}` and the run ends `partial` or `failed`. |
-| Cache ordering | Cache hook runs only after Company writes and terminal Railway System update. |
-| Airtable impact | Company refresh uses `ceil(successful/10)` PATCH calls, up to failed-company batches, plus System reads/writes; no Keyword, Paid Ads, Insights, or Review records are created. |
+| Provider boundary | Validate required Company metrics and `database: "worldwide"` before transformation; malformed nested keyword/ad entries are reported and omitted without discarding a valid company. |
+| Identity | Existing Company IDs are updated; Keyword and Paid Ad identities are stable deterministic data identities. Conflicting duplicate provider records are rejected while canonical duplicates are idempotent. |
+| Evidence | One canonical curated Company + Keyword + Paid Ad evidence-package builder feeds the fingerprint. Operational IDs, timestamps, workflow/status, and generated text are excluded. |
+| Partial persistence | Repository outcomes are per record/batch. Already committed records remain succeeded if a later batch fails. |
+| Cache | After data writes and terminal status, `System.Cache Version` advances through the repository. This is concrete invalidation, not an HTTP purge. |
+| Server config | The active plain-name `AIRTABLE_SCHEMA` is supported. No legacy layered field-map compatibility is claimed. |
 
 ## TDD evidence
 
-RED command (before implementation):
-
-```text
-node --test tests/apify/client.test.mjs tests/workflows/enrich.test.mjs
-ERR_MODULE_NOT_FOUND: src/apify/client.mjs
-ERR_MODULE_NOT_FOUND: src/workflows/enrich.mjs
-tests 2; pass 0; fail 2
-```
-
-GREEN command after implementation:
-
-```text
-node --test tests/apify/client.test.mjs tests/workflows/enrich.test.mjs
-tests 6; pass 6; fail 0
-```
-
-An additional repository test initially failed because `encodeURIComponent`
-does not encode the unreserved word `Companies`; the request URL was correct.
-The assertion was corrected to the observed URL and then passed.
-
-## Tests and command checks
-
-- Focused suite: `node --test tests/config/env.test.mjs tests/airtable/refresh-repository.test.mjs tests/apify/client.test.mjs tests/workflows/enrich.test.mjs` — 9 passed, 0 failed.
-- Full suite: `npm test` — 19 passed, 0 failed.
-- Fixture command: `npm run enrich -- --provider-fixture tests/fixtures/providers/semrush-sample.json --fixture-state tests/fixtures/airtable/base-snapshot.json` — exited 0 with a secret-free `succeeded` summary: processed 2, succeeded 2, failed 0.
-- Diff check: `git diff --check` — exited 0.
-
-## Files changed
-
-- `.env.example`
-- `package.json`
-- `railway.toml`
-- `docs/refresh-operations.md`
-- `scripts/enrich.mjs`
-- `src/config/env.mjs`
-- `src/domain/normalize.mjs`
-- `src/apify/client.mjs`
-- `src/apify/run-domain-overview.mjs`
-- `src/refresh/provider-record.mjs`
-- `src/airtable/refresh-repository.mjs`
-- `src/workflows/enrich.mjs`
-- `tests/config/env.test.mjs`
-- `tests/airtable/refresh-repository.test.mjs`
-- `tests/apify/client.test.mjs`
-- `tests/workflows/enrich.test.mjs`
-- `tests/fixtures/providers/semrush-sample.json`
-- `tests/fixtures/airtable/base-snapshot.json`
-
-## Self-review and concerns
-
-- No provider payloads, secret values, Authorization headers, or production domains are logged. Fixtures contain only sanitized `.example` values.
-- The current concrete Airtable schema is the plain `AIRTABLE_SCHEMA`; the repository accepts a field-map override for a layered base, but the CLI does not auto-detect the legacy layered field naming. A production base using that variant needs an explicit mapping at command construction.
-- There is no web-cache invalidation endpoint in the current prototype. The repository exposes an injected cache-invalidation hook and treats the absent cache as a no-op. The web-service owner must supply the actual signed invalidation callback when that service exists.
-- Keyword and Paid Ad refreshes remain outside this focused Task 9 implementation; it updates Company-level Domain Overview metrics only.
-
-## TypeScript-stack adaptation and review follow-up
-
-The shared workspace was reset onto the staged TypeScript/Next.js implementation
-before the Node ESM fix round could be committed. This TypeScript stack supersedes
-the old runtime and already provides the reviewed prerequisite contracts:
-
-- Semrush parsing and deterministic transforms validate provider records before
-  storage; Keyword/Paid Ad replacement uses stable identities and preserves first
-  observation state.
-- Airtable repository writes return per-record outcomes, including later-batch
-  failures, and workflow tests preserve committed partial successes.
-- The single canonical evidence-package builder and `fingerprintEvidence` hash
-  Company, Keyword, and Paid Ad curated evidence while excluding generated and
-  operational metadata.
-- The fixture repository exercises state mutation without modifying insights or
-  reviews; the workflow includes bounded terminal-state recovery and cache-failure
-  reconciliation.
-- Apify client tests cover bearer auth, start/poll/dataset flow, timeouts, and
-  redacted failures.
-
-### Fixes made on the TypeScript stack
-
-- Corrected the actor input in `lib/apify/run-domain-overview.ts` to exactly
-  `{mode: "domain", domains, database: "worldwide", include_moz: false,
-  concurrency: 5}`.
-- Made partial as well as failed refresh commands exit nonzero, while retaining
-  successful writes for safe retry.
-- Added a 14-minute live-job abort deadline and documented it under Railway's
-  15-minute `/usr/bin/timeout` outer limit.
-- Added `railway.cron.toml` for the terminating Railway service, while retaining
-  root `railway.toml` as web-safe Dockerfile build configuration. It has
-  `cronSchedule = "0 15 * * 1"`, `restartPolicyType = "NEVER"`, no public-domain
-  configuration, and no Apify schedule. The deployment documentation tells
-  operators to select `railway.cron.toml` as the cron service config path.
-- Added focused tests for exact actor input, cron ownership/configuration, and
-  nonzero partial CLI exit. Updated the existing timeout release contract from
-  the obsolete 20-minute value to the required 15 minutes.
-
-### TypeScript TDD evidence
+### TypeScript adaptation RED/GREEN
 
 RED:
 
 ```text
 npm test -- tests/apify/run-domain-overview.test.ts tests/config/railway-cron.test.ts tests/jobs/enrich.test.ts
-3 failed: actor input was `domain_overview`; railway.cron.toml was absent;
-partial fixture command returned exit 0.
+3 failed: actor input used `domain_overview`; railway.cron.toml was absent;
+partial fixture execution exited 0.
 ```
 
 GREEN:
@@ -153,18 +74,56 @@ npm test -- tests/apify/run-domain-overview.test.ts tests/config/railway-cron.te
 4 passed, 0 failed.
 ```
 
-`npm test` then ran 310 tests: 309 passed and one browser-secret-boundary test
-was blocked because an independently running shared Next build held `.next/lock`
-and had not produced `.next/BUILD_ID`. A direct `next build` invocation reported
-the same live build lock; no lock removal or process termination was attempted.
+### Deployment fallback RED/GREEN
 
-### TypeScript adaptation files
+RED:
 
-- `lib/apify/run-domain-overview.ts`
-- `jobs/enrich.ts`
-- `railway.cron.toml`
+```text
+npm test -- tests/config/server-env.test.ts tests/jobs/enrich.test.ts tests/config/railway-cron.test.ts
+4 failed: cron start command interpolated `$APIFY_ACTOR_ID`; APIFY_ACTOR_ID
+was absent from the refresh-only schema; valid refresh env accepted no actor ID;
+and no environment fallback resolver existed.
+```
+
+GREEN:
+
+```text
+npm test -- tests/config/server-env.test.ts tests/jobs/enrich.test.ts tests/config/railway-cron.test.ts
+Test Files  3 passed (3)
+Tests  9 passed (9)
+```
+
+## Files changed in the authoritative implementation
+
+- `.env.example`
 - `docs/operations/deployment.md`
+- `docs/refresh-operations.md`
+- `jobs/enrich.ts`
+- `lib/apify/run-domain-overview.ts`
+- `lib/config/server-env.ts`
+- `railway.cron.toml`
 - `tests/apify/run-domain-overview.test.ts`
 - `tests/config/railway-cron.test.ts`
-- `tests/jobs/enrich.test.ts`
+- `tests/config/server-env.test.ts`
 - `tests/contracts/skills.test.ts`
+- `tests/jobs/enrich.test.ts`
+
+## Verification and self-review
+
+- Focused adaptation and deployment-contract tests passed as recorded above.
+- `npm run build -- --webpack` passed after the deployment-fallback change.
+- `npm test` passed: 40 files and 311 tests.
+- The fixture command completed the intentionally partial sample with one
+  success and one unresolved company, then exited 1. This demonstrates the CLI
+  contract that partial persistence is retained but visible to Railway.
+- No provider payloads, Authorization headers, token values, or credentials are
+  logged or placed in fixtures. The command preflight identifies only missing
+  environment variable names.
+- Reviewed for schedule ownership, external/internal timeout ordering, validated
+  actor selection, and safe nonzero partial exits.
+
+## Concerns
+
+The live command requires all refresh-only server variables and an Airtable base
+matching the active plain-name schema. The existing tests cover those contracts;
+live credentials were not used in this task.

@@ -10,11 +10,12 @@ describe('Railway cron configuration', () => {
     expect(shared).toMatch(/builder = "DOCKERFILE"/);
     expect(shared).not.toMatch(/cronSchedule|startCommand/);
     expect(cron).toMatch(/dockerfilePath = "Dockerfile"/);
-    expect(cron).toMatch(/startCommand = ".*npm run enrich/);
+    expect(cron).toMatch(/startCommand = "\/usr\/bin\/timeout --signal=TERM --kill-after=30s 15m npm run enrich"/);
+    expect(cron).not.toMatch(/\$/);
     expect(cron).toMatch(/cronSchedule = "0 15 \* \* 1"/);
     expect(cron).toMatch(/restartPolicyType = "NEVER"/);
     expect(cron).not.toMatch(/apify.*schedule|schedule.*apify/i);
-    expect(docs).toMatch(/railway\.cron\.toml/);
+    expect(docs).toMatch(/configuration path.*\/railway\.cron\.toml/i);
     expect(docs).toMatch(/14-minute internal deadline/i);
     expect(docs).toMatch(/creates no Apify\s+schedule/i);
   });

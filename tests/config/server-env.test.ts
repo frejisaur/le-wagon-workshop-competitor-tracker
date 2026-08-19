@@ -14,17 +14,19 @@ const airtableEnv = {
 
 describe('server environment scopes', () => {
   it('rejects missing refresh credentials without printing their values', () => {
-    expect(() => getRefreshEnv({})).toThrow(/AIRTABLE_PAT, AIRTABLE_BASE_ID, APIFY_TOKEN/);
+    expect(() => getRefreshEnv({})).toThrow(/APIFY_TOKEN.*APIFY_ACTOR_ID/);
   });
 
-  it('requires only the live refresh adapter URL and secret in addition to refresh credentials', () => {
-    expect(() => getRefreshEnv({...airtableEnv, APIFY_TOKEN: 'token'})).toThrow(/APP_BASE_URL, CACHE_INVALIDATION_SECRET/);
+  it('requires a server-only actor ID and returns it only to refresh code', () => {
+    expect(() => getRefreshEnv({...airtableEnv, APIFY_TOKEN: 'token', APP_BASE_URL: 'https://app.example', CACHE_INVALIDATION_SECRET: 'cache-secret'})).toThrow(/APIFY_ACTOR_ID/);
+    expect(getRefreshEnv({...airtableEnv, APIFY_TOKEN: 'token', APIFY_ACTOR_ID: 'owner/actor', APP_BASE_URL: 'https://app.example', CACHE_INVALIDATION_SECRET: 'cache-secret'}).APIFY_ACTOR_ID).toBe('owner/actor');
   });
 
   it('does not expose refresh or model values to the web serving process', () => {
     const env = getWebEnv(airtableEnv);
     expect(env.AIRTABLE_BASE_ID).toBe('app-test');
     expect(env).not.toHaveProperty('APIFY_TOKEN');
+    expect(env).not.toHaveProperty('APIFY_ACTOR_ID');
     expect(env).not.toHaveProperty('CACHE_INVALIDATION_SECRET');
     expect(env).not.toHaveProperty('APP_BASE_URL');
     expect(env).not.toHaveProperty('OPENAI_API_KEY');
@@ -34,6 +36,7 @@ describe('server environment scopes', () => {
     const env = getInsightEnv(airtableEnv);
     expect(env.AIRTABLE_BASE_ID).toBe('app-test');
     expect(env).not.toHaveProperty('APIFY_TOKEN');
+    expect(env).not.toHaveProperty('APIFY_ACTOR_ID');
     expect(env).not.toHaveProperty('CACHE_INVALIDATION_SECRET');
     expect(env).not.toHaveProperty('APP_BASE_URL');
     expect(env).not.toHaveProperty('OPENAI_API_KEY');

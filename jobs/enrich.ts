@@ -38,6 +38,11 @@ function safeFailure(): string {
 export type EnrichCliResult = {exitCode: number; stdout: string};
 const INTERNAL_REFRESH_TIMEOUT_MS = 14 * 60 * 1_000;
 
+/** Explicit CLI actor selection overrides the validated server default. */
+export function resolveLiveActorId(explicitActorId: string | undefined, env: Pick<ReturnType<typeof getRefreshEnv>, 'APIFY_ACTOR_ID'>): string {
+  return explicitActorId ?? env.APIFY_ACTOR_ID;
+}
+
 /** Refuse the only fixture-mode write that could overwrite its source state. */
 export function assertDistinctFixturePaths(fixtureState: string, outputState: string): void {
   if (resolve(fixtureState) === resolve(outputState)) throw new TypeError('output-state must not resolve to fixture-state');
@@ -58,9 +63,8 @@ export async function runEnrichCli(arguments_: string[]): Promise<EnrichCliResul
       });
       if (args.outputState) writeFileSync(args.outputState, `${JSON.stringify(repository.toSnapshot(), null, 2)}\n`, 'utf8');
     } else {
-      if (!args.actorId) throw new TypeError('--actor-id is required outside fixture mode');
-      const actorId = args.actorId;
       const env = getRefreshEnv();
+      const actorId = resolveLiveActorId(args.actorId, env);
       const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT}));
       const apify = new ApifyClient({token: env.APIFY_TOKEN});
       const controller = new AbortController();

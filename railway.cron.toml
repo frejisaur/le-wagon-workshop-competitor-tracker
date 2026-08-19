@@ -5,6 +5,6 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "/usr/bin/timeout --signal=TERM --kill-after=30s 15m npm run enrich -- --actor-id \"$APIFY_ACTOR_ID\""
+startCommand = "/usr/bin/timeout --signal=TERM --kill-after=30s 15m npm run enrich"
 restartPolicyType = "NEVER"
 cronSchedule = "0 15 * * 1"
