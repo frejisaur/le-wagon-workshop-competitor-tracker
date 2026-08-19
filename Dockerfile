@@ -12,7 +12,7 @@ RUN npm run build -- --webpack
 FROM builder AS test
 RUN npm test -- --maxWorkers=2
 RUN npx tsc --noEmit
-RUN node .agents/skills/competitor-data-contracts/scripts/generate-semrush-schema.mjs --check data/apify/apollo-accounts-semrush-scraper.json .agents/skills/competitor-data-contracts/references/semrush-domain-overview-schema.md
+RUN node scripts/verify-semrush-schema-reference.mjs
 RUN touch /release-verified
 
 FROM node:22-bookworm-slim AS app

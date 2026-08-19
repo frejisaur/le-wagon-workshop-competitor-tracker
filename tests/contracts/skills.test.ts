@@ -48,7 +48,7 @@ describe('release contracts', () => {
     const dockerfile = read('Dockerfile');
     const testStage = dockerfile.slice(dockerfile.indexOf('FROM builder AS test'), dockerfile.indexOf('FROM node:22-bookworm-slim AS app'));
     const appStage = dockerfile.slice(dockerfile.indexOf('FROM node:22-bookworm-slim AS app'));
-    expect(testStage).toMatch(/npm test[\s\S]*tsc --noEmit[\s\S]*generate-semrush-schema[\s\S]*release-verified/);
+    expect(testStage).toMatch(/npm test[\s\S]*tsc --noEmit[\s\S]*verify-semrush-schema-reference[\s\S]*release-verified/);
     expect(appStage).toMatch(/COPY --from=test[^\n]*release-verified/);
   });
 
