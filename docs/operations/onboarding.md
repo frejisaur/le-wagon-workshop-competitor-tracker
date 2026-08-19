@@ -49,7 +49,11 @@ Do not proceed with a command whose required names are missing. Never copy a val
 
 ## 3. Create and verify the Airtable schema
 
-After the user has confirmed the base and its access scope, run the idempotent schema setup. This creates missing canonical tables and fields; it is a live Airtable mutation.
+The schema setup is idempotent, but it creates missing canonical tables and fields and is therefore a live Airtable mutation. Prepare a secret-safe summary before running it.
+
+## Approval gate: Airtable schema setup
+
+Show the selected Airtable base, confirm the PAT has `data.records:read`, `data.records:write`, `schema.bases:read`, and `schema.bases:write`, and report every required Airtable variable name as `present` or `missing`. Show that the command will create or verify `Companies`, `Keywords`, `Paid Ads`, `GTM Insights`, `Insight Reviews`, and `System`. Ask explicitly for affirmative approval to mutate this selected base. Base selection, access confirmation, or providing credentials alone is not consent. Do not run the command until the user says yes.
 
 ```bash
 npm run airtable:schema
