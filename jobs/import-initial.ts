@@ -8,17 +8,28 @@ import {parseApolloCsv} from '@/lib/schemas/apollo';
 import {parseSemrushPayload} from '@/lib/schemas/semrush';
 import {runInitialImport} from '@/lib/workflows/import-initial';
 
-type CliArguments = {apollo: string; semrush: string; dryRun: boolean; fixtureState?: string};
+type CliArguments = {
+  apollo: string;
+  semrush?: string;
+  apolloOnly: boolean;
+  dryRun: boolean;
+  fixtureState?: string;
+};
 
 function parseArguments(arguments_: string[]): CliArguments {
   let apollo: string | undefined;
   let semrush: string | undefined;
   let fixtureState: string | undefined;
+  let apolloOnly = false;
   let dryRun = false;
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
     if (argument === '--dry-run') {
       dryRun = true;
+      continue;
+    }
+    if (argument === '--apollo-only') {
+      apolloOnly = true;
       continue;
     }
     if (argument === '--apollo' || argument === '--semrush' || argument === '--fixture-state') {
@@ -32,8 +43,11 @@ function parseArguments(arguments_: string[]): CliArguments {
     }
     throw new TypeError(`unsupported argument: ${argument}`);
   }
-  if (!apollo || !semrush) throw new TypeError('--apollo and --semrush are required');
-  return {apollo, semrush, dryRun, fixtureState};
+  if (!apollo) throw new TypeError('--apollo is required');
+  if (Boolean(semrush) === apolloOnly) {
+    throw new TypeError('exactly one of --semrush or --apollo-only is required');
+  }
+  return {apollo, semrush, apolloOnly, dryRun, fixtureState};
 }
 
 function safeFailureSummary(): string {
@@ -53,7 +67,9 @@ export async function runInitialImportCli(arguments_: string[], dependencies: Cl
     const parsedArguments = parseArguments(arguments_);
     const readFile = dependencies.readFile ?? readFileSync;
     const apolloRows = parseApolloCsv(readFile(parsedArguments.apollo, 'utf8'));
-    const semrushRecords = parseSemrushPayload(JSON.parse(readFile(parsedArguments.semrush, 'utf8'))).records;
+    const semrushRecords = parsedArguments.apolloOnly
+      ? []
+      : parseSemrushPayload(JSON.parse(readFile(parsedArguments.semrush!, 'utf8'))).records;
     const repository = parsedArguments.dryRun
       ? undefined
       : parsedArguments.fixtureState
