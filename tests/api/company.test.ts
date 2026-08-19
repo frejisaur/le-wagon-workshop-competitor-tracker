@@ -62,6 +62,31 @@ describe('company response', () => {
     expect(shapeDashboardSnapshot({...snapshot, publishedInsights: [malformed]}).companies.get('company-alpha')?.publishedInsightState).toBe('stale');
   });
 
+  it('applies every canonical claim invariant to persisted collections and derives the lowest confidence', () => {
+    const currentFingerprint = fingerprintEvidence(buildEvidencePackage({company: snapshot.companies[0]!, keywords: snapshot.keywords, paidAds: [], review: snapshot.reviews[0]}));
+    const valid = {claimId: 'claim-valid', conclusion: 'A trimmed supported conclusion.', classification: 'inferred', confidence: 'low', confidenceReason: 'A trimmed evidence reason.', evidenceRefs: ['company:company-alpha:metric:organic_traffic']};
+    const base = {id: 'rec-insight', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint, 'Inferred • Overall Confidence': 'high', 'Inferred • Claims JSON': JSON.stringify([valid])}};
+    const current = shapeDashboardSnapshot({...snapshot, publishedInsights: [base]}).companies.get('company-alpha');
+    expect(current?.publishedInsightState).toBe('current');
+    expect(current?.publishedInsight?.overallConfidence).toBe('low');
+    const invalids = [
+      {...base, fields: {...base.fields, 'Observed • Themes JSON': JSON.stringify([{...valid, claimId: 'observed-wrong', classification: 'inferred'}])}},
+      {...base, fields: {...base.fields, 'Observed • Themes JSON': JSON.stringify([{...valid, classification: 'observed'}])}},
+      {...base, fields: {...base.fields, 'Observed • Themes JSON': JSON.stringify([{...valid, classification: 'observed'}]), 'Inferred • Claims JSON': JSON.stringify([{...valid}])}},
+      {...base, fields: {...base.fields, 'Inferred • Claims JSON': JSON.stringify([{...valid, evidenceRefs: [valid.evidenceRefs[0], valid.evidenceRefs[0]]}])}},
+      {...base, fields: {...base.fields, 'Inferred • Claims JSON': JSON.stringify([{...valid, conclusion: ` ${valid.conclusion}`}])}},
+    ];
+    for (const published of invalids) {
+      const response = shapeDashboardSnapshot({...snapshot, publishedInsights: [published]}).companies.get('company-alpha');
+      expect(response?.publishedInsightState).toBe('stale');
+      expect(response).not.toHaveProperty('publishedInsight');
+    }
+    const invalidStoredOverall = {...base, fields: {...base.fields, 'Inferred • Overall Confidence': 'not-a-confidence'}};
+    const derived = shapeDashboardSnapshot({...snapshot, publishedInsights: [invalidStoredOverall]}).companies.get('company-alpha');
+    expect(derived?.publishedInsightState).toBe('current');
+    expect(derived?.publishedInsight?.overallConfidence).toBe('low');
+  });
+
   it('retains resolvable evidence semantics without exposing raw dataset references', () => {
     const company = structuredClone(snapshot.companies[0]!);
     company.fields['Observed • Raw Ref'] = 'https://provider.example/dataset?token=sentinel-token';

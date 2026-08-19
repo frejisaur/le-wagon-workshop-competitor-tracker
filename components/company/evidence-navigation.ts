@@ -48,7 +48,8 @@ export function serializeEvidenceNavigation(navigation: EvidenceNavigation, clai
   const serialized = params.toString();
   if (byteLength(serialized) <= MAX_EVIDENCE_TRACE_QUERY_BYTES) return serialized;
   const fallback = new URLSearchParams(); fallback.set('tab', 'evidence'); if (claimId) fallback.set('claim', claimId);
-  return fallback.toString();
+  const claimOnly = fallback.toString();
+  return byteLength(claimOnly) <= MAX_EVIDENCE_TRACE_QUERY_BYTES ? claimOnly : 'tab=evidence';
 }
 
 export function canonicalWorkspaceSearch(tab: CompanyTab, paidAvailable: boolean, navigation: EvidenceNavigation | null, claimIds: ReadonlySet<string>, evidenceRefs: ReadonlySet<string>): string {

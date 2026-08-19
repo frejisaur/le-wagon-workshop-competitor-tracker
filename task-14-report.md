@@ -56,3 +56,11 @@ None. The existing curated evidence and published workflow fields supply the req
 - A published insight now remains current only when its fingerprint matches, at least one claim parses, every stored claim collection parses without omissions, and every reference resolves in the current evidence. Any malformed or unresolved stored claim fails closed to `Insight stale` and withholds all claims.
 
 Fix Round 1 validation: focused component/API/company tests 30 passed; full suite 29 files / 258 tests passed; TypeScript, schema drift check, Webpack production build, diff check, and browser artifact scan passed. The default Turbopack build remains blocked by the sandbox Sass-helper port binding restriction.
+
+## Fix Round 2
+
+- Persisted published claims now pass the canonical `CandidateClaimSchema` unchanged, including trimmed conclusion/reason text, bounded IDs/references, unique evidence references, collection-specific classification, and collection cardinality. Cross-collection duplicate claim IDs also fail closed.
+- The response derives overall confidence from the lowest valid material-claim confidence. Stored aggregate confidence is no longer trusted, so malformed or optimistic historical values cannot overstate the published insight or throw the response shaper.
+- Trace serialization enforces the 1,800 UTF-8 byte budget after every fallback. If a valid multibyte claim identifier itself makes a claim-only URL oversized, it is safely omitted and only `tab=evidence` remains.
+
+Fix Round 2 validation: focused evidence/API/company tests 32 passed; full suite 29 files / 260 tests passed; TypeScript, schema drift check, Webpack production build, diff check, and browser artifact scan passed. The default Turbopack build remains blocked by the sandbox Sass-helper port binding restriction.

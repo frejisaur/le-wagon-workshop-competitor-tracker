@@ -80,6 +80,14 @@ describe('battlecard evidence trace', () => {
     expect(screen.getAllByTestId('highlighted-evidence')).toHaveLength(4);
   });
 
+  it('never emits a trace query above the UTF-8 budget for a valid multibyte claim ID', () => {
+    const claimId = '調'.repeat(200); const refs = Array.from({length: 4}, (_, index) => `ref-${index}-${'x'.repeat(490)}`);
+    const serialized = serializeEvidenceNavigation({tab: 'evidence', claimId, evidenceRefs: refs}, new Set([claimId]), new Set(refs));
+    expect(new TextEncoder().encode(serialized).byteLength).toBeLessThanOrEqual(MAX_EVIDENCE_TRACE_QUERY_BYTES);
+    expect(serialized).toBe('tab=evidence');
+    expect(parseEvidenceNavigation(`?${serialized}`, new Set([claimId]), new Set(refs))).toEqual({tab: 'evidence', evidenceRefs: []});
+  });
+
   it('leads with the inferred interpretation and separates its claim confidence from the overall insight confidence', () => {
     render(<CompanyWorkspace company={{...company, publishedInsight: {...company.publishedInsight!, overallConfidence: 'low'}}} initialTab="battlecard" />);
     const lead = screen.getByLabelText('Published conclusion');
