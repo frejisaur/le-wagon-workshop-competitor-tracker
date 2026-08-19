@@ -1,0 +1,53 @@
+{
+  "companies": [{
+    "id": "rec-company-alpha",
+    "fields": {
+      "Identity • Company ID": "company-alpha",
+      "Identity • Canonical Domain": "alpha.example",
+      "Observed • Source": "semrush",
+      "Observed • Database": "us",
+      "Observed • At": "2026-08-01T00:00:00.000Z",
+      "Observed • Raw Ref": "dataset:sanitized-alpha",
+      "Observed • Organic Traffic": 200
+    }
+  }],
+  "keywords": [{
+    "id": "rec-keyword-alpha",
+    "fields": {
+      "Identity • Company ID": "company-alpha",
+      "Identity • Keyword ID": "keyword-alpha",
+      "Observed • Source": "semrush",
+      "Observed • Database": "us",
+      "Observed • At": "2026-08-01T00:00:00.000Z",
+      "Observed • Keyword": "competitor research",
+      "Observed • Landing URL": "https://alpha.example/research"
+    }
+  }],
+  "paidAds": [],
+  "insights": [{
+    "id": "rec-prior-published",
+    "fields": {
+      "Identity • Insight ID": "insight-prior-alpha",
+      "Identity • Company ID": "company-alpha",
+      "Workflow • Evidence Fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "Workflow • Run ID": "fixture-run-prior",
+      "Workflow • Agent Harness": "fixture",
+      "Workflow • Model": "sanitized-model",
+      "Workflow • Skill Version": "1.0.0",
+      "Workflow • Version": "1.0.0",
+      "Workflow • Generated At": "2026-07-18T12:00:00.000Z",
+      "Observed • Themes JSON": "[{\"claimId\":\"prior-organic-traffic\",\"conclusion\":\"A prior run observed organic traffic of 200.\",\"classification\":\"observed\",\"confidence\":\"high\",\"confidenceReason\":\"The curated metric directly reported the value.\",\"evidenceRefs\":[\"company:company-alpha:metric:organic_traffic\"],\"evidenceRefCount\":1,\"evidenceRefsRetainedCount\":1}]",
+      "Observed • Themes Claim Count": 1,
+      "Observed • Themes Claims Retained Count": 1,
+      "Inferred • Claims JSON": "[]",
+      "Inferred • Claims Claim Count": 0,
+      "Inferred • Claims Retained Count": 0,
+      "Inferred • Recommendations JSON": "[]",
+      "Inferred • Recommendations Claim Count": 0,
+      "Inferred • Recommendations Claims Retained Count": 0,
+      "Inferred • Overall Confidence": "high"
+    }
+  }],
+  "reviews": [],
+  "system": []
+}

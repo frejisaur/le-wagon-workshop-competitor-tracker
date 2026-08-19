@@ -47,3 +47,27 @@ Reviewed the scoped diff for unsupported inference, classification leakage, stal
 - No evidence-reviewer subagent was invoked because this bounded assignment explicitly prohibited subagents; the same read-only checklist was applied locally and recorded above.
 - No secrets were read or printed. No live service was called. No production deployment, cache invalidation, approval mutation, or destructive cleanup occurred.
 - Commit SHA is reported in the parent handoff; a commit cannot truthfully embed its own final hash.
+
+## Fix Round 1 — Final-review hardening
+
+### Findings resolved
+
+1. Added `low-preserves-published-state.json`, containing the current curated evidence plus a sanitized prior Insight record `rec-prior-published` with fingerprint `aaaaaaaa…`, distinct from the low candidate's current fingerprint. The workshop E2E invokes submission in a separate `npm` process, verifies `queued`/`conflicting_sources`, asserts the complete prior Insight record (ID and every field) is deeply identical in the output, and confirms the input fixture bytes are unchanged. High publication/replay and low-preserves-prior now start from independent fixtures and paths; the runbook states the exact commands and warns that the high output is not the low scenario input.
+2. The Docker `test` stage now writes a zero-byte `/release-verified` marker only after full Vitest, TypeScript, and schema gates succeed. The default deployable `app` stage copies that marker from `test`, so Docker cannot export the runtime without completing verification; runtime size impact is zero bytes of content. Focused RED proved the previous app had no structural dependency. The final default build log showed all 286 tests, `tsc`, schema check, marker creation, then the app copy/export in that order.
+3. Browser artifact scanning now rejects shell, JSON, and camel-case credential assignments with non-empty values; Authorization/Bearer and standalone Bearer values; raw provider fixture paths/objects/field markers; Observed Raw Ref, `rawDatasetRef`, and `dataset:` values; and Airtable record IDs in record-ID property context. It reports only detector name and filename, never matched content. Twelve sanitized sentinel files exercise every detector, a safe-label fixture proves legitimate labels do not trigger, and missing/stale production builds fail explicitly before scanning.
+
+### RED / GREEN evidence
+
+- RED contracts/security: 2 failures—missing Docker verification marker/dependency and only 2 of 8 original leak representations detected.
+- RED workshop: the focused browser workflow failed at the absent distinct prior-publication fixture.
+- Focused GREEN: contracts/security 4 files, 19 tests; workshop browser 1 passed; lifecycle/API 10 files, 84 tests.
+- Full Vitest after a fresh Webpack build: 35 files, 286 tests passed.
+- Full Playwright: 27 collected, 21 passed and 6 intentional non-desktop lifecycle skips.
+- Fresh local Webpack build, standalone `npx tsc --noEmit`, and schema drift check passed.
+- Default `docker build --progress=plain -t competitor-intelligence:v1 .` passed and visibly executed builder → tests → typecheck → schema → marker → app export. Final runtime verified Node 22.23.2, `tsx` 4.23.12, GNU timeout 9.1, non-root marker ownership (`app:app`), and zero-byte marker size.
+- Credential-free final-image smoke became ready in 246 ms and returned the same sanitized fail-closed HTTP 503 health body. Logs contained only normal Next startup/listen lines.
+- Supplied-data dry-run remained 52 accepted, 1 missing-website rejection, 426 projected records, 60 estimated writes, and 0 external API calls. No live repository write, Airtable, Apify, Railway, deployment, or cache call occurred.
+
+### Security and contract review
+
+Fresh `.next/static` artifacts produced zero hardened scanner findings. Production server/client artifacts retained no E2E fixture alias/marker. The Airtable ID detector is constrained to record-ID properties to avoid false positives such as React's legitimate `reconcilerVersion`; safe labels remain allowed. Publication identity, evidence fingerprint calculation, confidence routing, API response shapes, and UI presentation contracts were not changed. Airtable record/API impact: none; the new file is a sanitized test fixture only.

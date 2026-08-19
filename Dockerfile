@@ -12,6 +12,7 @@ FROM builder AS test
 RUN npm test -- --maxWorkers=2
 RUN npx tsc --noEmit
 RUN node .agents/skills/competitor-data-contracts/scripts/generate-semrush-schema.mjs --check data/apify/apollo-accounts-semrush-scraper.json .agents/skills/competitor-data-contracts/references/semrush-domain-overview-schema.md
+RUN touch /release-verified
 
 FROM node:22-bookworm-slim AS app
 WORKDIR /app
@@ -21,6 +22,7 @@ ENV NODE_ENV=production \
 RUN groupadd --system --gid 1001 app && useradd --system --uid 1001 --gid app app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=test --chown=app:app /release-verified ./.release-verified
 COPY --from=builder --chown=app:app /app/.next ./.next
 COPY --from=builder --chown=app:app /app/jobs ./jobs
 COPY --from=builder --chown=app:app /app/lib ./lib

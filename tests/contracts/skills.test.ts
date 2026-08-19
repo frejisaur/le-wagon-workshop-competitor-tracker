@@ -44,6 +44,14 @@ describe('release contracts', () => {
     expect(deployment).not.toMatch(/echo \$|printenv/i);
   });
 
+  it('makes the default runtime image depend on completed test, type, and schema gates', () => {
+    const dockerfile = read('Dockerfile');
+    const testStage = dockerfile.slice(dockerfile.indexOf('FROM builder AS test'), dockerfile.indexOf('FROM node:22-bookworm-slim AS app'));
+    const appStage = dockerfile.slice(dockerfile.indexOf('FROM node:22-bookworm-slim AS app'));
+    expect(testStage).toMatch(/npm test[\s\S]*tsc --noEmit[\s\S]*generate-semrush-schema[\s\S]*release-verified/);
+    expect(appStage).toMatch(/COPY --from=test[^\n]*release-verified/);
+  });
+
   it('keeps the supplied release estimate below the strict free-plan limit', () => {
     expect(estimateRecordBudget({companies: 52, keywords: 358, paidAds: 16, insights: 52, reviews: 52, system: 1}))
       .toEqual({total: 531, withinFreeLimit: true});
