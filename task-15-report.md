@@ -66,3 +66,31 @@ The company route/parser files were added to fix a production server/client impo
 - Unresolved data-contract needs: none.
 
 Commit subject: `test: cover dashboard states and accessibility`.
+
+## Fix Round 1
+
+- Market-map buttons now keep a fixed semantic 44x44 hit target while a non-interactive inner dot retains the original tracked-share encoding from 12px through 44px. Accessible names, pressed state, DOM/keyboard order, arrow-key focus movement, and source/freshness descriptions remain on the button.
+- The fixture dashboard replacement now requires both explicit `E2E_FIXTURES=1` and Next webpack's `dev` branch. A production webpack invocation returns the untouched configuration even when the environment flag is present; the sanitized alias and replacement plugin remain available to the explicit Playwright development server.
+- Company Detail containment coverage now opens the wide Search table and Evidence tab at 1440x1000, 1024x768, and 390x844. It asserts document containment, bounded table/tab scroll containers, table horizontal overflow ownership, selected Evidence state, and visible Evidence content. The new regression was already green at every viewport, so no speculative Company Detail CSS change was made.
+
+### Fix Round 1 RED and browser inspection
+
+- Mobile Playwright RED measured the first map point at 36px, below the required 44px semantic target.
+- The focused Next configuration RED showed the production branch installing the replacement plugin with `E2E_FIXTURES=1`; the explicit development branch already passed.
+- Company containment was measured before implementation and passed at all three project widths. Named, localhost-only `agent-browser` inspection at 390px measured a 375px document, a wide table scrolling from 341px client width to 393px content width inside x=16..359, and a 343px workspace fully inside the viewport. The session closed cleanly.
+
+### Fix Round 1 verification
+
+- Focused config/landscape tests: 2 files, 14 tests passed.
+- Focused mobile responsive Playwright: 4 tests passed.
+- Full Vitest: 32 files, 276 tests passed.
+- Full Playwright: 20 passed and 4 intentional desktop/tablet skips for mobile-only target checks; all 24 project cases accounted for with zero failures.
+- Semrush schema drift check and `npx tsc --noEmit` passed.
+- Normal `npm run build -- --webpack` passed.
+- `E2E_FIXTURES=1 npm run build -- --webpack` passed. Its `.next/server` and `.next/static` artifacts contained no fixture-service path, fixture fingerprint/run markers, deterministic-fixture marker, or E2E flag.
+- Default `npm run build` was attempted and remains blocked only by the known sandbox denial when the Turbopack Sass helper binds a local port.
+- Diff, production browser-bundle secret/raw-reference, scoped-source secret/raw-reference, and fixture-marker scans passed.
+
+No data classification, identity, fingerprint, evidence, confidence, persistence, API-call, or deployment behavior changed. Unresolved data-contract needs: none.
+
+Fix Round 1 commit subject: `fix: harden dashboard browser acceptance`.
