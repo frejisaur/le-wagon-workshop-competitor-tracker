@@ -51,7 +51,7 @@ without revealing credential values or raw provider records:
   deployment, verification, and recovery.
 - An explicit Apollo-only bootstrap option on `npm run import:initial` so the
   roster can be persisted safely before a first live Apify refresh.
-- Tests for the bootstrap option and documentation/configuration drift.
+- Functional tests for the Apollo-only bootstrap option.
 - Corrections to environment or deployment documentation when repository
   behavior proves the existing text incomplete or inconsistent.
 
@@ -251,11 +251,9 @@ Implementation starts with failing tests for `--apollo-only`:
 - Its output remains a single sanitized JSON summary.
 - The existing `--semrush` path remains unchanged.
 
-Documentation/config tests assert that the onboarding guide references real
-package scripts and current Railway configuration, requires approval before
-live import/deploy, includes the missing-export branch, and lists the correct
-service-specific variables. The narrow CLI and documentation tests run first,
-followed by the relevant workflow suite, full unit suite, and production build.
+README, onboarding, and deployment prose is checked through focused review,
+not source-text tests. The narrow CLI tests run first, followed by the relevant
+workflow suite, full unit suite, and production build.
 
 ## 11. Non-goals
 

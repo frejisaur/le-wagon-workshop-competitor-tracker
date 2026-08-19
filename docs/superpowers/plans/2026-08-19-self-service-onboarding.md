@@ -29,11 +29,9 @@
 - `jobs/import-initial.ts`: parse the new bootstrap flag and pass an empty validated Semrush collection into the existing workflow.
 - `tests/workflows/import-initial-cli.test.ts`: own the CLI-mode, compatibility, and sanitized-output behavior.
 - `.env.example`: document the exact Airtable PAT scopes required by the schema command.
-- `tests/airtable/schema-bootstrap.test.ts`: prevent the PAT scope example from regressing.
 - `docs/operations/onboarding.md`: canonical agent-led clone-to-deploy runbook and Railway MCP sequence.
 - `README.md`: short human entry point plus copyable agent prompt.
 - `docs/operations/deployment.md`: keep the operator contract aligned with the onboarding guide and exact PAT requirements.
-- `tests/contracts/onboarding.test.ts`: assert documentation references real commands, contains every safety gate, and preserves web/refresh separation.
 
 ---
 
@@ -180,7 +178,6 @@ git commit -m "feat: support Apollo-only roster bootstrap"
 
 **Files:**
 
-- Modify: `tests/airtable/schema-bootstrap.test.ts`
 - Modify: `.env.example:1-4`
 - Modify: `docs/operations/deployment.md:5-19`
 
@@ -189,40 +186,7 @@ git commit -m "feat: support Apollo-only roster bootstrap"
 - Consumes: Airtable schema endpoints used by `ensureAirtableSchema` and record endpoints used by `AirtableCompetitorRepository`.
 - Produces: one exact PAT scope contract: `data.records:read`, `data.records:write`, `schema.bases:read`, and `schema.bases:write`, limited to the selected base.
 
-- [ ] **Step 1: Add a failing scope-contract test**
-
-Import `readFileSync` from `node:fs` in
-`tests/airtable/schema-bootstrap.test.ts`, then add:
-
-```ts
-it('documents every Airtable scope required by schema and record setup', () => {
-  const example = readFileSync('.env.example', 'utf8');
-  const deployment = readFileSync('docs/operations/deployment.md', 'utf8');
-  for (const scope of [
-    'data.records:read',
-    'data.records:write',
-    'schema.bases:read',
-    'schema.bases:write',
-  ]) {
-    expect(example).toContain(scope);
-    expect(deployment).toContain(scope);
-  }
-  expect(example).toMatch(/scoped to this one .*base/i);
-});
-```
-
-- [ ] **Step 2: Run the focused test and confirm it fails**
-
-Run:
-
-```bash
-npm test -- tests/airtable/schema-bootstrap.test.ts
-```
-
-Expected: FAIL because `.env.example` omits `schema.bases:write` and the
-deployment guide does not yet list PAT scopes.
-
-- [ ] **Step 3: Correct both credential references**
+- [ ] **Step 1: Correct both credential references**
 
 Change the opening comment in `.env.example` to:
 
@@ -242,30 +206,30 @@ Use an Airtable PAT limited to the selected base with
 read-only schema access is insufficient.
 ```
 
-- [ ] **Step 4: Run schema and security tests**
+- [ ] **Step 2: Review the documentation diff**
 
-Run:
+Confirm both references name the same four scopes, limit the PAT to one
+selected base, and contain no example credential value. Then run:
 
 ```bash
-npm test -- tests/airtable/schema-bootstrap.test.ts tests/security/no-secret-exposure.test.ts
+git diff --check
 ```
 
-Expected: all tests pass and no credential assignment is detected.
+Expected: no whitespace errors.
 
-- [ ] **Step 5: Commit the credential contract**
+- [ ] **Step 3: Commit the credential contract**
 
 ```bash
-git add .env.example docs/operations/deployment.md tests/airtable/schema-bootstrap.test.ts
+git add .env.example docs/operations/deployment.md
 git commit -m "docs: correct Airtable setup scopes"
 ```
 
 ---
 
-### Task 3: Add the tested agent onboarding runbook and README prompt
+### Task 3: Add the agent onboarding runbook and README prompt
 
 **Files:**
 
-- Create: `tests/contracts/onboarding.test.ts`
 - Create: `docs/operations/onboarding.md`
 - Modify: `README.md`
 
@@ -278,68 +242,7 @@ git commit -m "docs: correct Airtable setup scopes"
 - Produces: a canonical runbook at `docs/operations/onboarding.md` and a
   copyable README prompt that routes agents to it.
 
-- [ ] **Step 1: Write a failing documentation contract test**
-
-Create `tests/contracts/onboarding.test.ts`:
-
-```ts
-import {readFileSync} from 'node:fs';
-import {describe, expect, it} from 'vitest';
-
-const read = (path: string) => readFileSync(path, 'utf8');
-
-describe('self-service onboarding contract', () => {
-  it('routes a fresh clone through the canonical agent runbook', () => {
-    const readme = read('README.md');
-    expect(readme).toContain('docs/operations/onboarding.md');
-    expect(readme).toMatch(/copy.*prompt|agent prompt/i);
-    expect(readme).toMatch(/ask me for one input at a time/i);
-  });
-
-  it('documents real commands, provider branches, and separate approvals', () => {
-    const guide = read('docs/operations/onboarding.md');
-    const scripts = (JSON.parse(read('package.json')) as {scripts: Record<string, string>}).scripts;
-    for (const name of ['airtable:schema', 'import:initial', 'enrich']) {
-      expect(scripts[name]).toBeTruthy();
-      expect(guide).toContain(`npm run ${name}`);
-    }
-    expect(guide).toContain('--apollo-only');
-    expect(guide).toMatch(/request.*website domains/i);
-    expect(guide).toMatch(/confirmed.*valid.*Apollo roster/i);
-    expect(guide).toMatch(/approval.*live Airtable import/is);
-    expect(guide).toMatch(/approval.*partial enrichment/is);
-    expect(guide).toMatch(/approval.*Railway/is);
-    expect(guide).toMatch(/missing.*absent.*never.*zero/is);
-  });
-
-  it('uses Railway MCP with distinct web and refresh contracts', () => {
-    const guide = read('docs/operations/onboarding.md');
-    for (const tool of [
-      'whoami', 'list_workspaces', 'create_project', 'create_deployment',
-      'set_variables', 'update_service', 'generate_domain',
-      'get_service_config', 'get_status',
-    ]) expect(guide).toContain(tool);
-    expect(guide).toContain('/railway.cron.toml');
-    expect(guide).toContain('0 15 * * 1');
-    expect(guide).toMatch(/refresh service.*no public domain/is);
-    expect(guide).toMatch(/web service.*must not receive.*APIFY_TOKEN/is);
-    expect(guide).toMatch(/present.*missing/i);
-  });
-});
-```
-
-- [ ] **Step 2: Run the new contract test and confirm it fails**
-
-Run:
-
-```bash
-npm test -- tests/contracts/onboarding.test.ts
-```
-
-Expected: FAIL because the onboarding guide does not exist and the README has
-no agent prompt.
-
-- [ ] **Step 3: Create the canonical onboarding guide**
+- [ ] **Step 1: Create the canonical onboarding guide**
 
 Create `docs/operations/onboarding.md` with these sections in this order:
 
@@ -398,7 +301,7 @@ arguments. For the missing-export branch, require the agent to:
    identities without raw provider records.
 
 For Railway MCP, write a numbered tool sequence using the capability names in
-the test. State that `create_deployment` requires a user-confirmed GitHub
+the Interfaces block. State that `create_deployment` requires a user-confirmed GitHub
 `owner/name` and can trigger an initial build before configuration. Configure:
 
 - Web: `Dockerfile`, `npm start`, `/api/health`, `ON_FAILURE`, 3 retries, one
@@ -417,7 +320,7 @@ a failed service with secret-bearing output redacted. Resource creation or a
 triggered deployment is not success; `/api/health` must return `200` and
 `status: ok`.
 
-- [ ] **Step 4: Expand the README with an entry point and copyable prompt**
+- [ ] **Step 2: Expand the README with an entry point and copyable prompt**
 
 Keep the local-start block, then add a `## Deploy your own tracker` section
 containing this prompt:
@@ -435,22 +338,24 @@ Explain in one sentence that the user can paste the prompt into a coding agent
 with repository access and a connected Railway MCP. Link the detailed
 onboarding guide and existing operator deployment contract.
 
-- [ ] **Step 5: Run onboarding, release-contract, and security tests**
+- [ ] **Step 3: Review the complete onboarding flow**
 
-Run:
+Read the README prompt and runbook once from the perspective of a fresh agent.
+Confirm every documented `npm run` name exists in `package.json`, the three
+approval gates are separate, the missing-export branch requests domains and
+runs Apify enrichment, web/refresh variables remain separated, and the final
+handoff does not claim resource creation is deployment success. Then run:
 
 ```bash
-npm test -- tests/contracts/onboarding.test.ts tests/contracts/skills.test.ts tests/config/railway-cron.test.ts tests/security/no-secret-exposure.test.ts
+git diff --check
 ```
 
-Expected: all tests pass; every documented package command exists; Railway web
-and refresh settings remain distinct; no committed credential assignment is
-found.
+Expected: no whitespace errors.
 
-- [ ] **Step 6: Commit the onboarding documentation**
+- [ ] **Step 4: Commit the onboarding documentation**
 
 ```bash
-git add README.md docs/operations/onboarding.md tests/contracts/onboarding.test.ts
+git add README.md docs/operations/onboarding.md
 git commit -m "docs: add agent-led deployment onboarding"
 ```
 
