@@ -8,6 +8,9 @@ dogfood-output/
 next-env.d.ts
 *.tsbuildinfo
 
+# macOS metadata
+.DS_Store
+
 # Local credentials and environment overrides
 .env
 .env.*

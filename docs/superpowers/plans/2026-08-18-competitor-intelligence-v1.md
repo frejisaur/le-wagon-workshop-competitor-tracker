@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node.js 22 LTS, TypeScript, Next.js App Router, React, Zod, `@carbon/react`, `@carbon/styles`, `@carbon/charts-react`, Airtable Web API through server-only `fetch`, Apify REST API through server-only `fetch`, Vitest, Testing Library, MSW, Playwright, and Railway.
 
-**Spec:** `gtm-competitor-intelligence-design.md` and `gtm-competitor-intelligence-design-system.md`
+**Spec:** `gtm-competitor-intelligence-design.md` and `docs/gtm-competitor-intelligence-design-system.md`
 
 ## Global Constraints
 

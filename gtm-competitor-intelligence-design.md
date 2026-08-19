@@ -222,7 +222,7 @@ The agent may summarize themes, strengths, vulnerabilities, and recommended acti
 
 The approved interface direction is a calm research instrument built on IBM Carbon patterns with a product-specific visual layer. The All Companies screen is landscape-led, and Company Detail uses workspace tabs with Battlecard and Evidence as sibling views.
 
-The complete visual system, including tokens, layouts, components, charts, states, responsive behavior, accessibility rules, and mockup decisions, is defined in [`gtm-competitor-intelligence-design-system.md`](./gtm-competitor-intelligence-design-system.md).
+The complete visual system, including tokens, layouts, components, charts, states, responsive behavior, accessibility rules, and mockup decisions, is defined in [`gtm-competitor-intelligence-design-system.md`](./docs/gtm-competitor-intelligence-design-system.md).
 
 ## 7. Airtable design
 

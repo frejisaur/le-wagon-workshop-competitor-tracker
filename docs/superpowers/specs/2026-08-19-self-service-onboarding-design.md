@@ -7,7 +7,7 @@ Status: Approved
 Companion specifications:
 
 - [`gtm-competitor-intelligence-design.md`](../../../gtm-competitor-intelligence-design.md)
-- [`gtm-competitor-intelligence-design-system.md`](../../../gtm-competitor-intelligence-design-system.md)
+- [`gtm-competitor-intelligence-design-system.md`](../../gtm-competitor-intelligence-design-system.md)
 - [`docs/operations/deployment.md`](../../operations/deployment.md)
 
 ## 1. Purpose

@@ -5,7 +5,7 @@
 Build a reliable prototype that can be demonstrated in 90 minutes and safely
 extended afterward. Treat `gtm-competitor-intelligence-design.md` as the product
 specification. For dashboard and presentation work, treat
-`gtm-competitor-intelligence-design-system.md` as the authoritative interface
+`docs/gtm-competitor-intelligence-design-system.md` as the authoritative interface
 specification.
 
 ## Working rules

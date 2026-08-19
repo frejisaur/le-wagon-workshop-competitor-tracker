@@ -7,7 +7,7 @@ Status: Approved in collaborative design; awaiting written-spec review
 Companion product specifications:
 
 - [`gtm-competitor-intelligence-design.md`](../../../gtm-competitor-intelligence-design.md)
-- [`gtm-competitor-intelligence-design-system.md`](../../../gtm-competitor-intelligence-design-system.md)
+- [`gtm-competitor-intelligence-design-system.md`](../../gtm-competitor-intelligence-design-system.md)
 
 ## 1. Purpose
 
@@ -93,7 +93,7 @@ CLAUDE.md                          # short Claude adapter; points to AGENTS.md
 .claude/agents/                    # focused Claude Code agent definitions
 .codex/agents/                     # matching Codex agent definitions
 gtm-competitor-intelligence-design.md
-gtm-competitor-intelligence-design-system.md
+docs/gtm-competitor-intelligence-design-system.md
 src/, scripts/, tests/, data/      # application and stable CLI boundaries
 
 workshop/
