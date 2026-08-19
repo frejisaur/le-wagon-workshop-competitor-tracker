@@ -7,16 +7,23 @@ describe('Airtable schema bootstrap', () => {
   it('documents every Airtable scope required by schema and record setup', () => {
     const example = readFileSync('.env.example', 'utf8');
     const deployment = readFileSync('docs/operations/deployment.md', 'utf8');
-    for (const scope of [
+    const requiredScopes = [
       'data.records:read',
       'data.records:write',
       'schema.bases:read',
       'schema.bases:write',
-    ]) {
-      expect(example).toContain(scope);
-      expect(deployment).toContain(scope);
-    }
-    expect(example).toMatch(/scoped to this one .*base/i);
+    ];
+    const exampleInstruction = example.match(/# Create a PAT[\s\S]*?(?=\nAIRTABLE_PAT=)/)?.[0];
+    const deploymentInstruction = deployment.match(/Use an Airtable PAT[\s\S]*?insufficient\./)?.[0];
+    const documentedScopes = (instruction: string | undefined) =>
+      [...(instruction ?? '').matchAll(/\b(?:data\.records|schema\.bases):[a-z]+\b/g)]
+        .map(([scope]) => scope)
+        .sort();
+
+    expect(documentedScopes(exampleInstruction)).toEqual(requiredScopes);
+    expect(documentedScopes(deploymentInstruction)).toEqual(requiredScopes);
+    expect(exampleInstruction).toMatch(/scoped to this one .*base/i);
+    expect(deploymentInstruction).toMatch(/limited to the selected base/i);
   });
 
   it('defines the six serving tables with company links and typed evidence fields', () => {
