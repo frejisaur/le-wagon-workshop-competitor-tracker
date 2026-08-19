@@ -423,11 +423,13 @@ Expected: all Vitest suites pass.
 
 ```bash
 npx tsc --noEmit
-node .agents/skills/competitor-data-contracts/scripts/generate-semrush-schema.mjs --check
+node scripts/verify-semrush-schema-reference.mjs
 ```
 
-Expected: TypeScript exits zero and the generated Semrush schema reference has
-no unreviewed drift.
+Expected: TypeScript exits zero and the committed Semrush schema reference
+matches its recorded source metadata. When the private raw Apify source export
+is available, additionally run the skill generator with `--check` to detect
+payload drift; a clean public clone does not contain that ignored export.
 
 - [ ] **Step 3: Build the production application**
 
@@ -437,7 +439,16 @@ npm run build -- --webpack
 
 Expected: the Next.js production build succeeds on Node.js 22.
 
-- [ ] **Step 4: Inspect the final diff and repository state**
+- [ ] **Step 4: Verify the Node 22 container release path**
+
+```bash
+docker build -t competitor-tracker-onboarding-verify .
+```
+
+Expected: every Docker test/build stage succeeds from the repository's Node 22
+base image.
+
+- [ ] **Step 5: Inspect the final diff and repository state**
 
 ```bash
 git diff --check
@@ -449,7 +460,7 @@ Expected: no whitespace errors; only pre-existing unrelated files such as
 `.DS_Store` remain untracked; commits exist for the CLI contract, Airtable
 scope correction, and onboarding documentation.
 
-- [ ] **Step 5: Report completion without claiming live deployment**
+- [ ] **Step 6: Report completion without claiming live deployment**
 
 The handoff must distinguish repository verification from actions the future
 onboarding agent performs against a user's Airtable, Apify, and Railway
