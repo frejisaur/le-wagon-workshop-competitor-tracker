@@ -23,6 +23,9 @@ describe('release contracts', () => {
       expect(packageJson.scripts[name]).toBeTruthy();
       expect(docs).toContain(`npm run ${name}`);
     }
+    for (const prompt of ['workshop/prompts/02-author-data-skill.md', 'workshop/prompts/05-author-dashboard-skill.md']) expect(read(prompt)).toContain('workshop/generated/');
+    for (const agent of ['pipeline-builder', 'dashboard-builder', 'evidence-reviewer']) expect(discovery).toContain(agent);
+    expect(read('README.md')).toContain('workshop/README.md');
   });
 
   it('defines one shared Node 22 image and distinct safe Railway service contracts', () => {

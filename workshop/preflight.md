@@ -30,6 +30,7 @@ Record date, result, and duration only—never URLs with query data, record IDs,
 
 | Date | Path | Result | Duration |
 |---|---|---|---|
-| 2026-08-19 | Fixture preflight | Ready | 00:24 |
+| — | Fixture rehearsal | Not yet recorded | — |
+| 2026-08-19 | Selected reference, desktop + mobile | Readable | 00:11 |
 
 Rotation order: create new → store new → deploy → verify health/refresh → revoke old.

@@ -2,6 +2,8 @@
 
 All default rehearsal commands below use sanitized local fixtures and make no Airtable, Apify, or Railway request. Run them from the repository root.
 
+Before presenting, run `npm run workshop:preflight -- --phase all` for secret-safe present/missing checks and `npm run workshop:verify` for the complete teaching bundle. If a provider call exceeds the 90-second threshold, disclose the fallback and continue with `workshop/expected/data-join-output.json`; do not consume the final proof block waiting for a remote service.
+
 ## Fixture import and refresh
 
 1. Dry-run the sample import:
