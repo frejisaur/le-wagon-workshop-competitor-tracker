@@ -1,0 +1,8 @@
+{
+  "project": "competitor-workshop",
+  "runLabel": "prepared-deployment",
+  "services": {"web": "healthy", "refresh": "scheduled"},
+  "schedule": "0 15 * * 1",
+  "url": "https://competitor-workshop.example",
+  "timestamp": "2026-08-19T00:00:00.000Z"
+}
