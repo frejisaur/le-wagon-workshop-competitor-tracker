@@ -30,6 +30,9 @@ const CompanySummarySchema = z.object({
   companyId: z.string().min(1),
   domain: z.string().min(1),
   displayName: z.string().min(1).optional(),
+  /** Curated observed identity fields for landscape filtering; never raw provider payloads. */
+  country: z.string().min(1).max(128).optional(),
+  segment: z.string().min(1).max(128).optional(),
   authorityScore: DashboardValueSchema,
   organicTraffic: DashboardValueSchema,
   organicTraffic30DayMovement: DashboardValueSchema,

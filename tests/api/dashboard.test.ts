@@ -8,6 +8,7 @@ const snapshot: DashboardSnapshot = {
     {id: 'rec-alpha', fields: {
       'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example',
       'Observed • Display Name': 'Alpha', 'Observed • Source': 'semrush', 'Observed • At': '2026-08-18T12:00:00.000Z', 'Observed • Database': 'ca',
+      'Observed • Apollo Company Country': 'Canada', 'Observed • Segment': 'Enterprise',
       'Observed • Authority Score': 42, 'Observed • Organic Traffic': 200, 'Observed • Organic Keywords': 20,
       'Observed • Paid Traffic': 10, 'Observed • AI Visibility': 3, 'Observed • AI Visibility Benchmark': 2,
       'Observed • Referring Domains': 18, 'Calculated • Organic Traffic 30d Movement': 15,
@@ -25,6 +26,8 @@ describe('dashboard response and cache', () => {
     expect(response.companies.map((company) => company.companyId)).toEqual(['company-alpha']);
     expect(JSON.stringify(response)).not.toMatch(/rec-alpha|AIRTABLE|rawProviderPayload/i);
     expect(response.companies[0]?.organicTraffic).toMatchObject({classification: 'observed', value: 200});
+    expect(response.companies[0]).toMatchObject({country: 'Canada', segment: 'Enterprise'});
+    expect(response.filters).toMatchObject({countries: ['Canada'], segments: ['Enterprise']});
   });
 
   it('single-flights first load, and preserves its last success when a later load fails', async () => {

@@ -85,6 +85,10 @@
   --skeleton-title-max-width: 260px;
   --skeleton-ledger-height: 112px;
   --skeleton-panel-min-height: 280px;
+  --landscape-map-min-height: 320px;
+  --landscape-table-max-height: 560px;
+  --visually-hidden-size: 1px;
+  --visually-hidden-offset: -1px;
 
   /* Motion */
   --motion-fast: 120ms;
