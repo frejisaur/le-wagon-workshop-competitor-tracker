@@ -6,12 +6,14 @@ import {AirtableClient} from '@/lib/airtable/client';
 import {getWebEnv} from '@/lib/config/server-env';
 import {parseApolloCsv} from '@/lib/schemas/apollo';
 import {parseSemrushPayload} from '@/lib/schemas/semrush';
+import {normalizeDomain} from '@/lib/transforms/normalize';
 import {runInitialImport} from '@/lib/workflows/import-initial';
 
 type CliArguments = {
   apollo: string;
   semrush?: string;
   apolloOnly: boolean;
+  domains?: string;
   dryRun: boolean;
   fixtureState?: string;
 };
@@ -19,6 +21,7 @@ type CliArguments = {
 function parseArguments(arguments_: string[]): CliArguments {
   let apollo: string | undefined;
   let semrush: string | undefined;
+  let domains: string | undefined;
   let fixtureState: string | undefined;
   let apolloOnly = false;
   let dryRun = false;
@@ -32,11 +35,12 @@ function parseArguments(arguments_: string[]): CliArguments {
       apolloOnly = true;
       continue;
     }
-    if (argument === '--apollo' || argument === '--semrush' || argument === '--fixture-state') {
+    if (argument === '--apollo' || argument === '--semrush' || argument === '--domains' || argument === '--fixture-state') {
       const value = arguments_[index + 1];
       if (!value || value.startsWith('--')) throw new TypeError(`${argument} requires a file path`);
       if (argument === '--apollo') apollo = value;
       if (argument === '--semrush') semrush = value;
+      if (argument === '--domains') domains = value;
       if (argument === '--fixture-state') fixtureState = value;
       index += 1;
       continue;
@@ -47,7 +51,35 @@ function parseArguments(arguments_: string[]): CliArguments {
   if (Boolean(semrush) === apolloOnly) {
     throw new TypeError('exactly one of --semrush or --apollo-only is required');
   }
-  return {apollo, semrush, apolloOnly, dryRun, fixtureState};
+  if (apolloOnly !== Boolean(domains)) {
+    throw new TypeError('--domains is required only with --apollo-only');
+  }
+  return {apollo, semrush, apolloOnly, domains, dryRun, fixtureState};
+}
+
+function validateRequestedDomains(apolloRows: ReturnType<typeof parseApolloCsv>, requestedText: string): void {
+  const requestedDomains = requestedText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const domain = normalizeDomain(line);
+      if (!domain) throw new TypeError('requested domain is invalid');
+      return domain;
+    });
+  if (requestedDomains.length === 0) throw new TypeError('at least one requested domain is required');
+
+  const requestedSet = new Set(requestedDomains);
+  if (requestedSet.size !== requestedDomains.length) throw new TypeError('requested domains must be unique');
+
+  const apolloSet = new Set(
+    apolloRows
+      .map((row) => normalizeDomain(row.Website))
+      .filter((domain): domain is string => domain !== null),
+  );
+  if (requestedSet.size !== apolloSet.size || [...requestedSet].some((domain) => !apolloSet.has(domain))) {
+    throw new TypeError('requested domains must exactly match the Apollo roster');
+  }
 }
 
 function safeFailureSummary(): string {
@@ -67,6 +99,9 @@ export async function runInitialImportCli(arguments_: string[], dependencies: Cl
     const parsedArguments = parseArguments(arguments_);
     const readFile = dependencies.readFile ?? readFileSync;
     const apolloRows = parseApolloCsv(readFile(parsedArguments.apollo, 'utf8'));
+    if (parsedArguments.apolloOnly) {
+      validateRequestedDomains(apolloRows, readFile(parsedArguments.domains!, 'utf8'));
+    }
     const semrushRecords = parsedArguments.apolloOnly
       ? []
       : parseSemrushPayload(JSON.parse(readFile(parsedArguments.semrush!, 'utf8'))).records;

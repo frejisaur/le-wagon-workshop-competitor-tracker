@@ -8,12 +8,22 @@ const apollo = [
   'Company Name,Website,Apollo Account Id,Apollo Record Id',
   'Alpha,https://alpha.example,acct-alpha,rec-alpha',
 ].join('\n');
+const twoCompanyApollo = [
+  'Company Name,Website,Apollo Account Id,Apollo Record Id',
+  'Alpha,https://alpha.example,acct-alpha,rec-alpha',
+  'Beta,https://beta.example,acct-beta,rec-beta',
+].join('\n');
+
+const initialImportFailure = {
+  exitCode: 1,
+  stdout: JSON.stringify({status: 'failed', error: 'initial_import_failed'}),
+};
 
 describe('initial import CLI', () => {
   it('dry-runs an Apollo-only roster as explicitly unenriched', async () => {
     const result = await runInitialImportCli(
-      ['--apollo', 'apollo.csv', '--apollo-only', '--dry-run'],
-      {readFile: () => apollo},
+      ['--apollo', 'apollo.csv', '--apollo-only', '--domains', 'domains.txt', '--dry-run'],
+      {readFile: (path) => path === 'apollo.csv' ? apollo : 'www.alpha.example\n'},
     );
 
     expect(result.exitCode).toBe(0);
@@ -26,6 +36,69 @@ describe('initial import CLI', () => {
     });
     expect(result.stdout.split('\n')).toHaveLength(1);
     expect(result.stdout).not.toMatch(/acct-alpha|rec-alpha|https:\/\/alpha\.example/);
+  });
+
+  it('requires domains in Apollo-only mode', async () => {
+    const result = await runInitialImportCli(
+      ['--apollo', 'apollo.csv', '--apollo-only', '--dry-run'],
+      {readFile: () => { throw new Error('must not read invalid arguments'); }},
+    );
+
+    expect(result).toEqual(initialImportFailure);
+  });
+
+  it('rejects domains in Semrush mode', async () => {
+    const result = await runInitialImportCli(
+      ['--apollo', 'apollo.csv', '--semrush', 'semrush.json', '--domains', 'domains.txt', '--dry-run'],
+      {readFile: () => { throw new Error('must not read invalid arguments'); }},
+    );
+
+    expect(result).toEqual(initialImportFailure);
+  });
+
+  it('rejects blank requested-domain input', async () => {
+    const result = await runInitialImportCli(
+      ['--apollo', 'apollo.csv', '--apollo-only', '--domains', 'domains.txt', '--dry-run'],
+      {readFile: (path) => path === 'apollo.csv' ? apollo : '\n  \n'},
+    );
+
+    expect(result).toEqual(initialImportFailure);
+  });
+
+  it('rejects an invalid requested domain', async () => {
+    const result = await runInitialImportCli(
+      ['--apollo', 'apollo.csv', '--apollo-only', '--domains', 'domains.txt', '--dry-run'],
+      {readFile: (path) => path === 'apollo.csv' ? apollo : 'not a public domain\n'},
+    );
+
+    expect(result).toEqual(initialImportFailure);
+  });
+
+  it('rejects normalized requested-domain duplicates', async () => {
+    const result = await runInitialImportCli(
+      ['--apollo', 'apollo.csv', '--apollo-only', '--domains', 'domains.txt', '--dry-run'],
+      {readFile: (path) => path === 'apollo.csv' ? apollo : 'www.alpha.example\nalpha.example\n'},
+    );
+
+    expect(result).toEqual(initialImportFailure);
+  });
+
+  it('rejects an extra requested domain not in the Apollo roster', async () => {
+    const result = await runInitialImportCli(
+      ['--apollo', 'apollo.csv', '--apollo-only', '--domains', 'domains.txt', '--dry-run'],
+      {readFile: (path) => path === 'apollo.csv' ? apollo : 'alpha.example\nunknown.example\n'},
+    );
+
+    expect(result).toEqual(initialImportFailure);
+  });
+
+  it('rejects an Apollo roster domain omitted from the requested domains', async () => {
+    const result = await runInitialImportCli(
+      ['--apollo', 'apollo.csv', '--apollo-only', '--domains', 'domains.txt', '--dry-run'],
+      {readFile: (path) => path === 'apollo.csv' ? twoCompanyApollo : 'alpha.example\n'},
+    );
+
+    expect(result).toEqual(initialImportFailure);
   });
 
   it('requires one provider source mode', async () => {
