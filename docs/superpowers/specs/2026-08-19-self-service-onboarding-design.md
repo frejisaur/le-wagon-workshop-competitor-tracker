@@ -51,9 +51,11 @@ without revealing credential values or raw provider records:
   deployment, verification, and recovery.
 - An explicit Apollo-only bootstrap option on `npm run import:initial` so the
   roster can be persisted safely before a first live Apify refresh.
-- Tests for the bootstrap option and documentation/configuration drift.
+- Functional tests for the Apollo-only bootstrap option.
 - Corrections to environment or deployment documentation when repository
   behavior proves the existing text incomplete or inconsistent.
+- Node 22 npm job wrappers that optionally load ignored `.env` and then
+  `.env.local` while preserving existing process variables.
 
 ## 4. User inputs and prerequisites
 
@@ -73,6 +75,12 @@ Required inputs:
   actor with a user-confirmed list of website domains.
 - For live scraping, `APIFY_TOKEN` and the reviewed Apify actor ID.
 
+Local npm jobs load optional ignored `.env` and `.env.local` files without
+shell-sourcing them; `.env.local` is later in the command, while existing
+process variables remain authoritative for Railway. A local live refresh also
+requires `APP_BASE_URL=http://127.0.0.1:3000` and the same server-only
+`CACHE_INVALIDATION_SECRET` in the Next.js and job processes.
+
 The guide may mention provider plugins as optional ways to obtain an export,
 but it must not require an Apollo, Semrush, Airtable, or Apify plugin when the
 repository command accepts a user-supplied file or credential. Railway MCP is
@@ -90,6 +98,8 @@ checkout
   -> import_previewed
   -> [approval: live Airtable import]
   -> roster_persisted
+  -> local_cache_callback_verified
+  -> [approval: live Apify enrichment]
   -> enrichment_verified
   -> [approval: accept partial enrichment, when applicable]
   -> railway_preflighted
@@ -129,25 +139,35 @@ dataset or bypass the provider boundary. It performs this explicit bootstrap:
 
 1. Ask the user for the website domains to enrich. The user may confirm the
    normalized valid websites extracted from the Apollo CSV or supply a list.
-2. Normalize and deduplicate the requested domains using the shared repository
-   domain normalizer.
-3. Compare the requested set with the valid normalized Apollo roster. Reject
-   invalid domains and stop on domains not represented by Apollo. Report Apollo
-   roster domains omitted by the user and request a corrected confirmation.
+2. Save the confirmation as a user-only (`0600`) line-delimited domain file in
+   an OS temporary directory outside the repository, pass its absolute path to
+   both repository CLI invocations with `--domains <path>`, and remove it after
+   the flow.
+3. The CLI normalizes the requested domains with the shared domain normalizer
+   and compares them with the valid normalized Apollo roster. It rejects
+   invalid, duplicate, unknown, extra, or omitted domains before import.
 4. Dry-run the explicit Apollo-only import mode. This mode passes an empty
    validated Semrush record collection to the existing import workflow and
    reports all accepted companies as unenriched.
 5. After approval, persist the Apollo roster with metrics absent.
 6. Validate the live refresh environment by variable name and presence only.
-7. Run `npm run enrich`, which starts the configured Apify Semrush actor through
-   the existing server-side client for the confirmed active company roster.
-8. Compare requested domains with processed, succeeded, and failed outcomes.
-   Preserve successful writes when a batch is partial and do not retry without
-   an operator decision.
+7. Before provider approval, run Next.js locally from the same `.env.local`,
+   verify `GET http://127.0.0.1:3000/api/health`, and keep it running so the
+   enrichment job can make its signed callback. Loopback HTTP is local-only;
+   Railway later uses its generated HTTPS origin.
+8. After approval, run `npm run enrich`, which starts the configured Apify
+   Semrush actor through the existing server-side client for the confirmed
+   active company roster.
+9. Require `status === "succeeded"`, `cacheInvalidated === true`, and one
+   successful enriched outcome for every requested domain. Any other status,
+   cache-only failure, failed/skipped domain, or unenriched domain enters the
+   partial/result approval gate. Preserve successful writes and do not retry
+   without an operator decision.
 
-The bootstrap CLI will use `--apollo-only` rather than requiring the agent to
-create a magic `[]` JSON file. `--apollo-only` and `--semrush <path>` are
-mutually exclusive, and one is required. Existing command behavior remains
+The bootstrap CLI will use `--apollo-only --domains <path>` rather than
+requiring the agent to create a magic `[]` JSON file. `--apollo-only` and
+`--semrush <path>` are mutually exclusive, and one is required. `--domains` is
+required only with `--apollo-only`. Existing Semrush command behavior remains
 compatible.
 
 The first implementation will require the confirmed domain set to equal the
@@ -176,40 +196,53 @@ remain authoritative.
 
 ## 8. Railway MCP deployment sequence
 
-The runbook names Railway MCP operations by capability so agents can adapt to
-minor tool-name changes while still preferring the current direct tools.
+At runbook start, the agent performs read-only capability/schema discovery for
+the exact active operations: `create_project`, `create_deployment`,
+`set_variables`, `update_service`, `generate_domain`, `get_service_config`,
+`redeploy`, `get_status`, and `get_logs`. If a name or argument differs, it
+stops before mutation and uses an equivalent only after confirming its schema.
+It never uses `list_variables`, because that operation may expose values;
+`get_service_config` supplies `variableNames` without values.
 
 1. Authenticate and identify the user with `whoami`; list workspaces.
 2. Ask the user to choose a workspace when more than one is available.
 3. Confirm the exact GitHub `owner/name` repository and branch. Never guess.
-4. Create a private Railway project and record its production environment ID.
-5. Create the web service from the confirmed GitHub repository.
-6. Set web variables from the validated runtime environment. The agent sends
-   values to Railway only through the variable-setting tool and reports names
-   afterward, never values.
-7. Configure the web service with the root Dockerfile, `npm start`, `/api/health`,
-   and `ON_FAILURE` with at most three retries.
-8. Generate a Railway domain for the web service and set the resulting URL as
+4. After explicit approval, call `create_project` and record its production
+   environment ID.
+5. Call `create_deployment` once to create the GitHub-backed web service; its
+   first build may be unconfigured because this is the active MCP's only
+   GitHub-attachment operation.
+6. Configure the web service with `update_service`, which does not accept
+   `skipDeploys`. Set web variables with `set_variables(skipDeploys: true)`.
+   The web receives
+   Airtable variables and the server-only `CACHE_INVALIDATION_SECRET` used to
+   verify refresh signatures. The agent reports names afterward, never values.
+7. Set the root Dockerfile, `npm start`, `/api/health`, and `ON_FAILURE` with at
+   most three retries.
+8. Call `generate_domain` for the web service and set the resulting HTTPS URL as
    `APP_BASE_URL` for the refresh service.
-9. Create a second service from the same repository for weekly refresh.
-10. Configure its Railway config path as `/railway.cron.toml`, with no public
-    domain, the terminating refresh command, `NEVER` restart policy, and
-    `0 15 * * 1` schedule.
-11. Set the refresh service's Airtable, Apify, application URL, and cache
-    invalidation variables.
-12. Inspect both service configurations and variable-name lists before asking
-    for approval to apply/redeploy staged changes.
-13. After explicit approval, trigger or accept deployment, follow status, and
-    inspect redacted logs only when a service fails.
+9. Call `create_deployment` once to create the GitHub-backed weekly refresh
+   service; do not call it again after its potentially unconfigured first build.
+10. With `update_service`, configure `/railway.cron.toml`, no public domain, the
+    terminating refresh command, `NEVER`, and `0 15 * * 1`; never pass
+    `skipDeploys` to `update_service`.
+11. Set Airtable, Apify, application URL, and cache variables using only
+    `set_variables(skipDeploys: true)`.
+12. Call `get_service_config` for both services and inspect settings plus
+    `variableNames` without retrieving values, then call `redeploy` once for
+    each fully configured service.
+13. Follow the configured deployments with `get_status`. Call redacted
+    `get_logs` only for a failed service.
 
-Because creating a GitHub-backed Railway service may immediately trigger its
-first build, the guide warns that the first deployment can fail until variables
-and service settings are present. The agent treats that as setup state, applies
-the complete configuration, and verifies the subsequent deployment. It must not
-claim success from resource creation alone.
+Because the active MCP attaches GitHub only through `create_deployment`, its
+first build can be unconfigured. The agent treats that as setup state, applies
+the complete configuration, and determines success only after the configured
+redeploy and health/service checks. It must not claim success from resource
+creation or the first build alone.
 
 The refresh service never receives a public domain. The web service never
-receives `APIFY_TOKEN` or `CACHE_INVALIDATION_SECRET`.
+receives `APIFY_TOKEN` or `APP_BASE_URL`; both services receive the same
+server-only `CACHE_INVALIDATION_SECRET`.
 
 ## 9. Verification and failure handling
 
@@ -248,14 +281,14 @@ Implementation starts with failing tests for `--apollo-only`:
 - It accepts Apollo input without `--semrush` and supplies zero Semrush records.
 - It rejects using `--apollo-only` together with `--semrush`.
 - It rejects a command with neither source mode.
+- Apollo-only mode requires a line-delimited domain file and rejects invalid,
+  duplicate, extra, omitted, or unknown confirmations.
 - Its output remains a single sanitized JSON summary.
 - The existing `--semrush` path remains unchanged.
 
-Documentation/config tests assert that the onboarding guide references real
-package scripts and current Railway configuration, requires approval before
-live import/deploy, includes the missing-export branch, and lists the correct
-service-specific variables. The narrow CLI and documentation tests run first,
-followed by the relevant workflow suite, full unit suite, and production build.
+README, onboarding, and deployment prose is checked through focused review,
+not source-text tests. The narrow CLI tests run first, followed by the relevant
+workflow suite, full unit suite, and production build.
 
 ## 11. Non-goals
 

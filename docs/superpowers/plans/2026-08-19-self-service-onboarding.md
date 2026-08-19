@@ -4,7 +4,7 @@
 
 **Goal:** Give a coding agent a tested, secret-safe path from a fresh clone to a user-owned Airtable dataset and two-service Railway deployment, including automatic Apify Semrush enrichment when no export is supplied.
 
-**Architecture:** Extend only the initial-import CLI boundary with an explicit Apollo-only mode; the existing import workflow already represents missing provider metrics as absent and the existing enrichment job already starts the reviewed Apify actor. Put orchestration policy in a dedicated operations runbook, link it from a concise README prompt, and protect command names, approval gates, service separation, and credential scopes with documentation contract tests.
+**Architecture:** Extend only the initial-import CLI boundary with an explicit Apollo-only mode; the existing import workflow already represents missing provider metrics as absent and the existing enrichment job already starts the reviewed Apify actor. Put orchestration policy in a dedicated operations runbook, link it from a concise README prompt, and verify command names, approval gates, service separation, and credential scopes through focused manual operational review plus runtime release evidence.
 
 **Tech Stack:** Node.js 22, TypeScript, Vitest, Next.js 16, Airtable Web API, Apify REST client, Railway MCP, Markdown operations documentation.
 
@@ -16,11 +16,14 @@
 - Never print, log, commit, browser-expose, or include credential values in prompts or handoffs.
 - Use the shared domain normalizer and Apollo-to-Apify join; never join by company name.
 - Missing Semrush enrichment remains absent, never zero.
-- `--apollo-only` and `--semrush <path>` are mutually exclusive, and one is required.
+- `--apollo-only --domains <path>` and `--semrush <path>` are mutually exclusive, and one source mode is required.
 - In the first version, the confirmed scrape-domain set must equal the valid active Apollo roster.
+- Store the requested-domain file outside the repository in an OS temporary directory with user-only permissions, reuse its absolute path, and remove it after the flow.
 - Repository commands remain authoritative for schema, validation, import, enrichment, and verification.
+- Node 22 npm job wrappers optionally load ignored `.env` and `.env.local` without shell-sourcing; existing process variables remain authoritative.
+- Before live Apify approval, run a local Next.js callback with the same `.env.local` cache secret and require loopback health; successful enrichment requires both `status === "succeeded"` and `cacheInvalidated === true`.
 - Live Airtable import, acceptance of partial enrichment, and Railway deployment each require separate explicit approval.
-- The web service must not receive `APIFY_TOKEN`, `APP_BASE_URL`, or `CACHE_INVALIDATION_SECRET`.
+- The web service must not receive `APIFY_TOKEN` or `APP_BASE_URL`; web and refresh receive the same server-only `CACHE_INVALIDATION_SECRET`.
 - The refresh service has no public domain and uses `/railway.cron.toml`, `NEVER`, and `0 15 * * 1`.
 - Node.js 22 remains the required runtime; add no dependencies.
 
@@ -28,12 +31,11 @@
 
 - `jobs/import-initial.ts`: parse the new bootstrap flag and pass an empty validated Semrush collection into the existing workflow.
 - `tests/workflows/import-initial-cli.test.ts`: own the CLI-mode, compatibility, and sanitized-output behavior.
+- `package.json`: load optional ignored local environment files for every standalone job.
 - `.env.example`: document the exact Airtable PAT scopes required by the schema command.
-- `tests/airtable/schema-bootstrap.test.ts`: prevent the PAT scope example from regressing.
 - `docs/operations/onboarding.md`: canonical agent-led clone-to-deploy runbook and Railway MCP sequence.
 - `README.md`: short human entry point plus copyable agent prompt.
 - `docs/operations/deployment.md`: keep the operator contract aligned with the onboarding guide and exact PAT requirements.
-- `tests/contracts/onboarding.test.ts`: assert documentation references real commands, contains every safety gate, and preserves web/refresh separation.
 
 ---
 
@@ -47,7 +49,7 @@
 **Interfaces:**
 
 - Consumes: `parseApolloCsv(csv: string)`, `parseSemrushPayload(value: unknown)`, and `runInitialImport({apolloRows, semrushRecords, repository, dryRun})`.
-- Produces: `npm run import:initial -- --apollo <path> --apollo-only [--dry-run]`; the existing `--semrush <path>` interface remains unchanged.
+- Produces: `npm run import:initial -- --apollo <path> --apollo-only --domains <path> [--dry-run]`; the existing `--semrush <path>` interface remains unchanged.
 
 - [ ] **Step 1: Write failing bootstrap and exclusivity tests**
 
@@ -61,8 +63,8 @@ const apollo = [
 
 it('dry-runs an Apollo-only roster as explicitly unenriched', async () => {
   const result = await runInitialImportCli(
-    ['--apollo', 'apollo.csv', '--apollo-only', '--dry-run'],
-    {readFile: () => apollo},
+    ['--apollo', 'apollo.csv', '--apollo-only', '--domains', 'domains.txt', '--dry-run'],
+    {readFile: (path) => path === 'apollo.csv' ? apollo : 'alpha.example\n'},
   );
 
   expect(result.exitCode).toBe(0);
@@ -124,13 +126,18 @@ type CliArguments = {
   apollo: string;
   semrush?: string;
   apolloOnly: boolean;
+  domains?: string;
   dryRun: boolean;
   fixtureState?: string;
 };
 ```
 
 Initialize `apolloOnly` to `false`, recognize the valueless flag next to
-`--dry-run`, and validate exactly one provider mode:
+`--dry-run`, parse `--domains` as a file-path argument, and validate exactly
+one provider mode. Apollo-only mode requires `--domains`; Semrush mode rejects
+it. Before `runInitialImport`, normalize both the Apollo websites and each
+nonblank requested-domain line with the shared `normalizeDomain`, reject
+duplicates/invalids, and require exact set equality.
 
 ```ts
 if (argument === '--apollo-only') {
@@ -142,8 +149,21 @@ if (!apollo) throw new TypeError('--apollo is required');
 if (Boolean(semrush) === apolloOnly) {
   throw new TypeError('exactly one of --semrush or --apollo-only is required');
 }
-return {apollo, semrush, apolloOnly, dryRun, fixtureState};
+if (apolloOnly !== Boolean(domains)) {
+  throw new TypeError('--domains is required only with --apollo-only');
+}
+return {apollo, semrush, apolloOnly, domains, dryRun, fixtureState};
 ```
+
+Extend the CLI test file with literal line-delimited domain inputs that prove:
+
+- missing `--domains` fails in Apollo-only mode;
+- `--domains` fails in Semrush mode;
+- blank or invalid requested domains fail;
+- normalized duplicates such as `www.alpha.example` plus `alpha.example` fail;
+- an extra/unknown domain fails;
+- an omitted Apollo roster domain fails;
+- an exact normalized match succeeds without printing the list.
 
 At the provider boundary, avoid reading a Semrush file in bootstrap mode:
 
@@ -180,7 +200,6 @@ git commit -m "feat: support Apollo-only roster bootstrap"
 
 **Files:**
 
-- Modify: `tests/airtable/schema-bootstrap.test.ts`
 - Modify: `.env.example:1-4`
 - Modify: `docs/operations/deployment.md:5-19`
 
@@ -189,40 +208,7 @@ git commit -m "feat: support Apollo-only roster bootstrap"
 - Consumes: Airtable schema endpoints used by `ensureAirtableSchema` and record endpoints used by `AirtableCompetitorRepository`.
 - Produces: one exact PAT scope contract: `data.records:read`, `data.records:write`, `schema.bases:read`, and `schema.bases:write`, limited to the selected base.
 
-- [ ] **Step 1: Add a failing scope-contract test**
-
-Import `readFileSync` from `node:fs` in
-`tests/airtable/schema-bootstrap.test.ts`, then add:
-
-```ts
-it('documents every Airtable scope required by schema and record setup', () => {
-  const example = readFileSync('.env.example', 'utf8');
-  const deployment = readFileSync('docs/operations/deployment.md', 'utf8');
-  for (const scope of [
-    'data.records:read',
-    'data.records:write',
-    'schema.bases:read',
-    'schema.bases:write',
-  ]) {
-    expect(example).toContain(scope);
-    expect(deployment).toContain(scope);
-  }
-  expect(example).toMatch(/scoped to this one .*base/i);
-});
-```
-
-- [ ] **Step 2: Run the focused test and confirm it fails**
-
-Run:
-
-```bash
-npm test -- tests/airtable/schema-bootstrap.test.ts
-```
-
-Expected: FAIL because `.env.example` omits `schema.bases:write` and the
-deployment guide does not yet list PAT scopes.
-
-- [ ] **Step 3: Correct both credential references**
+- [ ] **Step 1: Correct both credential references**
 
 Change the opening comment in `.env.example` to:
 
@@ -242,104 +228,46 @@ Use an Airtable PAT limited to the selected base with
 read-only schema access is insufficient.
 ```
 
-- [ ] **Step 4: Run schema and security tests**
+- [ ] **Step 2: Review the documentation diff**
 
-Run:
+Confirm both references name the same four scopes, limit the PAT to one
+selected base, and contain no example credential value. Then run:
 
 ```bash
-npm test -- tests/airtable/schema-bootstrap.test.ts tests/security/no-secret-exposure.test.ts
+git diff --check
 ```
 
-Expected: all tests pass and no credential assignment is detected.
+Expected: no whitespace errors.
 
-- [ ] **Step 5: Commit the credential contract**
+- [ ] **Step 3: Commit the credential contract**
 
 ```bash
-git add .env.example docs/operations/deployment.md tests/airtable/schema-bootstrap.test.ts
+git add .env.example docs/operations/deployment.md
 git commit -m "docs: correct Airtable setup scopes"
 ```
 
 ---
 
-### Task 3: Add the tested agent onboarding runbook and README prompt
+### Task 3: Add the agent onboarding runbook and README prompt
 
 **Files:**
 
-- Create: `tests/contracts/onboarding.test.ts`
 - Create: `docs/operations/onboarding.md`
 - Modify: `README.md`
+- Modify: `.env.example`
+- Modify: `docs/operations/deployment.md`
 
 **Interfaces:**
 
 - Consumes: package scripts `airtable:schema`, `import:initial`, `enrich`,
-  `test`, and `build`; Railway MCP capabilities `whoami`, `list_workspaces`,
-  `create_project`, `create_deployment`, `set_variables`, `update_service`,
-  `generate_domain`, `get_service_config`, `get_status`, and `get_logs`.
+  `test`, and `build`; Railway MCP read-only identity/workspace discovery plus
+  active operations `create_project`, `create_deployment`, `set_variables`,
+  `update_service`, `generate_domain`, `get_service_config`, `redeploy`,
+  `get_status`, and `get_logs`.
 - Produces: a canonical runbook at `docs/operations/onboarding.md` and a
   copyable README prompt that routes agents to it.
 
-- [ ] **Step 1: Write a failing documentation contract test**
-
-Create `tests/contracts/onboarding.test.ts`:
-
-```ts
-import {readFileSync} from 'node:fs';
-import {describe, expect, it} from 'vitest';
-
-const read = (path: string) => readFileSync(path, 'utf8');
-
-describe('self-service onboarding contract', () => {
-  it('routes a fresh clone through the canonical agent runbook', () => {
-    const readme = read('README.md');
-    expect(readme).toContain('docs/operations/onboarding.md');
-    expect(readme).toMatch(/copy.*prompt|agent prompt/i);
-    expect(readme).toMatch(/ask me for one input at a time/i);
-  });
-
-  it('documents real commands, provider branches, and separate approvals', () => {
-    const guide = read('docs/operations/onboarding.md');
-    const scripts = (JSON.parse(read('package.json')) as {scripts: Record<string, string>}).scripts;
-    for (const name of ['airtable:schema', 'import:initial', 'enrich']) {
-      expect(scripts[name]).toBeTruthy();
-      expect(guide).toContain(`npm run ${name}`);
-    }
-    expect(guide).toContain('--apollo-only');
-    expect(guide).toMatch(/request.*website domains/i);
-    expect(guide).toMatch(/confirmed.*valid.*Apollo roster/i);
-    expect(guide).toMatch(/approval.*live Airtable import/is);
-    expect(guide).toMatch(/approval.*partial enrichment/is);
-    expect(guide).toMatch(/approval.*Railway/is);
-    expect(guide).toMatch(/missing.*absent.*never.*zero/is);
-  });
-
-  it('uses Railway MCP with distinct web and refresh contracts', () => {
-    const guide = read('docs/operations/onboarding.md');
-    for (const tool of [
-      'whoami', 'list_workspaces', 'create_project', 'create_deployment',
-      'set_variables', 'update_service', 'generate_domain',
-      'get_service_config', 'get_status',
-    ]) expect(guide).toContain(tool);
-    expect(guide).toContain('/railway.cron.toml');
-    expect(guide).toContain('0 15 * * 1');
-    expect(guide).toMatch(/refresh service.*no public domain/is);
-    expect(guide).toMatch(/web service.*must not receive.*APIFY_TOKEN/is);
-    expect(guide).toMatch(/present.*missing/i);
-  });
-});
-```
-
-- [ ] **Step 2: Run the new contract test and confirm it fails**
-
-Run:
-
-```bash
-npm test -- tests/contracts/onboarding.test.ts
-```
-
-Expected: FAIL because the onboarding guide does not exist and the README has
-no agent prompt.
-
-- [ ] **Step 3: Create the canonical onboarding guide**
+- [ ] **Step 1: Create the canonical onboarding guide**
 
 Create `docs/operations/onboarding.md` with these sections in this order:
 
@@ -356,6 +284,7 @@ Create `docs/operations/onboarding.md` with these sections in this order:
 ### Branch B: Apify Semrush data is missing
 ## Approval gate: live Airtable import
 ## 5. Import the roster
+## Approval gate: live Apify enrichment
 ## 6. Run and verify missing Semrush enrichment
 ## Approval gate: partial enrichment
 ## 7. Prepare Railway MCP
@@ -375,9 +304,9 @@ npm run enrich -- --provider-fixture tests/fixtures/providers/semrush-sample.jso
 npm run build -- --webpack
 npm run airtable:schema
 npm run import:initial -- --apollo <apollo.csv> --semrush <semrush.json> --dry-run
-npm run import:initial -- --apollo <apollo.csv> --apollo-only --dry-run
+npm run import:initial -- --apollo <apollo.csv> --apollo-only --domains <absolute-temp-domain-file> --dry-run
 npm run import:initial -- --apollo <apollo.csv> --semrush <semrush.json>
-npm run import:initial -- --apollo <apollo.csv> --apollo-only
+npm run import:initial -- --apollo <apollo.csv> --apollo-only --domains <absolute-temp-domain-file>
 npm run enrich
 ```
 
@@ -387,37 +316,60 @@ arguments. For the missing-export branch, require the agent to:
 
 1. Parse and normalize the Apollo websites through the dry-run command.
 2. Ask the user for a website-domain list or confirmation of the normalized
-   Apollo list.
-3. Reject invalid, duplicate, unknown, or incomplete confirmation; the first
-   version requires exact equality with the valid active Apollo roster.
-4. Import with `--apollo-only` only after the live-import approval.
+   Apollo list, save it to a user-only line-delimited file in an OS temporary
+   directory outside the repository, and pass its absolute path through
+   `--domains` for preview and live import. Remove it after the flow.
+3. Let the CLI reject invalid, duplicate, unknown, extra, or incomplete
+   confirmation; the first version requires exact equality with the valid
+   active Apollo roster.
+4. Import with `--apollo-only --domains <absolute-temp-domain-file>` only after the live-import approval.
 5. Check refresh variable names as present/missing.
-6. Run `npm run enrich`, which triggers `pro100chok/semrush-scraper` through the
+6. Before approval, start `npm run dev -- --webpack` from the same ignored
+   `.env.local` used by the job, with loopback `APP_BASE_URL` and one shared
+   local cache secret; require the health endpoint to succeed.
+7. Obtain separate approval for the live provider-costing enrichment, then run
+   `npm run enrich`, which triggers `pro100chok/semrush-scraper` through the
    existing Apify client.
-7. Report processed, succeeded, failed, cache status, run ID, and domain
-   identities without raw provider records.
+8. Require succeeded status, true cache invalidation, and complete domain
+   coverage; otherwise enter the partial/result gate. Report processed,
+   succeeded, failed, cache status, run ID, and domain identities without raw
+   provider records.
 
-For Railway MCP, write a numbered tool sequence using the capability names in
-the test. State that `create_deployment` requires a user-confirmed GitHub
-`owner/name` and can trigger an initial build before configuration. Configure:
+For Railway MCP, begin with read-only capability/schema discovery for every
+active operation in the Interfaces block. If a name or argument differs, stop
+before mutation and confirm an equivalent's schema. Never use `list_variables`;
+`get_service_config` returns `variableNames` without values. Before the Railway
+approval, use only read-only discovery, identity/workspace lookup, and user
+confirmation of GitHub `owner/name` plus branch. After approval, call
+`create_project`, then use `create_deployment` once to create each GitHub-backed
+service. Because this can trigger an unconfigured initial build, configure with
+`update_service` (which does not accept `skipDeploys`) and
+`set_variables(skipDeploys: true)`, inspect with `get_service_config`, and call
+`redeploy` once per fully configured service. Configure:
 
 - Web: `Dockerfile`, `npm start`, `/api/health`, `ON_FAILURE`, 3 retries, one
-  generated public domain, Airtable variables only.
+  generated public domain, Airtable variables plus `CACHE_INVALIDATION_SECRET`.
 - Refresh: the same repo/branch, `/railway.cron.toml`, no domain,
   `/usr/bin/timeout --signal=TERM --kill-after=30s 15m npm run enrich`, `NEVER`,
   `0 15 * * 1`, Airtable + Apify + `APP_BASE_URL` + cache secret variables.
 
-Include the exact rule: "The web service must not receive `APIFY_TOKEN`,
-`APP_BASE_URL`, or `CACHE_INVALIDATION_SECRET`; the refresh service has no
-public domain."
+Include the exact rule: "The web service must not receive `APIFY_TOKEN` or
+`APP_BASE_URL`; both services receive the same server-only
+`CACHE_INVALIDATION_SECRET`; the refresh service has no public domain."
 
-Tell the agent to use `get_service_config` to verify variable names without
-retrieving values, `get_status` to follow deployments, and `get_logs` only for
-a failed service with secret-bearing output redacted. Resource creation or a
-triggered deployment is not success; `/api/health` must return `200` and
-`status: ok`.
+Tell the agent to use `get_service_config` to verify `variableNames` without
+retrieving values, `get_status` to follow configured redeployments, and
+redacted `get_logs` only for a failed service. Resource creation or an initial
+build is not success; `/api/health` must return `200` and `status: ok` after the
+configured redeploy.
 
-- [ ] **Step 4: Expand the README with an entry point and copyable prompt**
+Correct `.env.example` and `docs/operations/deployment.md` so both services
+receive the same server-only `CACHE_INVALIDATION_SECRET`; only refresh receives
+`APIFY_TOKEN` and `APP_BASE_URL`. Label the initial dry-run record budget as an
+incoming-only estimate and explain that the live import rechecks the selected
+Airtable base before writing.
+
+- [ ] **Step 2: Expand the README with an entry point and copyable prompt**
 
 Keep the local-start block, then add a `## Deploy your own tracker` section
 containing this prompt:
@@ -427,7 +379,7 @@ Follow docs/operations/onboarding.md to deploy my own competitor tracker. Ask
 me for one input at a time, never print or repeat secret values, and stop at
 every approval gate. If I do not have an Apify Semrush export, request my list
 of website domains, validate it against the Apollo roster, bootstrap the roster
-with --apollo-only, and run the repository's Apify enrichment job. Use Railway
+with --apollo-only and --domains, and run the repository's Apify enrichment job. Use Railway
 MCP for infrastructure and finish with the runbook's verification handoff.
 ```
 
@@ -435,22 +387,24 @@ Explain in one sentence that the user can paste the prompt into a coding agent
 with repository access and a connected Railway MCP. Link the detailed
 onboarding guide and existing operator deployment contract.
 
-- [ ] **Step 5: Run onboarding, release-contract, and security tests**
+- [ ] **Step 3: Review the complete onboarding flow**
 
-Run:
+Read the README prompt and runbook once from the perspective of a fresh agent.
+Confirm every documented `npm run` name exists in `package.json`, all approval
+gates are separate, the missing-export branch requests domains and
+runs Apify enrichment, web/refresh variables remain separated, and the final
+handoff does not claim resource creation is deployment success. Then run:
 
 ```bash
-npm test -- tests/contracts/onboarding.test.ts tests/contracts/skills.test.ts tests/config/railway-cron.test.ts tests/security/no-secret-exposure.test.ts
+git diff --check
 ```
 
-Expected: all tests pass; every documented package command exists; Railway web
-and refresh settings remain distinct; no committed credential assignment is
-found.
+Expected: no whitespace errors.
 
-- [ ] **Step 6: Commit the onboarding documentation**
+- [ ] **Step 4: Commit the onboarding documentation**
 
 ```bash
-git add README.md docs/operations/onboarding.md tests/contracts/onboarding.test.ts
+git add README.md .env.example docs/operations/deployment.md docs/operations/onboarding.md
 git commit -m "docs: add agent-led deployment onboarding"
 ```
 
@@ -482,11 +436,13 @@ Expected: all Vitest suites pass.
 
 ```bash
 npx tsc --noEmit
-node .agents/skills/competitor-data-contracts/scripts/generate-semrush-schema.mjs --check
+node scripts/verify-semrush-schema-reference.mjs
 ```
 
-Expected: TypeScript exits zero and the generated Semrush schema reference has
-no unreviewed drift.
+Expected: TypeScript exits zero and the committed Semrush schema reference
+matches its recorded source metadata. When the private raw Apify source export
+is available, additionally run the skill generator with `--check` to detect
+payload drift; a clean public clone does not contain that ignored export.
 
 - [ ] **Step 3: Build the production application**
 
@@ -496,7 +452,16 @@ npm run build -- --webpack
 
 Expected: the Next.js production build succeeds on Node.js 22.
 
-- [ ] **Step 4: Inspect the final diff and repository state**
+- [ ] **Step 4: Verify the Node 22 container release path**
+
+```bash
+docker build -t competitor-tracker-onboarding-verify .
+```
+
+Expected: every Docker test/build stage succeeds from the repository's Node 22
+base image.
+
+- [ ] **Step 5: Inspect the final diff and repository state**
 
 ```bash
 git diff --check
@@ -508,7 +473,7 @@ Expected: no whitespace errors; only pre-existing unrelated files such as
 `.DS_Store` remain untracked; commits exist for the CLI contract, Airtable
 scope correction, and onboarding documentation.
 
-- [ ] **Step 5: Report completion without claiming live deployment**
+- [ ] **Step 6: Report completion without claiming live deployment**
 
 The handoff must distinguish repository verification from actions the future
 onboarding agent performs against a user's Airtable, Apify, and Railway
