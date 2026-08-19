@@ -65,6 +65,14 @@ describe('transformSemrushCompany', () => {
     expect(evidence.company.calculated.aiCountriesObservedCount).toBe(2);
   });
 
+  it('preserves provider-ranked AI cited sources as observed evidence', () => {
+    const evidence = transformSemrushCompany(semrushFixture[0], context);
+
+    expect(evidence.company.observed.aiTopCitedSources).toEqual([
+      {domain: 'source.example', mentions: 1},
+    ]);
+  });
+
   it('projects classified direct-field groups and identifies normalized keyword and ad records', () => {
     const evidence = transformSemrushCompany(semrushFixture[0], context);
 

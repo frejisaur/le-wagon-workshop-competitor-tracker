@@ -1,6 +1,6 @@
 import type {DashboardValue} from '@/lib/domain/dashboard';
 
-type ValueFormat = 'number' | 'percent' | 'text';
+type ValueFormat = 'number' | 'percent' | 'points' | 'text';
 export type MovementTrend = 'beneficial' | 'adverse' | 'neutral';
 
 export type KpiMetric = {
@@ -15,7 +15,8 @@ function formatValue(value: DashboardValue['value'], format: ValueFormat = 'numb
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'string' || format === 'text') return String(value);
   if (format === 'percent') return new Intl.NumberFormat('en-US', {style: 'percent', maximumFractionDigits: 1}).format(value);
-  return new Intl.NumberFormat('en-US', {maximumFractionDigits: 1}).format(value);
+  const formatted = new Intl.NumberFormat('en-US', {maximumFractionDigits: 1}).format(value).replace(/^-/, '−');
+  return format === 'points' ? `${formatted} pts` : formatted;
 }
 
 function movementCopy(movement: NonNullable<KpiMetric['movement']>): string {

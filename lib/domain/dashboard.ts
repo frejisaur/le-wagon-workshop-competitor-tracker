@@ -77,6 +77,7 @@ export const CompanyResponseSchema = z.object({
   identity: z.object({domain: z.string().min(1), displayName: z.string().min(1).optional(), segment: z.string().min(1).optional(), country: z.string().min(1).optional()}).strict(),
   status: DashboardStatusSchema,
   freshness: FreshnessSchema,
+  enrichedAt: IsoTimestampSchema.optional(),
   recoveryMessage: z.string().min(1).optional(),
   kpis: z.object({authorityScore: DashboardValueSchema, organicTraffic: DashboardValueSchema, organicTraffic30DayMovement: DashboardValueSchema, organicKeywords: DashboardValueSchema, aiBenchmarkGap: DashboardValueSchema, referringDomains: DashboardValueSchema}).strict(),
   trend: z.array(z.object({
@@ -97,7 +98,14 @@ export const CompanyResponseSchema = z.object({
   competitors: z.array(z.object({domain: z.string().min(1), organicTraffic: z.number().finite().nullable(), organicKeywords: z.number().finite().nullable(), commonKeywords: z.number().finite().nullable()}).strict()),
   paidCompetitors: z.object({classification: z.enum(['observed', 'calculated']), source: z.string().min(1).optional(), database: z.string().min(1).optional(), observedAt: IsoTimestampSchema.optional(), calculatedAt: IsoTimestampSchema.optional(), rows: z.array(z.object({domain: z.string().min(1), paidTraffic: z.number().finite().nullable(), paidKeywords: z.number().finite().nullable(), commonKeywords: z.number().finite().nullable()}).strict())}).strict().optional(),
   countries: z.array(z.object({country: z.string().min(1), mentions: z.number().finite().nullable(), visibility: z.number().finite().nullable()}).strict()),
-  ai: z.object({visibility: DashboardValueSchema, benchmark: DashboardValueSchema, byLlm: z.array(z.object({llm: z.string().min(1), mentions: z.number().finite().nullable(), selfMentions: z.number().finite().nullable(), citedPages: z.number().finite().nullable()}).strict())}).strict(),
+  ai: z.object({
+    visibility: DashboardValueSchema,
+    benchmark: DashboardValueSchema,
+    mentions: DashboardValueSchema,
+    citedPages: DashboardValueSchema,
+    byLlm: z.array(z.object({llm: z.string().min(1), mentions: z.number().finite().nullable(), selfMentions: z.number().finite().nullable(), citedPages: z.number().finite().nullable()}).strict()),
+    topCitedSources: z.array(z.object({domain: z.string().min(1), mentions: z.number().finite().nullable()}).strict()).max(10),
+  }).strict(),
   authority: z.object({backlinks: DashboardValueSchema, referringDomains: DashboardValueSchema, followBacklinks: DashboardValueSchema, noFollowBacklinks: DashboardValueSchema, mozDomainAuthority: DashboardValueSchema.optional(), mozSpamScore: DashboardValueSchema.optional(), mozTopPages: z.array(z.object({url: z.string().url(), pageAuthority: z.number().finite().nullable()}).strict()).optional()}).strict(),
   paid: z.object({traffic: DashboardValueSchema, keywords: DashboardValueSchema, ads: z.array(z.object({paidAdId: z.string().min(1), keyword: z.string().nullable(), title: z.string().nullable(), landingUrl: z.string().url(), position: z.number().finite().nullable()}).strict())}).strict().optional(),
   publishedInsightState: z.enum(['current', 'stale', 'absent']),

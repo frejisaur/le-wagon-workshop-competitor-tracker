@@ -127,6 +127,24 @@ describe('prepareInsights', () => {
     expect(package_.evidence).toEqual(expect.arrayContaining([expect.objectContaining({ref: 'company:company-alpha:metric:organic_traffic'})]));
   });
 
+  it('includes curated AI cited sources in agent evidence and fingerprint inputs', () => {
+    const package_ = buildEvidencePackage({
+      company: {id: 'rec-company-alpha', fields: {
+        'Identity • Company ID': 'company-alpha',
+        'Identity • Canonical Domain': 'alpha.example',
+        'Observed • Source': 'semrush',
+        'Observed • AI Top Cited Sources JSON': JSON.stringify([{domain: 'source.example', mentions: 7}]),
+        'Observed • AI Top Cited Sources Observed Count': 1,
+      }},
+      keywords: [], paidAds: [],
+    });
+
+    expect(package_.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ref: 'company:company-alpha:metric:ai_top_cited_sources_json', classification: 'observed', value: [{domain: 'source.example', mentions: 7}]}),
+      expect.objectContaining({ref: 'company:company-alpha:metric:ai_top_cited_sources_observed_count', classification: 'observed', value: 1}),
+    ]));
+  });
+
   it('filters tampered quality issues, deterministically dedupes valid warnings, and caps evidence at the persisted limit', () => {
     const validIssues = Array.from({length: 25}, (_, index) => ({
       code: 'suspicious_moz_top_page', sourcePath: `moz.top_pages[${index}].url`, summary: `never forward ${index}`,

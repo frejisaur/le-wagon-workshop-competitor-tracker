@@ -14,7 +14,7 @@ const calculated = (value: number | null) => ({classification: 'calculated' as c
 const company: CompanyResponse = {
   companyId: 'alpha', identity: {domain: 'alpha.example', displayName: 'Alpha'}, status: 'succeeded', freshness: {lastSuccessfulRunAt: at, cachedAt: at, isStale: false},
   kpis: {authorityScore: observed(40), organicTraffic: observed(200), organicTraffic30DayMovement: calculated(.1), organicKeywords: observed(20), aiBenchmarkGap: calculated(.1), referringDomains: observed(12)},
-  trend: [], demand: {nonBrandShare: calculated(.5)}, keywords: [], landingPages: [], competitors: [], countries: [], ai: {visibility: observed(null), benchmark: observed(null), byLlm: []}, authority: {backlinks: observed(null), referringDomains: observed(null), followBacklinks: observed(null), noFollowBacklinks: observed(null)},
+  trend: [], demand: {nonBrandShare: calculated(.5)}, keywords: [], landingPages: [], competitors: [], countries: [], ai: {visibility: observed(null), benchmark: observed(null), mentions: observed(null), citedPages: observed(null), byLlm: [], topCitedSources: []}, authority: {backlinks: observed(null), referringDomains: observed(null), followBacklinks: observed(null), noFollowBacklinks: observed(null)},
   publishedInsightState: 'current',
   publishedInsight: {overallConfidence: 'high', generatedAt: at, workflow: {evidenceFingerprint: 'fingerprint-current', runId: 'run-sanitized', harness: 'fixture-harness', model: 'fixture-model', skillVersion: '1.0.0', workflowVersion: '1.0.0'}, claims: [
     {claimId: 'claim-observed', conclusion: 'Observed traffic signal', classification: 'observed', confidence: 'high', confidenceReason: 'Direct provider observation.', evidenceRefs: ['company:alpha:traffic', 'keyword:alpha:one']},

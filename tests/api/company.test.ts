@@ -9,7 +9,9 @@ import {fingerprintEvidence} from '@/lib/agents/evidence/fingerprint';
 const snapshot: DashboardSnapshot = {
   companies: [{id: 'rec-alpha', fields: {
     'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example', 'Observed • Source': 'semrush', 'Observed • At': '2026-08-18T12:00:00.000Z', 'Observed • Database': 'ca',
-    'Observed • Organic Traffic': 20, 'Observed • Organic Keywords': 2, 'Observed • Authority Score': 40, 'Observed • AI Visibility': 0, 'Observed • AI Visibility Benchmark': 1,
+    'Observed • Organic Traffic': 20, 'Observed • Organic Keywords': 2, 'Observed • Authority Score': 40, 'Observed • AI Visibility': 29, 'Observed • AI Visibility Benchmark': 31,
+    'Observed • AI Mentions': 583, 'Observed • AI Cited Pages': 208,
+    'Observed • AI Top Cited Sources JSON': JSON.stringify([{domain: 'example-source.test', mentions: 17}]),
     'Observed • Organic Competitors JSON': JSON.stringify([{domain: 'rival.example', organicTraffic: 10}]),
     'Calculated • Compact Organic Trend JSON': JSON.stringify([{date: '2026-08-01', organicTraffic: 20, organicKeywords: 9, organicTrafficCostUsd: 31, brandedTraffic: 8, nonBrandTraffic: 12, paidTraffic: 4, paidKeywords: 2, paidTrafficCostUsd: 7, serpFeatureTraffic: 6}]),
     'Calculated • Landing Page Portfolio JSON': JSON.stringify([{normalizedLandingUrl: 'https://alpha.example/', keywordCount: 2, estimatedTraffic: 20, keywords: ['alpha']}]),
@@ -44,6 +46,16 @@ describe('company response', () => {
       paidKeywords: {classification: 'calculated', value: 2},
       paidTrafficCostUsd: {classification: 'calculated', value: 7},
       serpFeatureTraffic: {classification: 'calculated', value: 6},
+    });
+    expect(response).toMatchObject({
+      enrichedAt: '2026-08-18T12:00:00.000Z',
+      ai: {
+        visibility: {classification: 'observed', value: 29},
+        benchmark: {classification: 'observed', value: 31},
+        mentions: {classification: 'observed', value: 583},
+        citedPages: {classification: 'observed', value: 208},
+         topCitedSources: [{domain: 'example-source.test', mentions: 17}],
+       },
     });
   });
 

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import {cleanup, render, screen, within, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, it} from 'vitest';
 import {CompanyWorkspace, parseCompanyTab, serializeCompanyTab} from '@/components/company/CompanyWorkspace';
+import {companyDestination} from '@/components/company/CompanySwitcher';
 import type {CompanyResponse} from '@/lib/domain/dashboard';
 
 afterEach(cleanup);
@@ -12,8 +13,8 @@ const observed = (value: number | null) => ({classification: 'observed' as const
 const calculated = (value: number | null) => ({classification: 'calculated' as const, value, source: 'semrush', database: 'ca', calculatedAt: '2026-08-18T12:00:00.000Z'});
 
 const company: CompanyResponse = {
-  companyId: 'alpha', identity: {domain: 'alpha.example', displayName: 'Alpha', country: 'Canada', segment: 'Enterprise'}, status: 'succeeded', freshness,
-  kpis: {authorityScore: observed(42), organicTraffic: observed(12_000), organicTraffic30DayMovement: calculated(0.15), organicKeywords: observed(900), aiBenchmarkGap: calculated(0.2), referringDomains: observed(450)},
+  companyId: 'alpha', identity: {domain: 'alpha.example', displayName: 'Alpha', country: 'Canada', segment: 'Enterprise'}, status: 'succeeded', freshness, enrichedAt: '2026-08-18T12:00:00.000Z',
+  kpis: {authorityScore: observed(42), organicTraffic: observed(12_000), organicTraffic30DayMovement: calculated(0.15), organicKeywords: observed(900), aiBenchmarkGap: calculated(-2), referringDomains: observed(450)},
   trend: [
     {date: '2024-08-01', organicTraffic: calculated(9_000), organicKeywords: calculated(700), organicTrafficCostUsd: calculated(30_000), brandedTraffic: calculated(2_700), nonBrandTraffic: calculated(6_300), paidTraffic: calculated(80), paidKeywords: calculated(12), paidTrafficCostUsd: calculated(1_200), serpFeatureTraffic: calculated(900)},
     {date: '2024-09-01', organicTraffic: calculated(null), organicKeywords: calculated(760), organicTrafficCostUsd: calculated(31_000), brandedTraffic: calculated(2_800), nonBrandTraffic: calculated(6_500), paidTraffic: calculated(null), paidKeywords: calculated(null), paidTrafficCostUsd: calculated(null), serpFeatureTraffic: calculated(950)},
@@ -23,13 +24,18 @@ const company: CompanyResponse = {
   keywords: [{keywordId: 'keyword-alpha', classification: 'observed', keyword: 'competitor research', landingUrl: 'https://alpha.example/research', position: 1, volume: 800, cpcUsd: 4.5, difficulty: 40, traffic: 100, intents: ['informational']}],
   landingPages: [{normalizedLandingUrl: 'https://alpha.example/research', keywordCount: 1, estimatedTraffic: 100, keywords: ['competitor research']}],
   competitors: [{domain: 'alpha.example', organicTraffic: 40_000, organicKeywords: 4_000, commonKeywords: 300}, {domain: 'rival.example', organicTraffic: 8_000, organicKeywords: null, commonKeywords: 24}],
-  countries: [{country: 'Canada', mentions: 5, visibility: 0.5}, {country: 'Zero country', mentions: 0, visibility: 0}],
-  ai: {visibility: observed(0.3), benchmark: observed(0.1), byLlm: [{llm: 'ChatGPT', mentions: 4, selfMentions: 1, citedPages: 2}]},
+  countries: [{country: 'ca', mentions: 5, visibility: 16}, {country: 'us', mentions: 0, visibility: 0}],
+  ai: {visibility: observed(29), benchmark: observed(31), mentions: observed(583), citedPages: observed(208), byLlm: [{llm: 'ChatGPT', mentions: 182, selfMentions: 1, citedPages: 82}], topCitedSources: [{domain: 'source.example', mentions: 17}]},
   authority: {backlinks: observed(1_200), referringDomains: observed(450), followBacklinks: observed(900), noFollowBacklinks: observed(300)},
   publishedInsightState: 'absent', evidence: [],
 };
 
 describe('company research workspace', () => {
+  it('preserves the active workspace when switching companies', () => {
+    expect(companyDestination('bravo/id', 'ai')).toBe('/companies/bravo%2Fid?tab=ai');
+    expect(companyDestination('bravo/id', 'overview')).toBe('/companies/bravo%2Fid');
+  });
+
   it('strictly bounds and canonically serializes supported workspace tabs', () => {
     expect(parseCompanyTab('?tab=unknown', true)).toBe('overview');
     expect(parseCompanyTab('?tab=paid', false)).toBe('overview');
@@ -46,10 +52,55 @@ describe('company research workspace', () => {
     expect(screen.getByText('No meaningful paid-search activity was observed in this enrichment.')).toBeInTheDocument();
     expect(screen.getByRole('list', {name: /key metrics/i})).toHaveClass('kpi-ledger');
     expect(screen.getByTestId('historical-chart')).toHaveAttribute('data-gap-count', '1');
+    expect(container.querySelector('.historical-chart__data')).not.toHaveAttribute('open');
+    expect(screen.getByText('View chart data (3 months)')).toBeInTheDocument();
     expect(screen.getByRole('table', {name: /organic traffic historical data/i})).toHaveTextContent('Not available');
     expect(within(screen.getByRole('table', {name: /organic competitors/i})).queryByText('alpha.example')).not.toBeInTheDocument();
     expect(screen.queryByText('Zero country')).not.toBeInTheDocument();
     expect(container.querySelector('.company-workspace__tabs')).toBeInTheDocument();
+  });
+
+  it('prioritizes a granular AI summary and formats visibility as points', () => {
+    render(<CompanyWorkspace company={company} initialTab="overview" />);
+    const aiHeading = screen.getByRole('heading', {name: 'AI presence'});
+    const historyHeading = screen.getByRole('heading', {name: /historical performance/i});
+    const tabs = screen.getAllByRole('tab').map((tab) => tab.textContent);
+
+    expect(aiHeading.compareDocumentPosition(historyHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tabs.slice(0, 3)).toEqual(['Overview', 'AI presence', 'Search']);
+    expect(screen.getByText('−2 pts')).toBeInTheDocument();
+    expect(screen.getByText('583')).toBeInTheDocument();
+    expect(screen.getByText('208')).toBeInTheDocument();
+  });
+
+  it('shows complete observed AI evidence with human geography and compact provenance', () => {
+    render(<CompanyWorkspace company={company} initialTab="ai" />);
+
+    expect(screen.getByText('29 pts')).toBeInTheDocument();
+    expect(screen.getByText('31 pts')).toBeInTheDocument();
+    expect(screen.getByText('Canada')).toBeInTheDocument();
+    expect(screen.getByText('16 pts')).toBeInTheDocument();
+    expect(screen.getByText('source.example')).toBeInTheDocument();
+    expect(screen.getByText('View provenance')).toBeInTheDocument();
+    expect(screen.queryByText(/cited-source domains are not available/i)).not.toBeInTheDocument();
+  });
+
+  it('uses a searchable company combobox and exposes local enrichment status', () => {
+    const comparisons = [{...company, companyId: 'bravo', identity: {...company.identity, displayName: 'Bravo', domain: 'bravo.example'}}];
+    render(<CompanyWorkspace company={company} initialTab="ai" comparison={comparisons} />);
+
+    expect(screen.getByRole('combobox', {name: /change company/i})).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', {name: /other companies/i})).not.toBeInTheDocument();
+    expect(screen.getByText('Enriched 2026-08-18 12:00 UTC')).toBeInTheDocument();
+    expect(screen.getByText('Status: Data current')).toBeInTheDocument();
+  });
+
+  it('keeps workspace tabs readable as a horizontal rail on narrow screens', () => {
+    const styles = readFileSync('components/company/company-enhancements.module.scss', 'utf8');
+    expect(styles).toMatch(/\.tabs\s+\[role='tablist'\][\s\S]*overflow-x:\s*auto/);
+    expect(styles).toMatch(/\.tabs\s+\[role='tab'\][\s\S]*flex:\s*0 0 auto/);
+    expect(styles).toMatch(/\.tabs\s+\[role='tab'\][\s\S]*white-space:\s*nowrap/);
+    expect(styles).toMatch(/\.tabs\s+\[role='tab'\][\s\S]*padding-inline:\s*var\(--space-4\)/);
   });
 
   it('defensively excludes an already-parseable self competitor URL with default port and path', () => {
@@ -101,7 +152,7 @@ describe('company research workspace', () => {
     await waitFor(() => expect(screen.getByRole('tab', {name: /ai presence/i})).toHaveAttribute('aria-selected', 'true'));
     screen.getByRole('tab', {name: /ai presence/i}).focus();
     await user.keyboard('{ArrowRight}');
-    expect(screen.getByRole('tab', {name: 'Authority'})).toHaveFocus();
+    expect(screen.getByRole('tab', {name: 'Search'})).toHaveFocus();
   });
 
   it('caps explicit comparison input deterministically and renders responsive chart/table hooks', () => {

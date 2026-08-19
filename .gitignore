@@ -3,6 +3,9 @@ node_modules/
 .next/
 playwright-report/
 test-results/
+dogfood-output/
+next-env.d.ts
+*.tsbuildinfo
 
 # Local credentials and environment overrides
 .env

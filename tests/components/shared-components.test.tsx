@@ -54,6 +54,11 @@ describe('shared dashboard components', () => {
     const main = screen.getByRole('main');
     expect(screen.getAllByRole('main')).toHaveLength(1);
     expect(screen.getAllByRole('navigation', {name: /primary/i})).toHaveLength(1);
+    expect(screen.getByRole('link', {name: 'All companies'})).toHaveAttribute('href', '/');
+    expect(screen.queryByRole('link', {name: 'Saved views'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', {name: 'Insight reviews'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', {name: 'Evidence sources'})).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', {name: 'Refresh status'})).not.toBeInTheDocument();
     const skipLink = screen.getByRole('link', {name: /skip to content/i});
     expect(skipLink).toHaveAttribute('href', '#main-content');
     await user.tab();
@@ -182,6 +187,8 @@ describe('shared dashboard components', () => {
     expect(compiled).toMatch(/\.cds--select-input\s*\{[^}]*appearance:\s*none/s);
     expect(compiled).toMatch(/\.cds--text-input\s*\{[^}]*background-color:\s*var\(--cds-field\)/s);
     expect(compiled).toMatch(/:root\s*\{[^}]*--cds-layout-size-height-md:\s*2\.5rem/s);
+    expect(compiled).toContain('.cds--combo-box');
+    expect(compiled).toContain('.cds--tabs');
   });
 
   it('applies the approved tokenized page title style after Carbon reset', () => {

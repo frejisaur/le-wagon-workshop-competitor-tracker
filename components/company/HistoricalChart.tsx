@@ -153,8 +153,8 @@ export function HistoricalChart({trend, comparison = []}: {trend: CompanyRespons
 
     {tooltip ? <div className="historical-chart__tooltip" role="tooltip"><strong>{tooltip.company}</strong><p>Date: {tooltip.date}</p><p>Value: {formatted(typeof tooltip.value.value === 'number' ? tooltip.value.value : null, metric.format)}</p><p>Source: {tooltip.value.source ?? 'Not available'}</p><p>Database: {tooltip.value.database ?? 'Not available'}</p><p>Classification: {tooltip.value.classification}</p></div> : null}
 
-    <details className="historical-chart__data" open>
-      <summary>View underlying monthly data</summary>
+    <details className="historical-chart__data">
+      <summary>View chart data ({rows.length} {rows.length === 1 ? 'month' : 'months'})</summary>
       <div className="company-table__scroll">
         <table className="company-table" aria-label={`${metric.text} historical data`}><caption>{metric.text} calculated monthly series</caption><thead><tr><th scope="col">Date</th><th scope="col" className="company-table__numeric">{metric.column}</th><th scope="col">Provenance</th>{comparisonRows.map(({company}) => <th scope="col" className="company-table__numeric" key={company.companyId}>{company.identity.displayName ?? company.identity.domain}</th>)}</tr></thead><tbody>{rows.map((point) => <tr key={point.date}><td>{point.date}</td><td className="company-table__numeric">{formatted(rawValue(point, metric.id), metric.format)}</td><td>{provenance(point[metric.id])}</td>{comparisonRows.map(({company, rows: points}) => { const comparisonPoint = points.find((row) => row.date === point.date); return <td className="company-table__numeric" key={company.companyId}>{comparisonPoint ? `${formatted(rawValue(comparisonPoint, metric.id), metric.format)} · ${provenance(comparisonPoint[metric.id])}` : 'Not available'}</td>; })}</tr>)}</tbody></table>
       </div>

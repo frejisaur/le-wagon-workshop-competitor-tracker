@@ -4,8 +4,6 @@ import {Freshness} from './Freshness';
 import {SkipLink} from './SkipLink';
 import {WorkflowStatus} from './WorkflowStatus';
 
-const destinations = ['All companies', 'Saved views', 'Insight reviews', 'Evidence sources', 'Refresh status'];
-
 export function AppShell({children, status = 'succeeded', freshness, breadcrumb = 'Competitive landscape'}: {children: ReactNode; status?: DashboardStatus; freshness?: FreshnessValue; breadcrumb?: string}) {
   return <div className="app-shell">
     <SkipLink />
@@ -15,7 +13,7 @@ export function AppShell({children, status = 'succeeded', freshness, breadcrumb 
       <div className="app-shell__status">{freshness ? <Freshness freshness={freshness} /> : <WorkflowStatus status={status} />}</div>
     </header>
     <div className="app-shell__body">
-      <aside className="app-shell__sidebar"><nav aria-label="Primary"><ul className="app-shell__nav-list">{destinations.map((destination, index) => <li key={destination}><a className="app-shell__nav-link" href={index === 0 ? '/' : `#${destination.toLowerCase().replaceAll(' ', '-')}`} aria-current={index === 0 ? 'page' : undefined}>{destination}</a></li>)}</ul></nav></aside>
+      <aside className="app-shell__sidebar"><nav aria-label="Primary"><ul className="app-shell__nav-list"><li><a className="app-shell__nav-link" href="/" aria-current="page">All companies</a></li></ul></nav></aside>
       <div className="app-shell__content"><main id="main-content" tabIndex={-1}>{children}</main></div>
     </div>
   </div>;

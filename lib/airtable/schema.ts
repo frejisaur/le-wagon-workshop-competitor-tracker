@@ -31,7 +31,7 @@ const companies: AirtableSchemaTable = {
       'Observed • AI Visibility', 'Observed • AI Visibility Benchmark', 'Observed • AI Mentions', 'Observed • AI Cited Pages',
       'Observed • Top Country Traffic', 'Observed • Organic Competitors Observed Count', 'Observed • Paid Competitors Observed Count',
       'Observed • AI Countries Observed Count', 'Observed • AI by LLM Observed Count', 'Observed • SERP Codes Observed Count',
-      'Observed • Moz Top Pages Observed Count', 'Calculated • AI Countries Observed Count',
+      'Observed • AI Top Cited Sources Observed Count', 'Observed • Moz Top Pages Observed Count', 'Calculated • AI Countries Observed Count',
       'Calculated • Moz Top Pages Observed Count', 'Calculated • Top Keyword Sample Count',
     ),
     ...decimals(
@@ -41,7 +41,7 @@ const companies: AirtableSchemaTable = {
     ),
     ...longText(
       'Observed • Organic Competitors JSON', 'Observed • Paid Competitors JSON', 'Observed • AI Countries JSON',
-      'Observed • AI by LLM JSON', 'Observed • SERP Codes JSON', 'Observed • Moz Top Pages JSON',
+      'Observed • AI by LLM JSON', 'Observed • AI Top Cited Sources JSON', 'Observed • SERP Codes JSON', 'Observed • Moz Top Pages JSON',
       'Calculated • Inputs JSON', 'Calculated • Organic Competitors JSON', 'Calculated • Paid Competitors JSON',
       'Calculated • AI Countries JSON', 'Calculated • Moz Top Pages JSON', 'Calculated • Compact Organic Trend JSON',
       'Calculated • Landing Page Portfolio JSON', 'Quality • Issues JSON',

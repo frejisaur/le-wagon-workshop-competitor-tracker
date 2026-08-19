@@ -16,7 +16,7 @@ const base = CompanyResponseSchema.parse({
   keywords: [{keywordId: 'keyword-alpha', classification: 'observed', keyword: 'competitor research', landingUrl: 'https://alpha.example/research', position: 1, volume: 800, cpcUsd: 4.5, difficulty: 40, traffic: 100, intents: ['informational']}],
   landingPages: [{normalizedLandingUrl: 'https://alpha.example/research', keywordCount: 1, estimatedTraffic: 100, keywords: ['competitor research']}],
   competitors: [{domain: 'bravo.example', organicTraffic: 8_000, organicKeywords: 500, commonKeywords: 24}], countries: [{country: 'Canada', mentions: 5, visibility: 0.5}],
-  ai: {visibility: observed(0.3), benchmark: observed(0.1), byLlm: [{llm: 'ChatGPT', mentions: 4, selfMentions: 1, citedPages: 2}]},
+  ai: {visibility: observed(29), benchmark: observed(31), mentions: observed(583), citedPages: observed(208), byLlm: [{llm: 'ChatGPT', mentions: 182, selfMentions: 1, citedPages: 82}], topCitedSources: [{domain: 'source.example', mentions: 17}]},
   authority: {backlinks: observed(1_200), referringDomains: observed(450), followBacklinks: observed(900), noFollowBacklinks: observed(300)},
   paid: {traffic: observed(10), keywords: observed(2), ads: [{paidAdId: 'ad-alpha', keyword: 'competitor', title: 'Compare approaches', landingUrl: 'https://alpha.example/compare', position: 1}]},
   publishedInsightState: 'current', publishedInsight,
