@@ -91,3 +91,40 @@ Fix Round 1 validation: focused suite (14 passed), full suite (213 passed),
 TypeScript, Webpack production build, diff check, and emitted Carbon/local-font
 CSS scan passed. Default Turbopack remains restricted by the sandbox Sass
 helper local-port limitation.
+
+## Fix Round 2
+
+### RED → GREEN
+
+- RED: four focused regressions failed for the Carbon selector mismatch, the
+  no-retained running state, absent page-title rule, and insufficiently scoped
+  movement-classification rule.
+- GREEN: the focused suite now has 18 passing tests. It renders Carbon's actual
+  `Theme theme="white"` class and compiles the Sass to confirm `--cds-*`
+  variables are scoped to that emitted `.cds--white` selector.
+
+### Decisions and accessibility
+
+- The one Carbon light theme is now scoped to `.cds--white`, which is exactly
+  the class emitted by Carbon's root `Theme`; no second theme was introduced.
+- A running refresh with no retained data shows `Refresh running` and the same
+  dashboard-shaped five-cell skeleton used by the loading state. The optional
+  live announcement remains attached only to the meaningful notice.
+- The reusable `.page-title` restores the approved tokenized 24px/30px/500
+  hierarchy after Carbon's reset.
+- Movement provenance uses `--color-text-secondary` rather than the quieter
+  text token. The regression test checks its rendered class, compiled style,
+  and AA contrast ratio against both raised-white and subtle surfaces.
+
+### Fix Round 2 validation
+
+- `npm test -- tests/components/shared-components.test.tsx` — 18 passed.
+- `npm test` — 26 files / 217 tests passed.
+- `npx tsc --noEmit` — passed.
+- `npm run build` — blocked only by the sandbox's Turbopack Sass-helper local
+  port restriction (`Operation not permitted`).
+- `npm run build -- --webpack` — passed.
+- Emitted Webpack CSS contains local `@font-face` WOFF2 assets, `.cds--white`
+  Carbon variables including `--cds-background`, and the optimized
+  `.page-title,.workflow-status` weight rule; no external font URL was found.
+- `git diff --check` — passed.

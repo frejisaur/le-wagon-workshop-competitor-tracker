@@ -1,6 +1,8 @@
 import {readFileSync} from 'node:fs';
+import {Theme} from '@carbon/react';
 import userEvent from '@testing-library/user-event';
 import {cleanup, render, screen, within} from '@testing-library/react';
+import {compile} from 'sass';
 import {afterEach, describe, expect, it} from 'vitest';
 import type {DashboardValue, Freshness as FreshnessValue} from '@/lib/domain/dashboard';
 import {AppShell} from '@/components/shared/AppShell';
@@ -14,6 +16,20 @@ const calculated = (value: DashboardValue['value']): DashboardValue => ({classif
 const inferred = (value: DashboardValue['value']): DashboardValue => ({classification: 'inferred', value});
 
 afterEach(cleanup);
+
+function tokenValue(name: string): string {
+  const tokens = readFileSync('styles/tokens.css', 'utf8');
+  return new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`).exec(tokens)?.[1] ?? '';
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const luminance = (hex: string) => {
+    const channels = [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255).map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  };
+  const [light, dark] = [luminance(foreground), luminance(background)].sort((left, right) => right - left);
+  return (light + 0.05) / (dark + 0.05);
+}
 
 describe('shared dashboard components', () => {
   it('renders one five-value ledger with classification, movement text, and explicit unknowns', () => {
@@ -90,6 +106,13 @@ describe('shared dashboard components', () => {
     expect(screen.queryByText(/last successful data remains available/i)).not.toBeInTheDocument();
   });
 
+  it('renders a meaningful skeleton state for a running refresh without retained data', () => {
+    render(<ScreenState status="running" />);
+    expect(screen.getByText('Refresh running')).toBeInTheDocument();
+    expect(screen.getByTestId('screen-skeleton')).toHaveAttribute('data-geometry', 'dashboard');
+    expect(screen.queryByRole('heading', {name: /no companies/i})).not.toBeInTheDocument();
+  });
+
   it('renders a five-cell ledger-shaped loading skeleton plus empty and unknown recovery states', () => {
     const {rerender} = render(<ScreenState status="loading" />);
     expect(screen.getByTestId('screen-skeleton')).toHaveAttribute('data-geometry', 'dashboard');
@@ -143,5 +166,28 @@ describe('shared dashboard components', () => {
     expect(authoredRules).not.toMatch(/(?<![\w-])(?:[1-9]\d*(?:\.\d+)?)(?:px|rem|ms)\b|#[0-9a-fA-F]{3,8}\b|\brgba?\(/);
     expect(styles).toContain('CSS custom properties cannot be evaluated in media-query conditions');
     expect(styles).toContain('.screen-skeleton__ledger .kpi-ledger');
+  });
+
+  it('scopes compiled Carbon white variables to the class emitted by the Theme component', () => {
+    const {container} = render(<Theme theme="white"><span>Theme content</span></Theme>);
+    expect(container.firstElementChild).toHaveClass('cds--white');
+    const compiled = compile('styles/globals.scss', {loadPaths: ['node_modules']}).css;
+    expect(compiled).toMatch(/\.cds--white\s*\{[^}]*--cds-background:/s);
+    expect(compiled).not.toContain('.cds--theme--white');
+  });
+
+  it('applies the approved tokenized page title style after Carbon reset', () => {
+    const compiled = compile('styles/globals.scss', {loadPaths: ['node_modules']}).css;
+    expect(compiled).toMatch(/\.page-title\s*\{[^}]*font-size:\s*var\(--type-page-size\);[^}]*font-weight:\s*var\(--weight-medium\);[^}]*line-height:\s*var\(--type-page-line\)/s);
+  });
+
+  it('uses AA contrast for the rendered movement classification over approved surfaces', () => {
+    render(<KpiLedger metrics={[{label: 'Risk', value: observed(1), movement: {value: calculated(0.2), format: 'percent', trend: 'adverse'}}]} />);
+    expect(screen.getByText(/calculated movement/i)).toHaveClass('kpi-ledger__movement-classification');
+    const compiled = compile('styles/globals.scss', {loadPaths: ['node_modules']}).css;
+    expect(compiled).toMatch(/\.kpi-ledger__movement-classification\s*\{[^}]*color:\s*var\(--color-text-secondary\)/s);
+    const secondary = tokenValue('--color-text-secondary');
+    expect(contrastRatio(secondary, tokenValue('--color-surface-raised'))).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(secondary, tokenValue('--color-surface-subtle'))).toBeGreaterThanOrEqual(4.5);
   });
 });

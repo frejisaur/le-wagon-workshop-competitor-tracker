@@ -5,7 +5,7 @@
 @include reset.reset();
 
 /* The single root `Theme theme="white"` owns this Carbon light theme. */
-.cds--theme--white { @include theme.theme(); }
+.cds--white { @include theme.theme(); }
 
 @include meta.load-css('tokens.css');
 
@@ -31,6 +31,7 @@ a { color: var(--color-accent); }
 .app-shell__nav-link[aria-current='page'] { border-left-color: var(--color-accent); background: var(--color-accent-subtle); color: var(--color-accent); font-weight: var(--weight-medium); }
 .app-shell__content { min-width: 0; }
 .app-shell__content > main { width: min(100%, var(--content-max-width)); margin: 0 auto; padding: var(--space-5) var(--content-gutter) var(--space-7); }
+.page-title { margin: 0; font-size: var(--type-page-size); font-weight: var(--weight-medium); line-height: var(--type-page-line); }
 
 .workflow-status { display: inline-flex; align-items: center; min-height: var(--status-min-height); padding: var(--space-1) var(--space-2); border: var(--rule-width) solid currentColor; border-radius: var(--radius-tag); font-size: var(--type-label-size); font-weight: var(--weight-medium); line-height: var(--type-label-line); }
 .workflow-status[data-status='succeeded'] { color: var(--color-positive); }
@@ -50,6 +51,7 @@ a { color: var(--color-accent); }
 .kpi-ledger__label { color: var(--color-text-secondary); font-size: var(--type-label-size); font-weight: var(--weight-medium); line-height: var(--type-label-line); }
 .kpi-ledger__value { display: block; margin-top: var(--space-1); font-family: var(--font-data); font-size: var(--type-data-large-size); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; line-height: var(--type-data-large-line); }
 .kpi-ledger__classification { margin-top: var(--space-1); color: var(--color-text-quiet); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); text-transform: capitalize; }
+.kpi-ledger__movement-classification { color: var(--color-text-secondary); }
 .kpi-ledger__movement { margin-top: var(--space-1); color: var(--color-text-secondary); font-family: var(--font-data); font-size: var(--type-data-size); font-variant-numeric: tabular-nums; line-height: var(--type-data-line); }
 .kpi-ledger__movement[data-trend='beneficial'] { color: var(--color-positive); }
 .kpi-ledger__movement[data-trend='adverse'] { color: var(--color-negative); }

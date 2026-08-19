@@ -19,6 +19,8 @@ function DashboardSkeleton() {
 
 export function ScreenState({status, hasRetainedData = false, recoveryMessage, announce = false, children}: {status: ScreenStatus; hasRetainedData?: boolean; recoveryMessage?: string; announce?: boolean; children?: ReactNode}) {
   if (status === 'loading' && !hasRetainedData) return <DashboardSkeleton />;
+  const liveProps = announce ? {'aria-live': 'polite' as const, 'aria-atomic': true} : {};
+  if (status === 'running' && !hasRetainedData) return <section className="screen-state"><p className="screen-state__notice" data-status={status} {...liveProps}>Refresh running</p><DashboardSkeleton /></section>;
   if (status === 'empty') return <section className="screen-state__empty" aria-labelledby="empty-dashboard-heading"><h2 id="empty-dashboard-heading">No companies have been imported.</h2><p>Import a competitor roster to begin the landscape.</p></section>;
   if (status === 'unknown') return <section className="screen-state__unknown" role="alert" aria-labelledby="unknown-dashboard-heading"><h2 id="unknown-dashboard-heading">We could not determine the dashboard state.</h2><p>Retry the refresh or check the refresh status.</p></section>;
   const message = (status === 'loading' || status === 'running') && hasRetainedData
@@ -26,7 +28,6 @@ export function ScreenState({status, hasRetainedData = false, recoveryMessage, a
     : status === 'failed' && !hasRetainedData
       ? 'Refresh failed. Retry the refresh or check the refresh status.'
       : recoveryMessage ?? defaultRecovery[status];
-  const liveProps = announce ? {'aria-live': 'polite' as const, 'aria-atomic': true} : {};
   return <section className="screen-state">
     {message ? <p className="screen-state__notice" data-status={status} {...liveProps}>{message}</p> : null}
     {children}
