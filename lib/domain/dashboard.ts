@@ -75,7 +75,7 @@ export const CompanyResponseSchema = z.object({
   keywords: z.array(z.object({keywordId: z.string().min(1), classification: z.literal('observed'), keyword: z.string().min(1), landingUrl: z.string().url(), position: z.number().finite().nullable(), volume: z.number().finite().nullable(), cpcUsd: z.number().finite().nullable(), difficulty: z.number().finite().nullable(), traffic: z.number().finite().nullable(), intents: z.array(z.string())}).strict()),
   landingPages: z.array(z.object({normalizedLandingUrl: z.string().url(), keywordCount: z.number().int().nonnegative(), estimatedTraffic: z.number().finite().nullable(), keywords: z.array(z.string())}).strict()),
   competitors: z.array(z.object({domain: z.string().min(1), organicTraffic: z.number().finite().nullable(), organicKeywords: z.number().finite().nullable(), commonKeywords: z.number().finite().nullable()}).strict()),
-  paidCompetitors: z.object({classification: z.enum(['observed', 'calculated']), source: z.string().min(1).optional(), database: z.string().min(1).optional(), observedAt: IsoTimestampSchema.optional(), calculatedAt: IsoTimestampSchema.optional(), rows: z.array(z.object({domain: z.string().min(1), organicTraffic: z.number().finite().nullable(), organicKeywords: z.number().finite().nullable(), commonKeywords: z.number().finite().nullable()}).strict())}).strict().optional(),
+  paidCompetitors: z.object({classification: z.enum(['observed', 'calculated']), source: z.string().min(1).optional(), database: z.string().min(1).optional(), observedAt: IsoTimestampSchema.optional(), calculatedAt: IsoTimestampSchema.optional(), rows: z.array(z.object({domain: z.string().min(1), paidTraffic: z.number().finite().nullable(), paidKeywords: z.number().finite().nullable(), commonKeywords: z.number().finite().nullable()}).strict())}).strict().optional(),
   countries: z.array(z.object({country: z.string().min(1), mentions: z.number().finite().nullable(), visibility: z.number().finite().nullable()}).strict()),
   ai: z.object({visibility: DashboardValueSchema, benchmark: DashboardValueSchema, byLlm: z.array(z.object({llm: z.string().min(1), mentions: z.number().finite().nullable(), selfMentions: z.number().finite().nullable(), citedPages: z.number().finite().nullable()}).strict())}).strict(),
   authority: z.object({backlinks: DashboardValueSchema, referringDomains: DashboardValueSchema, followBacklinks: DashboardValueSchema, noFollowBacklinks: DashboardValueSchema, mozDomainAuthority: DashboardValueSchema.optional(), mozSpamScore: DashboardValueSchema.optional(), mozTopPages: z.array(z.object({url: z.string().url(), pageAuthority: z.number().finite().nullable()}).strict()).optional()}).strict(),
@@ -86,3 +86,11 @@ export const CompanyResponseSchema = z.object({
   evidence: z.array(EvidenceSchema),
 }).strict();
 export type CompanyResponse = z.infer<typeof CompanyResponseSchema>;
+
+/** Bounded comparison projection for the company workspace; detailed evidence never crosses this branch. */
+export const CompanyComparisonSchema = z.object({
+  companyId: z.string().min(1),
+  identity: z.object({domain: z.string().min(1), displayName: z.string().min(1).optional()}).strict(),
+  trend: CompanyResponseSchema.shape.trend,
+}).strict();
+export type CompanyComparison = z.infer<typeof CompanyComparisonSchema>;

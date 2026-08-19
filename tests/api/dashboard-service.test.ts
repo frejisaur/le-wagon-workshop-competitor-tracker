@@ -1,6 +1,7 @@
 import {describe, expect, it, vi} from 'vitest';
 import type {DashboardSnapshot} from '@/lib/airtable/types';
 import {DashboardService} from '@/lib/api/dashboard-service-core';
+import {CompanyComparisonSchema} from '@/lib/domain/dashboard';
 
 const snapshot: DashboardSnapshot = {companies: [{id: 'rec-alpha', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example'}}], keywords: [], paidAds: [], publishedInsights: [], reviews: [], system: []};
 
@@ -29,5 +30,21 @@ describe('DashboardService singleton contract', () => {
     expect(staleLandscape.status).toBe('stale'); expect(staleCompany?.status).toBe('stale'); expect(reload).toHaveBeenCalledTimes(1);
     resolveReload(snapshot);
     await vi.waitFor(() => expect(service.peek().state.status).toBe('succeeded'));
+  });
+
+  it('returns a deterministic bounded CompanyComparison projection from one cached snapshot load', async () => {
+    const companies = Array.from({length: 53}, (_, index) => ({id: `rec-${index}`, fields: {'Identity • Company ID': `company-${String(index).padStart(2, '0')}`, 'Identity • Canonical Domain': `company-${String(index).padStart(2, '0')}.example`, 'Calculated • Compact Organic Trend JSON': JSON.stringify([{date: '2026-08-01', organicTraffic: index}])}}));
+    const load = vi.fn(async (): Promise<DashboardSnapshot> => ({companies, keywords: [], paidAds: [], publishedInsights: [], reviews: [], system: []}));
+    const service = new DashboardService(load);
+
+    const workspace = await service.companyWorkspace('company-52');
+
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(workspace?.company.companyId).toBe('company-52');
+    expect(workspace?.comparisons).toHaveLength(51);
+    expect(workspace?.comparisons.map((item) => item.companyId)).toEqual(Array.from({length: 51}, (_, index) => `company-${String(index).padStart(2, '0')}`));
+    expect(JSON.stringify(workspace?.comparisons)).not.toMatch(/evidence|publishedInsight|reviewCandidate|raw/i);
+    expect(workspace?.comparisons[0]).toEqual({companyId: 'company-00', identity: {domain: 'company-00.example'}, trend: [{date: '2026-08-01', organicTraffic: expect.any(Object)}]});
+    expect(CompanyComparisonSchema.safeParse({...workspace?.comparisons[0], evidence: []}).success).toBe(false);
   });
 });

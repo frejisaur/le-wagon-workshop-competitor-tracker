@@ -1,5 +1,3 @@
-import {isIP} from 'node:net';
-
 const explicitScheme = /^[a-z][a-z0-9+.-]*:\/\//i;
 const hostnameLabel = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?|xn--[a-z0-9-]{1,59})$/i;
 const publicSuffix = /^(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/i;
@@ -22,7 +20,8 @@ function parsePublicUrl(value: string): URL | null {
 }
 
 function isPublicLookingHostname(hostname: string): boolean {
-  if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost') || isIP(hostname) !== 0 || hostname.length > 253) return false;
+  const ipLiteral = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':');
+  if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost') || ipLiteral || hostname.length > 253) return false;
   const labels = hostname.split('.');
   if (labels.length < 2 || labels.some((label) => !hostnameLabel.test(label))) return false;
   return publicSuffix.test(labels.at(-1) ?? '');

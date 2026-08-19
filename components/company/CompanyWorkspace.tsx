@@ -61,7 +61,7 @@ export function CompanyWorkspace({company, initialTab = 'overview', initialSearc
   const competitors = valid(CompanyResponseSchema.shape.competitors, company.competitors);
   const countries = valid(CompanyResponseSchema.shape.countries, company.countries);
   const [selectedComparisons, setSelectedComparisons] = useState<string[]>([]);
-  const comparisonOptions = useMemo(() => [...(comparison ?? [])].filter((item) => item.companyId !== company.companyId).sort((left, right) => (left.identity.displayName ?? left.identity.domain).localeCompare(right.identity.displayName ?? right.identity.domain)).slice(0, 52), [comparison, company.companyId]);
+  const comparisonOptions = useMemo(() => [...(comparison ?? [])].filter((item) => item.companyId !== company.companyId).sort((left, right) => (left.identity.displayName ?? left.identity.domain).localeCompare(right.identity.displayName ?? right.identity.domain)).slice(0, 51), [comparison, company.companyId]);
   const selectedComparisonData = comparisonOptions.filter((item) => selectedComparisons.includes(item.companyId));
   useEffect(() => {
     if (initialSearch === undefined) setTab(initialTab === 'paid' && !paidAvailable ? 'overview' : initialTab);

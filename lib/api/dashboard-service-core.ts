@@ -1,6 +1,6 @@
 import type {DashboardSnapshot} from '@/lib/airtable/types';
 import {DashboardCache, type CacheResult} from '@/lib/cache/dashboard-cache';
-import type {CompanyResponse, LandscapeResponse} from '@/lib/domain/dashboard';
+import {CompanyComparisonSchema, type CompanyComparison, type CompanyResponse, type LandscapeResponse} from '@/lib/domain/dashboard';
 import {shapeDashboardSnapshot} from './shape-landscape';
 
 const emptySnapshot: DashboardSnapshot = {companies: [], keywords: [], paidAds: [], publishedInsights: [], reviews: [], system: []};
@@ -26,12 +26,16 @@ export class DashboardService {
     return shapeDashboardSnapshot(result.snapshot, this.state(result)).companies.get(companyId);
   }
   /** Bounded, sanitized comparison set for the company workspace; never raw records. */
-  async companyWorkspace(companyId: string): Promise<{company: CompanyResponse; comparisons: CompanyResponse[]} | undefined> {
+  async companyWorkspace(companyId: string): Promise<{company: CompanyResponse; comparisons: CompanyComparison[]} | undefined> {
     const result = await this.cache.getOrLoad(this.loader, {background: true});
     if (!result.snapshot) return undefined;
     const shaped = shapeDashboardSnapshot(result.snapshot, this.state(result)); const company = shaped.companies.get(companyId);
     if (!company) return undefined;
-    const comparisons = [...shaped.companies.values()].filter((item) => item.companyId !== companyId).sort((left, right) => left.identity.domain.localeCompare(right.identity.domain) || left.companyId.localeCompare(right.companyId)).slice(0, 52);
+    const comparisons = [...shaped.companies.values()]
+      .filter((item) => item.companyId !== companyId)
+      .sort((left, right) => left.identity.domain.localeCompare(right.identity.domain) || left.companyId.localeCompare(right.companyId))
+      .slice(0, 51)
+      .map((item) => CompanyComparisonSchema.parse({companyId: item.companyId, identity: {domain: item.identity.domain, ...(item.identity.displayName ? {displayName: item.identity.displayName} : {})}, trend: item.trend}));
     return {company, comparisons};
   }
 }

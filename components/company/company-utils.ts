@@ -1,4 +1,5 @@
 import type {DashboardValue} from '@/lib/domain/dashboard';
+import {normalizeDomain} from '@/lib/transforms/normalize';
 
 const integer = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
 const decimal = new Intl.NumberFormat('en-US', {maximumFractionDigits: 1});
@@ -23,5 +24,5 @@ export function safeExternalUrl(value: string): string | undefined {
 }
 
 export function canonicalDomain(value: string): string {
-  try { return new URL(`https://${value}`).hostname.toLowerCase().replace(/^www\./, '').replace(/\.$/, ''); } catch { return value.toLowerCase().replace(/^www\./, '').replace(/\.$/, ''); }
+  return normalizeDomain(value) ?? value.toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
 }

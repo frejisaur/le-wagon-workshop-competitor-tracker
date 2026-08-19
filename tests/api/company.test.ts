@@ -55,13 +55,14 @@ describe('company response', () => {
 
   it('keeps curated paid competitors and validated Moz detail while excluding self competitors in canonical URL forms', () => {
     const company = structuredClone(snapshot.companies[0]!);
-    company.fields['Observed • Organic Competitors JSON'] = JSON.stringify([{domain: 'https://www.alpha.example/path', organicTraffic: 99}, {domain: 'rival.example', organicTraffic: 10}]);
-    company.fields['Calculated • Paid Competitors JSON'] = JSON.stringify([{domain: 'paid-rival.example', organicTraffic: 5, organicKeywords: 2, commonKeywords: 1}]);
+    company.fields['Observed • Organic Competitors JSON'] = JSON.stringify([{domain: 'https://www.alpha.example:443/path', organicTraffic: 99}, {domain: 'rival.example', organicTraffic: 10}]);
+    company.fields['Calculated • Paid Competitors JSON'] = JSON.stringify([{domain: 'paid-rival.example', paidTraffic: 71, paidKeywords: 17, organicKeywords: 999, commonKeywords: 1}]);
     company.fields['Calculated • Moz Domain Authority'] = 48;
     company.fields['Calculated • Moz Spam Score'] = 0.03;
     company.fields['Calculated • Moz Top Pages JSON'] = JSON.stringify([{normalizedUrl: 'https://alpha.example/guide', pageAuthority: 42}]);
     const response = shapeDashboardSnapshot({...snapshot, companies: [company]}).companies.get('company-alpha');
     expect(response?.competitors).toEqual([{domain: 'rival.example', organicTraffic: 10, organicKeywords: null, commonKeywords: null}]);
-    expect(response).toMatchObject({authority: {mozDomainAuthority: {classification: 'calculated', value: 48}, mozSpamScore: {classification: 'calculated', value: 0.03}}, paidCompetitors: {classification: 'calculated', rows: [{domain: 'paid-rival.example'}]}});
+    expect(response).toMatchObject({authority: {mozDomainAuthority: {classification: 'calculated', value: 48}, mozSpamScore: {classification: 'calculated', value: 0.03}}, paidCompetitors: {classification: 'calculated', rows: [{domain: 'paid-rival.example', paidTraffic: 71, paidKeywords: 17}]}});
+    expect(JSON.stringify(response?.paidCompetitors)).not.toContain('999');
   });
 });

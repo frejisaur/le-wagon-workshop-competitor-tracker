@@ -52,6 +52,13 @@ describe('company research workspace', () => {
     expect(container.querySelector('.company-workspace__tabs')).toBeInTheDocument();
   });
 
+  it('defensively excludes an already-parseable self competitor URL with default port and path', () => {
+    render(<CompanyWorkspace company={{...company, competitors: [{domain: 'https://www.alpha.example:443/path', organicTraffic: 99, organicKeywords: 999, commonKeywords: 1}, {domain: 'rival.example', organicTraffic: 8_000, organicKeywords: 20, commonKeywords: 24}]}} initialTab="overview" />);
+    const table = screen.getByRole('table', {name: /organic competitors/i});
+    expect(within(table).queryByText('https://www.alpha.example:443/path')).not.toBeInTheDocument();
+    expect(within(table).getByText('rival.example')).toBeInTheDocument();
+  });
+
   it('uses exact source and database provenance in the historical metric disclosure', async () => {
     const user = userEvent.setup();
     render(<CompanyWorkspace company={company} initialTab="overview" />);
@@ -108,8 +115,18 @@ describe('company research workspace', () => {
     await waitFor(() => expect(screen.getByRole('heading', {name: /core keyword evidence/i})).toBeInTheDocument());
   });
 
+  it('labels and displays paid competitor traffic and keywords without organic competitor fields', () => {
+    render(<CompanyWorkspace company={{...company, paid: {traffic: observed(10), keywords: observed(2), ads: []}, paidCompetitors: {classification: 'observed', source: 'semrush', database: 'ca', observedAt: '2026-08-18T12:00:00.000Z', rows: [{domain: 'paid-rival.example', paidTraffic: 71, paidKeywords: 17, commonKeywords: 1}]}}} initialTab="paid" />);
+    const table = screen.getByRole('table', {name: /paid competitors/i});
+    expect(within(table).getByRole('columnheader', {name: /paid traffic/i})).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', {name: /paid keywords/i})).toBeInTheDocument();
+    expect(within(table).getByText('71')).toBeInTheDocument();
+    expect(within(table).getByText('17')).toBeInTheDocument();
+  });
+
   it('sizes the demand band from the validated 70/30 composition instead of equal segments', () => {
     render(<CompanyWorkspace company={company} initialTab="overview" />);
+    expect(screen.getByText(/Calculated from the latest branded and non-brand organic traffic trend evidence/i)).toBeInTheDocument();
     expect(screen.getByText('Non-brand 70%')).toHaveStyle({flexGrow: '0.7'});
     expect(screen.getByText('Branded 30%')).toHaveStyle({flexGrow: '0.30000000000000004'});
   });

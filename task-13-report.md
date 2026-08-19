@@ -53,3 +53,12 @@ None for Task 13. `CompanyResponse` does not yet include a second historical met
 The plotted comparison series has an explicit regression assertion for two selected companies, and its point disclosure reports the selected company alongside date, value, source, and database.
 
 Fix Round 1 validation: focused tests 18 passed; full suite 28 files / 242 tests passed; schema drift check, TypeScript, Webpack build, and diff check passed. The default Turbopack build remains blocked by the sandbox Sass-helper port binding restriction.
+
+## Fix Round 2
+
+- Paid competitor rows now have a dedicated strict contract (`paidTraffic`, `paidKeywords`, and common keywords), sourced from validated Semrush `ad_traffic` and `paid_keywords`. The transform, Airtable mapper, response shaper, and paid table regression use distinct paid/organic values to prevent cross-field display.
+- The browser competitor defense now calls the shared normalizer. It handles a parseable URL directly and normalizes lowercase hostnames, `www`, trailing dots, default ports, and paths before self exclusion.
+- Workspace comparisons now use a strict `CompanyComparison` projection: company ID, display identity, and compact validated trend only. The server builds selected detail plus at most 51 deterministically ordered comparisons from one cached snapshot, keeping each workspace response at 52 companies maximum and excluding insight, evidence, review, and raw fields.
+- Demand composition now accurately identifies itself as a calculation from latest branded and non-brand organic-traffic trend evidence; it remains a calculated value.
+
+Fix Round 2 validation: focused transform/mapper/API/component tests 44 passed; full suite 28 files / 246 tests passed; schema drift check, TypeScript, Webpack build, and diff check passed. The default Turbopack build remains blocked by the sandbox Sass-helper port binding restriction.

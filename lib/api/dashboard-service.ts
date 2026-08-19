@@ -4,7 +4,7 @@ import {AirtableClient} from '@/lib/airtable/client';
 import {AirtableCompetitorRepository} from '@/lib/airtable/repository';
 import type {DashboardSnapshot} from '@/lib/airtable/types';
 import {DashboardCache} from '@/lib/cache/dashboard-cache';
-import type {CompanyResponse, LandscapeResponse} from '@/lib/domain/dashboard';
+import type {CompanyComparison, CompanyResponse, LandscapeResponse} from '@/lib/domain/dashboard';
 import {getWebEnv} from '@/lib/config/server-env';
 import {DashboardService} from './dashboard-service-core';
 
@@ -26,6 +26,6 @@ export async function getCompanyResponse(companyId: string): Promise<CompanyResp
   return dashboardService.company(companyId);
 }
 
-export async function getCompanyWorkspaceResponse(companyId: string): Promise<{company: CompanyResponse; comparisons: CompanyResponse[]} | undefined> {
+export async function getCompanyWorkspaceResponse(companyId: string): Promise<{company: CompanyResponse; comparisons: CompanyComparison[]} | undefined> {
   return dashboardService.companyWorkspace(companyId);
 }

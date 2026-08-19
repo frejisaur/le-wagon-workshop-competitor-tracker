@@ -2,10 +2,10 @@
 
 import {useMemo, useState} from 'react';
 import {Dropdown} from '@carbon/react';
-import type {CompanyResponse} from '@/lib/domain/dashboard';
+import type {CompanyComparison, CompanyResponse} from '@/lib/domain/dashboard';
 import {provenance, valueText} from './company-utils';
 
-export type ComparisonDataset = readonly CompanyResponse[];
+export type ComparisonDataset = readonly CompanyComparison[];
 
 type TrendPoint = CompanyResponse['trend'][number];
 type TooltipPoint = {company: string; point: TrendPoint};

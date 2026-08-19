@@ -3,6 +3,7 @@ import {resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {parseSemrushPayload} from '@/lib/schemas/semrush';
 import {transformSemrushCompany, type TransformSemrushContext} from '@/lib/transforms/semrush-to-domain';
+import {toAirtableCompanyFields} from '@/lib/airtable/mappers';
 
 const fixtureDirectory = resolve(process.cwd(), 'tests/fixtures/providers');
 const semrushFixture = parseSemrushPayload(JSON.parse(readFileSync(resolve(fixtureDirectory, 'semrush-sample.json'), 'utf8'))).records;
@@ -150,6 +151,18 @@ describe('transformSemrushCompany', () => {
     expect(positive.company.calculated.paidActivityPresent).toBe(true);
     expect(explicitZero.company.calculated.paidActivityPresent).toBe(false);
     expect(transformSemrushCompany(missingPaid, context).company.calculated.paidActivityPresent).toBeNull();
+  });
+
+  it('preserves paid competitor traffic and keywords independently of organic competitor fields through Airtable mapping', () => {
+    const record = structuredClone(semrushFixture[1]);
+    record.paid!.competitors = [{...record.paid!.competitors[0]!, domain: 'paid-rival.example', ad_traffic: 71, paid_keywords: 17, organic_keywords: 999, common_keywords: 5}];
+
+    const evidence = transformSemrushCompany(record, context);
+    const fields = toAirtableCompanyFields({...evidence.company, companyId: context.companyId, qualityIssues: evidence.qualityIssues});
+    const paidCompetitor = JSON.parse(fields['Observed • Paid Competitors JSON'] as string)[0];
+
+    expect(evidence.company.observed.paidCompetitors[0]).toMatchObject({paidTraffic: 71, paidKeywords: 17, organicKeywords: 999});
+    expect(paidCompetitor).toMatchObject({paidTraffic: 71, paidKeywords: 17, organicKeywords: 999});
   });
 
   it('sorts actual ISO dates by epoch and records bounded issues for invalid calendar strings', () => {
