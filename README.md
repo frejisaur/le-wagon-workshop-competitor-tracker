@@ -22,7 +22,7 @@ Follow docs/operations/onboarding.md to deploy my own competitor tracker. Ask
 me for one input at a time, never print or repeat secret values, and stop at
 every approval gate. If I do not have an Apify Semrush export, request my list
 of website domains, validate it against the Apollo roster, bootstrap the roster
-with --apollo-only, and run the repository's Apify enrichment job. Use Railway
+with --apollo-only and --domains, and run the repository's Apify enrichment job. Use Railway
 MCP for infrastructure and finish with the runbook's verification handoff.
 ```
 
