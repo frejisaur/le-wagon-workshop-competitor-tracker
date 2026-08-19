@@ -18,8 +18,8 @@
 
   /* Typography. IBM Plex is preferred when installed; browser-safe fallbacks
      avoid a build-time or runtime font-network dependency. */
-  --font-interface: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
-  --font-data: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-interface: var(--font-ibm-plex-sans), "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-data: var(--font-ibm-plex-mono), "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --type-page-size: 24px;
   --type-page-line: 30px;
   --type-section-size: 16px;
@@ -74,9 +74,21 @@
   --breakpoint-desktop-min: 1280px;
   --breakpoint-wide-min: 1440px;
   --touch-target-min: 44px;
+  --layout-min-width: 320px;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --rule-width: 1px;
+  --selection-edge-width: 2px;
+  --status-min-height: 24px;
+  --tooltip-max-width: 280px;
+  --tooltip-shift: 2px;
+  --skeleton-title-max-width: 260px;
+  --skeleton-ledger-height: 112px;
+  --skeleton-panel-min-height: 280px;
 
   /* Motion */
   --motion-fast: 120ms;
   --motion-evidence: 160ms;
+  --motion-reduced: 0.01ms;
   --motion-ease: ease;
 }

@@ -1,3 +1,5 @@
+import {AppShell} from '@/components/shared/AppShell';
+
 export default function HomePage() {
-  return <main><h1>Competitor Intelligence</h1></main>;
+  return <AppShell><h1>Competitor Intelligence</h1></AppShell>;
 }

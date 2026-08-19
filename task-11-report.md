@@ -62,3 +62,32 @@ Webpack production build completed successfully.
 
 None. The Task 10 classified response contracts already contain the values this
 foundation renders.
+
+## Fix Round 1
+
+- `AppShell` now owns the only `main#main-content` landmark and programmatic
+  focus target. The home route supplies page content instead of nesting a main.
+- KPI movements now show their own provenance classification and require the
+  caller to provide `beneficial`, `adverse`, or `neutral` meaning. Numeric sign
+  only determines the `Increased`/`Decreased` text; it no longer determines
+  status color.
+- Retained loading/running content states explicitly say `Refresh running`.
+  Failed states only claim that a last successful snapshot is available when it
+  was supplied.
+- Freshness is a click/touch/keyboard disclosure. It uses one visible name,
+  only associates the exact timestamp as a description while open, and Escape
+  closes the hidden tooltip.
+- Carbon reset/theme Sass is included once before product overrides. The root
+  loads locally bundled IBM Plex Sans and Mono through `next/font/local` at
+  weights 400/500/600; emitted assets are local `/_next/static/media` WOFF2
+  files, and no external font host is present.
+- Additional tokens cover focus, rule widths, status, tooltip, skeleton, and
+  layout values. Authored style rules now contain no non-token px/rem/ms/color
+  literals outside the documented approved breakpoint media queries.
+- The loading ledger now renders five cells and inherits the same desktop and
+  mobile ledger grid/divider rules as populated KPI content.
+
+Fix Round 1 validation: focused suite (14 passed), full suite (213 passed),
+TypeScript, Webpack production build, diff check, and emitted Carbon/local-font
+CSS scan passed. Default Turbopack remains restricted by the sandbox Sass
+helper local-port limitation.

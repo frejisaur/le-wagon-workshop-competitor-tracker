@@ -16,7 +16,7 @@ export function AppShell({children, status = 'succeeded', freshness, breadcrumb 
     </header>
     <div className="app-shell__body">
       <aside className="app-shell__sidebar"><nav aria-label="Primary"><ul className="app-shell__nav-list">{destinations.map((destination, index) => <li key={destination}><a className="app-shell__nav-link" href={index === 0 ? '/' : `#${destination.toLowerCase().replaceAll(' ', '-')}`} aria-current={index === 0 ? 'page' : undefined}>{destination}</a></li>)}</ul></nav></aside>
-      <div className="app-shell__content">{children}</div>
+      <div className="app-shell__content"><main id="main-content" tabIndex={-1}>{children}</main></div>
     </div>
   </div>;
 }

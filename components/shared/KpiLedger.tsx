@@ -1,12 +1,13 @@
 import type {DashboardValue} from '@/lib/domain/dashboard';
 
 type ValueFormat = 'number' | 'percent' | 'text';
+export type MovementTrend = 'beneficial' | 'adverse' | 'neutral';
 
 export type KpiMetric = {
   label: string;
   value: DashboardValue;
   format?: ValueFormat;
-  movement?: {value: DashboardValue; format?: ValueFormat; text?: string};
+  movement?: {value: DashboardValue; trend: MovementTrend; format?: ValueFormat};
 };
 
 function formatValue(value: DashboardValue['value'], format: ValueFormat = 'number'): string {
@@ -17,14 +18,13 @@ function formatValue(value: DashboardValue['value'], format: ValueFormat = 'numb
   return new Intl.NumberFormat('en-US', {maximumFractionDigits: 1}).format(value);
 }
 
-function movementCopy(movement: NonNullable<KpiMetric['movement']>): {text: string; direction: 'positive' | 'negative' | 'neutral'} {
-  if (movement.text) return {text: movement.text, direction: 'neutral'};
+function movementCopy(movement: NonNullable<KpiMetric['movement']>): string {
   const {value} = movement.value;
-  if (typeof value !== 'number') return {text: 'Movement not available', direction: 'neutral'};
+  if (typeof value !== 'number') return 'Movement not available';
   const formatted = formatValue(Math.abs(value), movement.format ?? 'percent');
-  if (value > 0) return {text: `Increased ${formatted}`, direction: 'positive'};
-  if (value < 0) return {text: `Decreased ${formatted}`, direction: 'negative'};
-  return {text: 'No change', direction: 'neutral'};
+  if (value > 0) return `Increased ${formatted}`;
+  if (value < 0) return `Decreased ${formatted}`;
+  return 'No change';
 }
 
 export function KpiLedger({metrics}: {metrics: readonly KpiMetric[]}) {
@@ -35,7 +35,7 @@ export function KpiLedger({metrics}: {metrics: readonly KpiMetric[]}) {
         <span className="kpi-ledger__label">{metric.label}</span>
         <strong className="kpi-ledger__value">{formatValue(metric.value.value, metric.format)}</strong>
         <span className="kpi-ledger__classification" data-classification={metric.value.classification}>{metric.value.classification}</span>
-        {movement ? <span className="kpi-ledger__movement" data-direction={movement.direction}>{movement.text}</span> : null}
+        {movement ? <><span className="kpi-ledger__classification kpi-ledger__movement-classification" data-classification={metric.movement!.value.classification}>{metric.movement!.value.classification} movement</span><span className="kpi-ledger__movement" data-trend={metric.movement!.trend}>{movement}</span></> : null}
       </li>;
     })}
   </ul>;
