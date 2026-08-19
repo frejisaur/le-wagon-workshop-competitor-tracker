@@ -129,11 +129,11 @@ dataset or bypass the provider boundary. It performs this explicit bootstrap:
 
 1. Ask the user for the website domains to enrich. The user may confirm the
    normalized valid websites extracted from the Apollo CSV or supply a list.
-2. Normalize and deduplicate the requested domains using the shared repository
-   domain normalizer.
-3. Compare the requested set with the valid normalized Apollo roster. Reject
-   invalid domains and stop on domains not represented by Apollo. Report Apollo
-   roster domains omitted by the user and request a corrected confirmation.
+2. Save the confirmation as an uncommitted line-delimited domain file and pass
+   it to the repository CLI with `--domains <path>`.
+3. The CLI normalizes the requested domains with the shared domain normalizer
+   and compares them with the valid normalized Apollo roster. It rejects
+   invalid, duplicate, unknown, extra, or omitted domains before import.
 4. Dry-run the explicit Apollo-only import mode. This mode passes an empty
    validated Semrush record collection to the existing import workflow and
    reports all accepted companies as unenriched.
@@ -145,9 +145,10 @@ dataset or bypass the provider boundary. It performs this explicit bootstrap:
    Preserve successful writes when a batch is partial and do not retry without
    an operator decision.
 
-The bootstrap CLI will use `--apollo-only` rather than requiring the agent to
-create a magic `[]` JSON file. `--apollo-only` and `--semrush <path>` are
-mutually exclusive, and one is required. Existing command behavior remains
+The bootstrap CLI will use `--apollo-only --domains <path>` rather than
+requiring the agent to create a magic `[]` JSON file. `--apollo-only` and
+`--semrush <path>` are mutually exclusive, and one is required. `--domains` is
+required only with `--apollo-only`. Existing Semrush command behavior remains
 compatible.
 
 The first implementation will require the confirmed domain set to equal the
@@ -184,9 +185,9 @@ minor tool-name changes while still preferring the current direct tools.
 3. Confirm the exact GitHub `owner/name` repository and branch. Never guess.
 4. Create a private Railway project and record its production environment ID.
 5. Create the web service from the confirmed GitHub repository.
-6. Set web variables from the validated runtime environment. The agent sends
-   values to Railway only through the variable-setting tool and reports names
-   afterward, never values.
+6. Set web variables from the validated runtime environment. The web receives
+   Airtable variables and the server-only `CACHE_INVALIDATION_SECRET` used to
+   verify refresh signatures. The agent reports names afterward, never values.
 7. Configure the web service with the root Dockerfile, `npm start`, `/api/health`,
    and `ON_FAILURE` with at most three retries.
 8. Generate a Railway domain for the web service and set the resulting URL as
@@ -197,10 +198,9 @@ minor tool-name changes while still preferring the current direct tools.
     `0 15 * * 1` schedule.
 11. Set the refresh service's Airtable, Apify, application URL, and cache
     invalidation variables.
-12. Inspect both service configurations and variable-name lists before asking
-    for approval to apply/redeploy staged changes.
-13. After explicit approval, trigger or accept deployment, follow status, and
-    inspect redacted logs only when a service fails.
+12. Inspect both service configurations and variable-name lists, then redeploy
+    each configured service under the already-granted Railway approval.
+13. Follow status and inspect redacted logs only when a service fails.
 
 Because creating a GitHub-backed Railway service may immediately trigger its
 first build, the guide warns that the first deployment can fail until variables
@@ -209,7 +209,8 @@ the complete configuration, and verifies the subsequent deployment. It must not
 claim success from resource creation alone.
 
 The refresh service never receives a public domain. The web service never
-receives `APIFY_TOKEN` or `CACHE_INVALIDATION_SECRET`.
+receives `APIFY_TOKEN` or `APP_BASE_URL`; both services receive the same
+server-only `CACHE_INVALIDATION_SECRET`.
 
 ## 9. Verification and failure handling
 
@@ -248,6 +249,8 @@ Implementation starts with failing tests for `--apollo-only`:
 - It accepts Apollo input without `--semrush` and supplies zero Semrush records.
 - It rejects using `--apollo-only` together with `--semrush`.
 - It rejects a command with neither source mode.
+- Apollo-only mode requires a line-delimited domain file and rejects invalid,
+  duplicate, extra, omitted, or unknown confirmations.
 - Its output remains a single sanitized JSON summary.
 - The existing `--semrush` path remains unchanged.
 
