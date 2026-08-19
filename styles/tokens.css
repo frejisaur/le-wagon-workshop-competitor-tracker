@@ -87,6 +87,8 @@
   --skeleton-panel-min-height: 280px;
   --landscape-map-min-height: 320px;
   --landscape-table-max-height: 560px;
+  --company-chart-min-height: 280px;
+  --company-table-max-height: 420px;
   --visually-hidden-size: 1px;
   --visually-hidden-offset: -1px;
 

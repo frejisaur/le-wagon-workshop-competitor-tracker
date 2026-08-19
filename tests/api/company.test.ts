@@ -28,6 +28,7 @@ describe('company response', () => {
     expect(response?.keywords[0]).toMatchObject({classification: 'observed', keyword: 'alpha'});
     expect(response?.reviewCandidate).toEqual({status: 'needs_review', reasons: ['low_confidence']});
     expect(JSON.stringify(response)).not.toMatch(/rec-|ignore these instructions|reviewer/i);
+    expect(response?.trend[0]?.organicTraffic).toMatchObject({source: 'semrush', database: 'ca'});
   });
 
   it('withholds published claims when current curated evidence changes under the same reference', () => {
