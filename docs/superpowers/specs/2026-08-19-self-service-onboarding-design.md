@@ -2,7 +2,7 @@
 
 Date: 2026-08-19
 
-Status: Approved in collaborative design; awaiting written-spec review
+Status: Approved
 
 Companion specifications:
 
