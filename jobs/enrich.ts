@@ -36,6 +36,7 @@ function safeFailure(): string {
 }
 
 export type EnrichCliResult = {exitCode: number; stdout: string};
+const INTERNAL_REFRESH_TIMEOUT_MS = 14 * 60 * 1_000;
 
 /** Refuse the only fixture-mode write that could overwrite its source state. */
 export function assertDistinctFixturePaths(fixtureState: string, outputState: string): void {
@@ -62,16 +63,23 @@ export async function runEnrichCli(arguments_: string[]): Promise<EnrichCliResul
       const env = getRefreshEnv();
       const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT}));
       const apify = new ApifyClient({token: env.APIFY_TOKEN});
-      report = await runEnrichment({
-        repository,
-        runDomainOverview: (domains, options) => runDomainOverview(apify, domains, {...options, actorId}),
-        // Live only: fixture mode remains self-contained and never needs a URL or secret.
-        cache: createCacheInvalidationAdapter({baseUrl: env.APP_BASE_URL, secret: env.CACHE_INVALIDATION_SECRET}),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(new Error('refresh_internal_timeout')), INTERNAL_REFRESH_TIMEOUT_MS);
+      try {
+        report = await runEnrichment({
+          repository,
+          runDomainOverview: (domains, options) => runDomainOverview(apify, domains, {...options, actorId}),
+          // Live only: fixture mode remains self-contained and never needs a URL or secret.
+          cache: createCacheInvalidationAdapter({baseUrl: env.APP_BASE_URL, secret: env.CACHE_INVALIDATION_SECRET}),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
     }
-    // A partial refresh retains successfully persisted companies and is safe to
-    // retry. Only a fully failed run gets a non-zero Railway exit status.
-    return {exitCode: report.status === 'failed' ? 1 : 0, stdout: JSON.stringify(report)};
+    // Partial refreshes retain successful writes but must still make Railway
+    // surface operator work. Only complete success exits zero.
+    return {exitCode: report.status === 'succeeded' ? 0 : 1, stdout: JSON.stringify(report)};
   } catch {
     return {exitCode: 1, stdout: safeFailure()};
   }

@@ -30,12 +30,18 @@ After a non-production deployment, open a fresh browser session and verify lands
 
 ## Terminating weekly refresh service
 
+Create a separate Railway cron service from the same repository revision and set
+its **configuration path** to `railway.cron.toml`. The root `railway.toml` stays
+build-only for the web service. Railway alone owns the cadence; each invocation
+starts the Apify actor through the REST API and this project creates no Apify
+schedule.
+
 - Image: the exact same revision and `Dockerfile` as web.
 - Workload command: `npm run enrich`.
-- Railway start command (hard timeout): `/usr/bin/timeout --signal=TERM --kill-after=30s 20m npm run enrich -- --actor-id "$APIFY_ACTOR_ID"`.
+- Railway start command (hard timeout): `/usr/bin/timeout --signal=TERM --kill-after=30s 15m npm run enrich -- --actor-id "$APIFY_ACTOR_ID"`.
 - Cron schedule: `0 15 * * 1` (Monday 15:00 UTC).
 - Public networking: **no public domain**.
-- Restart policy: `NEVER`; failed scheduled runs require operator review. The command must exit after success or failure so schedules cannot overlap.
+- Restart policy: `NEVER`; failed scheduled runs require operator review. The command must exit after success or failure so schedules cannot overlap. The job installs a 14-minute internal deadline so it can publish a bounded terminal state before Railway's 15-minute outer termination.
 
 Before a non-production refresh, export the `System` table row as a sanitized before snapshot. After it terminates, capture the after snapshot and verify a new independent refresh run ID, `last_attempt_at`, per-company successes/failures, and `last_successful_at` only when appropriate. Partial refreshes must retain successful companies and the previous publication. Cache invalidation must call the configured `APP_BASE_URL` server endpoint with the `CACHE_INVALIDATION_SECRET` signature; record status only, never the signature.
 

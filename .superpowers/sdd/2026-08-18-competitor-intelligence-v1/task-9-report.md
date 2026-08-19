@@ -97,3 +97,74 @@ The assertion was corrected to the observed URL and then passed.
 - The current concrete Airtable schema is the plain `AIRTABLE_SCHEMA`; the repository accepts a field-map override for a layered base, but the CLI does not auto-detect the legacy layered field naming. A production base using that variant needs an explicit mapping at command construction.
 - There is no web-cache invalidation endpoint in the current prototype. The repository exposes an injected cache-invalidation hook and treats the absent cache as a no-op. The web-service owner must supply the actual signed invalidation callback when that service exists.
 - Keyword and Paid Ad refreshes remain outside this focused Task 9 implementation; it updates Company-level Domain Overview metrics only.
+
+## TypeScript-stack adaptation and review follow-up
+
+The shared workspace was reset onto the staged TypeScript/Next.js implementation
+before the Node ESM fix round could be committed. This TypeScript stack supersedes
+the old runtime and already provides the reviewed prerequisite contracts:
+
+- Semrush parsing and deterministic transforms validate provider records before
+  storage; Keyword/Paid Ad replacement uses stable identities and preserves first
+  observation state.
+- Airtable repository writes return per-record outcomes, including later-batch
+  failures, and workflow tests preserve committed partial successes.
+- The single canonical evidence-package builder and `fingerprintEvidence` hash
+  Company, Keyword, and Paid Ad curated evidence while excluding generated and
+  operational metadata.
+- The fixture repository exercises state mutation without modifying insights or
+  reviews; the workflow includes bounded terminal-state recovery and cache-failure
+  reconciliation.
+- Apify client tests cover bearer auth, start/poll/dataset flow, timeouts, and
+  redacted failures.
+
+### Fixes made on the TypeScript stack
+
+- Corrected the actor input in `lib/apify/run-domain-overview.ts` to exactly
+  `{mode: "domain", domains, database: "worldwide", include_moz: false,
+  concurrency: 5}`.
+- Made partial as well as failed refresh commands exit nonzero, while retaining
+  successful writes for safe retry.
+- Added a 14-minute live-job abort deadline and documented it under Railway's
+  15-minute `/usr/bin/timeout` outer limit.
+- Added `railway.cron.toml` for the terminating Railway service, while retaining
+  root `railway.toml` as web-safe Dockerfile build configuration. It has
+  `cronSchedule = "0 15 * * 1"`, `restartPolicyType = "NEVER"`, no public-domain
+  configuration, and no Apify schedule. The deployment documentation tells
+  operators to select `railway.cron.toml` as the cron service config path.
+- Added focused tests for exact actor input, cron ownership/configuration, and
+  nonzero partial CLI exit. Updated the existing timeout release contract from
+  the obsolete 20-minute value to the required 15 minutes.
+
+### TypeScript TDD evidence
+
+RED:
+
+```text
+npm test -- tests/apify/run-domain-overview.test.ts tests/config/railway-cron.test.ts tests/jobs/enrich.test.ts
+3 failed: actor input was `domain_overview`; railway.cron.toml was absent;
+partial fixture command returned exit 0.
+```
+
+GREEN:
+
+```text
+npm test -- tests/apify/run-domain-overview.test.ts tests/config/railway-cron.test.ts tests/jobs/enrich.test.ts
+4 passed, 0 failed.
+```
+
+`npm test` then ran 310 tests: 309 passed and one browser-secret-boundary test
+was blocked because an independently running shared Next build held `.next/lock`
+and had not produced `.next/BUILD_ID`. A direct `next build` invocation reported
+the same live build lock; no lock removal or process termination was attempted.
+
+### TypeScript adaptation files
+
+- `lib/apify/run-domain-overview.ts`
+- `jobs/enrich.ts`
+- `railway.cron.toml`
+- `docs/operations/deployment.md`
+- `tests/apify/run-domain-overview.test.ts`
+- `tests/config/railway-cron.test.ts`
+- `tests/jobs/enrich.test.ts`
+- `tests/contracts/skills.test.ts`

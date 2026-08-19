@@ -1,0 +1,10 @@
+# Select this file as the Railway configuration path for the terminating
+# refresh service. `railway.toml` remains the shared web-safe build config.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "/usr/bin/timeout --signal=TERM --kill-after=30s 15m npm run enrich -- --actor-id \"$APIFY_ACTOR_ID\""
+restartPolicyType = "NEVER"
+cronSchedule = "0 15 * * 1"

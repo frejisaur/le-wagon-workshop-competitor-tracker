@@ -39,7 +39,7 @@ describe('release contracts', () => {
     expect(deployment).toContain('npm run enrich');
     expect(deployment).toContain('0 15 * * 1');
     expect(deployment).toMatch(/no public domain/i);
-    expect(deployment).toMatch(/timeout.*20m/i);
+    expect(deployment).toMatch(/timeout.*15m/i);
     expect(deployment).toMatch(/present.*missing/i);
     expect(deployment).not.toMatch(/echo \$|printenv/i);
   });
