@@ -19,7 +19,8 @@
     "insights:prepare": "tsx jobs/prepare-insights.ts",
     "insights:submit": "tsx jobs/submit-insight.ts",
     "insights:publish-approved": "tsx jobs/publish-approved-insights.ts",
-    "workshop:context": "tsx jobs/generate-workshop-context.ts"
+    "workshop:context": "tsx jobs/generate-workshop-context.ts",
+    "workshop:preflight": "tsx jobs/workshop-preflight.ts"
   },
   "dependencies": {
     "@carbon/charts": "^1.27.18",

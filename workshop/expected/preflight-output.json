@@ -1,0 +1,6 @@
+{
+  "phase": "all",
+  "ready": true,
+  "summary": {"present": 12, "missing": 0},
+  "note": "Example shape only; values and command output are never included."
+}
