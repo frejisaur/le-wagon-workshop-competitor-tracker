@@ -80,6 +80,7 @@ a { color: var(--color-accent); }
 .landscape-filters__expanded summary { min-height: var(--touch-target-min); color: var(--color-accent); cursor: pointer; font-size: var(--type-compact-size); }
 .landscape-filters .cds--btn { justify-self: start; }
 .landscape-modules { display: grid; gap: var(--space-5); margin-top: var(--space-5); }
+.landscape-modules > * { min-width: 0; }
 .market-map-panel, .attention-signals, .company-leaderboard { border-top: var(--rule-width) solid var(--color-rule-strong); background: var(--color-surface); padding: var(--space-4); }
 .landscape-panel-heading h2 { margin: 0; font-size: var(--type-section-size); font-weight: var(--weight-semibold); line-height: var(--type-section-line); }
 .market-map { position: relative; min-height: var(--landscape-map-min-height); margin-top: var(--space-4); border-left: var(--rule-width) solid var(--color-rule-strong); border-bottom: var(--rule-width) solid var(--color-rule-strong); background: var(--color-surface-subtle); }

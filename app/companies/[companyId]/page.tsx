@@ -1,5 +1,6 @@
 import {notFound} from 'next/navigation';
-import {CompanyWorkspace, parseCompanyTab} from '@/components/company/CompanyWorkspace';
+import {CompanyWorkspace} from '@/components/company/CompanyWorkspace';
+import {parseCompanyTab} from '@/components/company/company-tab';
 import {AppShell} from '@/components/shared/AppShell';
 import {getCompanyWorkspaceResponse} from '@/lib/api/dashboard-service';
 

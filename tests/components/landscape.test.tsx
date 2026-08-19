@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import userEvent from '@testing-library/user-event';
 import {cleanup, render, screen, waitFor, within} from '@testing-library/react';
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import type {LandscapeResponse} from '@/lib/domain/dashboard';
 import {LandscapeScreen} from '@/components/landscape/LandscapeScreen';
 import {parseLandscapeState, serializeLandscapeState} from '@/components/landscape/filter-state';
@@ -52,6 +52,17 @@ describe('competitive landscape', () => {
     expect(within(screen.getByRole('table', {name: /company leaderboard/i})).getAllByRole('row')).toHaveLength(2);
     expect(screen.getByRole('columnheader', {name: /estimated organic traffic/i})).toHaveAttribute('aria-sort', 'descending');
     expect(window.location.search).toContain('sort=traffic-desc');
+  });
+
+  it('updates URL-backed filters without mutating history during a React state calculation', async () => {
+    const user = userEvent.setup();
+    const errors: unknown[][] = [];
+    const error = vi.spyOn(console, 'error').mockImplementation((...args) => errors.push(args));
+    render(<LandscapeScreen initialData={fixture} />);
+    await user.selectOptions(screen.getByLabelText('Country'), 'Canada');
+    error.mockRestore();
+    expect(errors.flat().join(' ')).not.toContain('Cannot update a component');
+    expect(window.location.search).toContain('country=Canada');
   });
 
   it('links map selection, table selection, focus, and keyboard traversal in leaderboard order', async () => {

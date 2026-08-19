@@ -5,6 +5,7 @@
 :global(.company-workspace__heading p), :global(.company-module__heading p), :global(.historical-chart__summary), :global(.demand-composition__summary), :global(.ai-presence__summary), :global(.authority-distribution__summary), :global(.paid-activity__summary) { margin: var(--space-1) 0 0; color: var(--color-text-secondary); }
 :global(.company-workspace__tabs) { overflow-x: auto; border-bottom: var(--rule-width) solid var(--color-rule); }
 :global(.company-workspace__tabs [role='tablist']) { min-width: max-content; }
+:global(.company-workspace__tabs [role='tab']) { min-height: var(--touch-target-min); }
 :global(.company-workspace__tabs [role='tabpanel']) { padding: var(--space-5) 0; }
 :global(.company-workspace__ledger) { margin-bottom: var(--space-6); }
 :global(.company-workspace__overview), :global(.company-workspace__search) { display: grid; gap: var(--space-6); }
@@ -44,7 +45,7 @@
 .battlecardClaims { display: grid; gap: var(--space-3); }
 .battlecardClaim { display: grid; gap: var(--space-2); border-top: var(--rule-width) solid var(--color-rule); padding-top: var(--space-3); scroll-margin-top: var(--space-6); }
 .battlecardClaim p { margin: 0; }
-.battlecardClaim a { width: fit-content; min-height: var(--touch-target-min); display: inline-flex; align-items: center; color: var(--color-accent); font-weight: var(--weight-semibold); }
+.battlecardClaim a, .battlecardLead a { width: fit-content; min-height: var(--touch-target-min); display: inline-flex; align-items: center; color: var(--color-accent); font-weight: var(--weight-semibold); }
 .battlecardClaim:focus-visible { outline: var(--focus-width) solid var(--color-accent); outline-offset: var(--focus-offset); }
 .claimMeta { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .insightReview, .insightStale { border-left: var(--selection-edge-width) solid var(--color-warning); padding: var(--space-3); background: var(--color-surface-subtle); color: var(--color-warning); }

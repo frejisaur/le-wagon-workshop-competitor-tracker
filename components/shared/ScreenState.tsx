@@ -1,4 +1,5 @@
 import type {ReactNode} from 'react';
+import {Button} from '@carbon/react';
 import type {DashboardStatus} from '@/lib/domain/dashboard';
 
 export type ScreenStatus = DashboardStatus | 'unknown';
@@ -17,7 +18,7 @@ function DashboardSkeleton() {
   </div>;
 }
 
-export function ScreenState({status, hasRetainedData = false, recoveryMessage, announce = false, children}: {status: ScreenStatus; hasRetainedData?: boolean; recoveryMessage?: string; announce?: boolean; children?: ReactNode}) {
+export function ScreenState({status, hasRetainedData = false, recoveryMessage, announce = false, onRetry, children}: {status: ScreenStatus; hasRetainedData?: boolean; recoveryMessage?: string; announce?: boolean; onRetry?: () => void; children?: ReactNode}) {
   if (status === 'loading' && !hasRetainedData) return <DashboardSkeleton />;
   const liveProps = announce ? {'aria-live': 'polite' as const, 'aria-atomic': true} : {};
   if (status === 'running' && !hasRetainedData) return <section className="screen-state"><p className="screen-state__notice" data-status={status} {...liveProps}>Refresh running</p><DashboardSkeleton /></section>;
@@ -30,6 +31,7 @@ export function ScreenState({status, hasRetainedData = false, recoveryMessage, a
       : recoveryMessage ?? defaultRecovery[status];
   return <section className="screen-state">
     {message ? <p className="screen-state__notice" data-status={status} {...liveProps}>{message}</p> : null}
+    {status === 'failed' ? <Button kind="secondary" type="button" onClick={onRetry ?? (() => window.location.reload())}>Retry refresh</Button> : null}
     {children}
   </section>;
 }
