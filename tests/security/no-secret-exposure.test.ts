@@ -4,9 +4,9 @@ import {join} from 'node:path';
 import {describe, expect, it} from 'vitest';
 
 const forbidden = [
-  {name: 'credential-assignment', pattern: /\b(?:AIRTABLE_PAT|AIRTABLE_BASE_ID|APIFY_TOKEN|CACHE_INVALIDATION_SECRET|airtablePat|airtableBaseId|apifyToken|cacheInvalidationSecret)\b["']?\s*[:=]\s*["']?[A-Za-z0-9._~+/=-]{8,}/i},
-  {name: 'authorization-bearer', pattern: /\bauthorization\b["']?\s*[:=]\s*["']?\s*Bearer\s+[A-Za-z0-9._~+/=-]{8,}/i},
-  {name: 'bearer-value', pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/i},
+  {name: 'credential-assignment', pattern: /\b(?:AIRTABLE_PAT|AIRTABLE_BASE_ID|APIFY_TOKEN|CACHE_INVALIDATION_SECRET|airtablePat|airtableBaseId|apifyToken|cacheInvalidationSecret)\b["']?\s*[:=]\s*(?:"(?:\\.|[^"\\])+"|'(?:\\.|[^'\\])+'|[^\s"',;}\]]+)/i},
+  {name: 'authorization-bearer', pattern: /\bauthorization\b["']?\s*[:=]\s*(?:"Bearer\s+(?:\\.|[^"\\])+"|'Bearer\s+(?:\\.|[^'\\])+'|Bearer\s+[^\s"',;}\]]+)/i},
+  {name: 'bearer-value', pattern: /\b(?:token|apiToken|authorizationToken)\b["']?\s*[:=]\s*(?:"Bearer\s+(?:\\.|[^"\\])+"|'Bearer\s+(?:\\.|[^'\\])+'|Bearer\s+[^\s"',;}\]]+)/i},
   {name: 'provider-fixture-path', pattern: /tests\/fixtures\/providers/i},
   {name: 'raw-provider-object', pattern: /\brawProvider\b/i},
   {name: 'raw-provider-field', pattern: /\b(?:domain_organic|organic_keywords|backlinks_overview)\b/i},
@@ -62,9 +62,11 @@ describe('release secret boundary', () => {
         'const payload={rawProvider:{domain:"private.example"}}',
         'const payload={domain_organic:{traffic:42}}',
         'const fixture="tests/fixtures/providers/private-payload.json"',
+        'const shortConfig={"APIFY_TOKEN":"x"}',
+        'const shortHeaders={Authorization:"Bearer y"}',
       ];
       sentinels.forEach((sentinel, index) => writeFileSync(join(temp, `bad-${index}.js`), sentinel));
-      writeFileSync(join(temp, 'safe-labels.js'), 'Authorization status; AIRTABLE_PAT is present or missing; Raw reference unavailable');
+      writeFileSync(join(temp, 'safe-labels.js'), 'Authorization status; AIRTABLE_PAT is present or missing; Bearer authentication; Raw reference unavailable');
       expect(scan(temp)).toHaveLength(sentinels.length);
       expect(new Set(scan(temp).map(({detector}) => detector))).toEqual(new Set(forbidden.map(({name}) => name)));
       assertFreshProductionBuild('.next', ['app', 'components', 'lib', 'styles', 'next.config.ts', 'package.json', 'package-lock.json']);

@@ -71,3 +71,14 @@ Reviewed the scoped diff for unsupported inference, classification leakage, stal
 ### Security and contract review
 
 Fresh `.next/static` artifacts produced zero hardened scanner findings. Production server/client artifacts retained no E2E fixture alias/marker. The Airtable ID detector is constrained to record-ID properties to avoid false positives such as React's legitimate `reconcilerVersion`; safe labels remain allowed. Publication identity, evidence fingerprint calculation, confidence routing, API response shapes, and UI presentation contracts were not changed. Airtable record/API impact: none; the new file is a sanitized test fixture only.
+
+## Fix Round 2 — Short credential values
+
+The browser artifact scanner previously required credential values of at least eight characters and Bearer values of at least eight or twelve characters. Server environment schemas accept any non-empty string, so a one-character value still represents a secret and must fail the client boundary.
+
+- RED: added sanitized JSON/property `{"APIFY_TOKEN":"x"}` and Authorization `Bearer y` files. The negative corpus expected 14 findings but the scanner returned 12, missing exactly the two short values.
+- GREEN: credential assignment matching now accepts any non-empty quoted, escaped, or context-bounded unquoted value after an allow-listed server credential name. Authorization matching accepts any non-empty Bearer value only after the `Authorization` property, while standalone Bearer matching is limited to `token`, `apiToken`, or `authorizationToken` assignment contexts.
+- False-positive control remains explicit: labels such as `Authorization status`, `AIRTABLE_PAT is present or missing`, and `Bearer authentication` do not match. Findings continue to expose detector name and filename only, never the matched value.
+- Focused contracts/security passed: 4 files, 19 tests. A fresh Webpack production build passed, followed by the hardened fresh-artifact scan with zero findings. Full Vitest passed: 35 files, 286 tests. Standalone TypeScript and schema checks passed; production fixture-alias scan returned no findings; `git diff --check` passed before commit.
+- Playwright and Docker were not rerun because this round changes only the test-owned scanner helper and sanitized negative controls. No application, route, fixture service, package, Dockerfile, Railway, or runtime configuration changed; the fresh Webpack artifact is the direct consumer under test.
+- No provider/domain field, identity, fingerprint, persistence, UI, record count, or API-call contract changed. No live call or deployment occurred.
