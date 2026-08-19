@@ -9,7 +9,9 @@ This is a guided, approval-based procedure for an agent working in a fresh clone
 - Keep the Apollo roster as the source of company identity. Normalize websites through the repository command; do not join or create companies by display name.
 - Never treat missing Semrush metrics as zero, bypass a dry run, substitute an unvalidated empty export, or create an Apify-only company.
 - Stop at every approval gate. A successful resource-creation call or a triggered deployment is setup progress, not deployment success.
-- Do not mutate Airtable or Railway or invoke live Apify until the relevant user approval. Before the Railway gate, only the read-only `whoami` and `list_workspaces` calls are allowed. Preserve already successful writes and the last published insight if a later operation is partial or fails.
+- At the start of the runbook, discover the available Railway MCP capabilities and inspect the input/output schemas for exactly `create_project`, `create_deployment`, `set_variables`, `update_service`, `generate_domain`, `get_service_config`, `redeploy`, `get_status`, and `get_logs`. If any name or argument differs, stop before mutation; use an equivalent only after confirming its schema. This read-only capability/schema discovery does not authorize a Railway mutation.
+- Do not mutate Airtable or Railway or invoke live Apify until the relevant user approval. Before the Railway gate, only read-only capability/schema discovery, `whoami`, `list_workspaces`, and user confirmation are allowed. Preserve already successful writes and the last published insight if a later operation is partial or fails.
+- Never call `list_variables`; it may expose rendered values. Use `get_service_config`, whose active response contains `variableNames` without values.
 
 ## What the user needs
 
@@ -20,7 +22,7 @@ Collect these inputs one at a time and report their status without exposing valu
 3. For web, confirm the Airtable names and server-only `CACHE_INVALIDATION_SECRET`. For an Apify refresh, confirm the Airtable names, the same `CACHE_INVALIDATION_SECRET`, `APIFY_TOKEN`, `APIFY_ACTOR_ID`, and `APP_BASE_URL` by name and `present`/`missing` status only. The required actor ID is `pro100chok/semrush-scraper`.
 4. A user-confirmed GitHub `owner/name`, branch, Railway workspace, and permission for Railway MCP. Never guess the repository, branch, workspace, or base.
 
-Use server-side environment storage (for example, a local uncommitted `.env`) for values. Never use `NEXT_PUBLIC_*` for any of these variables.
+Use ignored server-side environment files for local values. The npm job commands optionally load `.env` and then `.env.local` without shell-sourcing either file; existing process variables remain authoritative, including on Railway. Next.js also loads `.env.local`, so use it for local web/job values that must match. Never source, echo, commit, or use `NEXT_PUBLIC_*` for these values.
 
 ## 1. Verify the clone with fixtures
 
@@ -77,12 +79,12 @@ Stop on an invalid payload, an invalid or duplicate normalized Apollo domain, co
 
 ### Branch B: Apify Semrush data is missing
 
-Ask the user for a website-domain list or confirmation of the normalized valid Apollo list. Save exactly that requested/confirmed set as an uncommitted line-delimited local file, one website domain per line. Substitute the same verified Apollo and domain-file paths in the preview and live commands, and never put a secret in either argument.
+Ask the user for a website-domain list or confirmation of the normalized valid Apollo list. Create a line-delimited file in an OS temporary directory outside the repository, restrict it to the current user (mode `0600`), and save exactly that requested/confirmed set, one website domain per line. Record its absolute path, use that same path for preview and live import, and remove the file after the onboarding flow. Never place this file in the repository or put a secret in either argument.
 
 Run the explicit Apollo-only dry run:
 
 ```bash
-npm run import:initial -- --apollo <apollo.csv> --apollo-only --domains <domains.txt> --dry-run
+npm run import:initial -- --apollo <apollo.csv> --apollo-only --domains <absolute-temp-domain-file> --dry-run
 ```
 
 The CLI authoritatively parses and normalizes the Apollo websites and requested domain file through the shared normalizer. It rejects invalid, duplicate, unknown, extra, or omitted domains. Version 1 requires exact equality with the valid active Apollo roster: a rejected file requires corrected user confirmation and a new dry run, rather than silent deduplication, subset enrichment, or extra companies.
@@ -106,12 +108,26 @@ npm run import:initial -- --apollo <apollo.csv> --semrush <semrush.json>
 For Branch B:
 
 ```bash
-npm run import:initial -- --apollo <apollo.csv> --apollo-only --domains <domains.txt>
+npm run import:initial -- --apollo <apollo.csv> --apollo-only --domains <absolute-temp-domain-file>
 ```
 
 Report the sanitized import summary and confirm that canonical company identity came from Apollo. Confirm the live budget used the selected Airtable state and that no writes occurred if it was exceeded. In the Apollo-only branch, report the accepted companies as unenriched with absent metrics. If an import is partial, preserve successful companies and stop for an operator decision rather than retrying or overwriting records.
 
 For Branch B, recheck every live-refresh name as `present` or `missing`: all Airtable names, `APIFY_TOKEN`, `APIFY_ACTOR_ID`, `APP_BASE_URL`, and `CACHE_INVALIDATION_SECRET`. Do not reveal values. Branch A skips the next approval and enrichment step unless the user explicitly requests a live refresh.
+
+Before the live-Apify approval, prepare the signed local cache callback. In ignored `.env.local`, set `APP_BASE_URL=http://127.0.0.1:3000` and one local server-only `CACHE_INVALIDATION_SECRET`; the web process and enrichment job must load the same value. Do not print or shell-source the file. In a dedicated terminal, start the web process and keep it running:
+
+```bash
+npm run dev -- --webpack
+```
+
+Next.js loads `.env.local`; the npm job wrapper loads the same optional file. From another terminal, request `GET http://127.0.0.1:3000/api/health` and require HTTP `200` with `status: ok` before requesting approval:
+
+```bash
+curl --fail --silent --show-error http://127.0.0.1:3000/api/health
+```
+
+Loopback HTTP is accepted only for local development; the later Railway refresh uses the generated HTTPS web origin. A missing or unhealthy callback blocks the live enrichment approval.
 
 ## Approval gate: live Apify enrichment
 
@@ -125,19 +141,20 @@ This step is required for Branch B and may also be used later to refresh the act
 npm run enrich
 ```
 
-The repository job triggers `pro100chok/semrush-scraper` through the existing server-side Apify client. Report only the processed, succeeded, failed, and cache status; run ID; and affected domain identities. Do not report raw provider records, token values, request headers, or cache signatures. Compare processed domains with the confirmed Apollo roster. Preserve successful writes if a batch is partial.
+The repository job triggers `pro100chok/semrush-scraper` through the existing server-side Apify client. Require the returned JSON to have `status === "succeeded"` and `cacheInvalidated === true`. Report only the processed, succeeded, failed, and cache status; run ID; and affected domain identities. Do not report raw provider records, token values, request headers, or cache signatures. Compare every requested domain with the processed outcomes and identify any failed, skipped, or still-unenriched domain. Preserve successful writes if a batch is partial. Stop the dedicated local web server when it is no longer needed.
 
 ## Approval gate: partial enrichment
 
-If any domain failed, was skipped, or remains unenriched, present the safe counts, run ID, cache status, and domain identities. Ask whether the user accepts this partial state before moving to Railway. Do not retry, conceal the failure, or deploy as if coverage were complete without that approval.
+Enter this gate whenever the overall status is not `succeeded`, `cacheInvalidated` is not `true`, or any requested domain failed, was skipped, or remains unenriched. Present the safe counts, run ID, cache status, and domain identities. Ask whether the user accepts this partial/result state before moving to Railway. A cache-only failure cannot bypass the gate. Do not retry, conceal the failure, or deploy as if coverage were complete without that approval.
 
 ## 7. Prepare Railway MCP
 
-Use Railway MCP capabilities by intent; current tool names may vary slightly. Perform this numbered sequence and stop if authentication, workspace selection, or repository confirmation is unresolved:
+Use the exact active Railway MCP contract discovered at runbook start. Perform this numbered sequence and stop if authentication, workspace selection, repository confirmation, or an operation schema is unresolved:
 
 1. Call `whoami`, then `list_workspaces`; ask the user to choose when more than one workspace is available.
 2. Ask the user to confirm the GitHub `owner/name` and branch. `create_deployment` requires this confirmed `owner/name`; never infer it from a directory or remote.
-3. Before the next approval gate, do not call `create_project`, `create_deployment`, `set_variables`, `update_service`, `generate_domain`, `get_service_config`, or `redeploy`. Only `whoami`, `list_workspaces`, and user confirmation of workspace, GitHub `owner/name`, and branch are allowed.
+3. Confirm that `set_variables` accepts `skipDeploys`, `update_service` does not, `get_service_config` returns `variableNames` without values, and the other required operations match the schemas discovered at runbook start. If they differ, stop before mutation and confirm an equivalent operation's schema.
+4. Before the next approval gate, do not call `create_project`, `create_deployment`, `set_variables`, `update_service`, `generate_domain`, `get_service_config`, or `redeploy`. Only read-only capability/schema discovery, `whoami`, `list_workspaces`, and user confirmation of workspace, GitHub `owner/name`, and branch are allowed.
 
 ## Approval gate: Railway creation and deployment
 
@@ -149,10 +166,10 @@ After approval, use the following Railway MCP sequence. Send secret values only 
 
 1. Call `create_project` in the confirmed workspace and record the returned project and production-environment identifiers.
 2. Call `create_deployment` once with the confirmed GitHub `owner/name` and branch to create the web service. Its automatic initial build may fail while configuration is incomplete; do not call `create_deployment` again.
-3. Call `update_service` with `skipDeploys: true` to set the web service's root `Dockerfile`, start command `npm start`, health check `/api/health`, restart policy `ON_FAILURE`, and 3 retries. Call `set_variables` with `skipDeploys: true` for the Airtable variables and `CACHE_INVALIDATION_SECRET`. Call `generate_domain` once for this service.
+3. Call `update_service` to set the web service's root `Dockerfile`, start command `npm start`, health check `/api/health`, restart policy `ON_FAILURE`, and 3 retries. `update_service` does not accept `skipDeploys`; never pass it there. Call `set_variables` with `skipDeploys: true` for the Airtable variables and `CACHE_INVALIDATION_SECRET`. Call `generate_domain` once for this service.
 4. Call `create_deployment` once with the same repository and branch to create the refresh service. Its automatic initial build may also fail while configuration is incomplete; do not call `create_deployment` again.
-5. Call `update_service` with `skipDeploys: true` to set configuration path `/railway.cron.toml`, no public domain, start command `/usr/bin/timeout --signal=TERM --kill-after=30s 15m npm run enrich`, restart policy `NEVER`, and cron schedule `0 15 * * 1`. Call `set_variables` with `skipDeploys: true` for the Airtable variables, `APIFY_TOKEN`, `APIFY_ACTOR_ID`, `APP_BASE_URL` (the generated web URL), and the same `CACHE_INVALIDATION_SECRET` used by web.
-6. Call `get_service_config` for each service to verify settings and variable names without retrieving values. Correct only failed or missing configuration with `update_service` or `set_variables`, again using `skipDeploys: true`, then re-inspect it.
+5. Call `update_service` to set configuration path `/railway.cron.toml`, no public domain, start command `/usr/bin/timeout --signal=TERM --kill-after=30s 15m npm run enrich`, restart policy `NEVER`, and cron schedule `0 15 * * 1`; never pass `skipDeploys` to this operation. Call `set_variables` with `skipDeploys: true` for the Airtable variables, `APIFY_TOKEN`, `APIFY_ACTOR_ID`, `APP_BASE_URL` (the generated HTTPS web URL), and the same `CACHE_INVALIDATION_SECRET` used by web.
+6. Call `get_service_config` for each service to verify settings and its `variableNames` list without retrieving values. Correct only failed or missing configuration with `update_service`, or with `set_variables(skipDeploys: true)` for variables, then re-inspect it. Never call `list_variables`.
 7. Once both configurations are complete, call `redeploy` exactly once per service. Do not create either service again.
 
 The web service must not receive `APIFY_TOKEN` or `APP_BASE_URL`; both services receive the same server-only `CACHE_INVALIDATION_SECRET`; the refresh service has no public domain.
@@ -161,7 +178,7 @@ Do not set an Apify schedule outside Railway: Railway owns the refresh cadence.
 
 ## 9. Verify deployment and freshness
 
-Use `get_status` to follow both deployments until their terminal states. Use `get_logs` only for a failed service, redact secret-bearing output before reporting it, and do not retrieve logs for a healthy service merely for narration.
+Use `get_status` to follow the configured redeployments until their terminal states. Use redacted `get_logs` only for a failed service, and do not retrieve logs for a healthy service merely for narration. The earlier builds triggered by `create_deployment` may be unconfigured because this active MCP can attach GitHub only through that operation; determine success only after the configured redeploy and the health/service checks below.
 
 Resource creation or a triggered deployment is not success. Open the web service's generated domain and require `GET /api/health` to return `200` and `status: ok`; verify only non-secret freshness metadata. Confirm the refresh service has no domain, retains `NEVER` and `0 15 * * 1`, and its configuration still has the full refresh variable-name set. For a completed refresh, compare the sanitized `System` status with the pre-refresh snapshot: run ID, `last_attempt_at`, successes/failures, and `last_successful_at` when appropriate.
 
@@ -175,7 +192,7 @@ Resume from the last completed boundary instead of replaying the whole workflow:
 - Schema blocked: correct selected-base scope or table configuration, recheck names, and retry `npm run airtable:schema` only after approval.
 - Import blocked: preserve the dry-run summary, correct files or roster confirmation, then repeat the dry run before requesting the import approval again.
 - Apify partial or failed: retain successful company writes, report processed/succeeded/failed identities and run ID, then ask for a bounded retry or accept partial enrichment.
-- Railway initial build failed: under the granted Railway approval, complete configuration with `skipDeploys: true`, verify only names with `get_service_config`, and call `redeploy` once for the fully configured service. Do not call `create_deployment` again; keep web and refresh variables separated.
+- Railway initial build failed: under the granted Railway approval, complete service settings with `update_service` and variables with `set_variables(skipDeploys: true)`, verify only `variableNames` with `get_service_config`, and call `redeploy` once for the fully configured service. Do not call `create_deployment` again; keep web and refresh variables separated.
 - Health failed: use `get_status`, then redacted `get_logs` for the failed service; do not call the deployment successful until `/api/health` returns the required response.
 
 When live services jeopardize the workshop timeline, disclose the switch to sanitized fixture evidence. Never use a hand-edited result that bypasses repository validation.
@@ -190,3 +207,5 @@ Return a concise, secret-safe summary containing:
 - Railway project, workspace, web and refresh service identifiers; confirmed repository/branch; web domain only; web health `200` with `status: ok`; refresh schedule and no-domain status.
 - Variable names reported as present/missing only, including confirmation that web and refresh share `CACHE_INVALIDATION_SECRET` while web lacks `APIFY_TOKEN` and `APP_BASE_URL`.
 - Any unresolved failure, the last safe resume point, and the explicit approval needed for the next action.
+
+After completing or abandoning the flow, confirm any user-only temporary domain file was removed. Do not retain a copy in the repository.

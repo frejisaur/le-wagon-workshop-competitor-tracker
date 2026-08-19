@@ -4,7 +4,7 @@
 
 **Goal:** Give a coding agent a tested, secret-safe path from a fresh clone to a user-owned Airtable dataset and two-service Railway deployment, including automatic Apify Semrush enrichment when no export is supplied.
 
-**Architecture:** Extend only the initial-import CLI boundary with an explicit Apollo-only mode; the existing import workflow already represents missing provider metrics as absent and the existing enrichment job already starts the reviewed Apify actor. Put orchestration policy in a dedicated operations runbook, link it from a concise README prompt, and protect command names, approval gates, service separation, and credential scopes with documentation contract tests.
+**Architecture:** Extend only the initial-import CLI boundary with an explicit Apollo-only mode; the existing import workflow already represents missing provider metrics as absent and the existing enrichment job already starts the reviewed Apify actor. Put orchestration policy in a dedicated operations runbook, link it from a concise README prompt, and verify command names, approval gates, service separation, and credential scopes through focused manual operational review plus runtime release evidence.
 
 **Tech Stack:** Node.js 22, TypeScript, Vitest, Next.js 16, Airtable Web API, Apify REST client, Railway MCP, Markdown operations documentation.
 
@@ -18,7 +18,10 @@
 - Missing Semrush enrichment remains absent, never zero.
 - `--apollo-only --domains <path>` and `--semrush <path>` are mutually exclusive, and one source mode is required.
 - In the first version, the confirmed scrape-domain set must equal the valid active Apollo roster.
+- Store the requested-domain file outside the repository in an OS temporary directory with user-only permissions, reuse its absolute path, and remove it after the flow.
 - Repository commands remain authoritative for schema, validation, import, enrichment, and verification.
+- Node 22 npm job wrappers optionally load ignored `.env` and `.env.local` without shell-sourcing; existing process variables remain authoritative.
+- Before live Apify approval, run a local Next.js callback with the same `.env.local` cache secret and require loopback health; successful enrichment requires both `status === "succeeded"` and `cacheInvalidated === true`.
 - Live Airtable import, acceptance of partial enrichment, and Railway deployment each require separate explicit approval.
 - The web service must not receive `APIFY_TOKEN` or `APP_BASE_URL`; web and refresh receive the same server-only `CACHE_INVALIDATION_SECRET`.
 - The refresh service has no public domain and uses `/railway.cron.toml`, `NEVER`, and `0 15 * * 1`.
@@ -28,6 +31,7 @@
 
 - `jobs/import-initial.ts`: parse the new bootstrap flag and pass an empty validated Semrush collection into the existing workflow.
 - `tests/workflows/import-initial-cli.test.ts`: own the CLI-mode, compatibility, and sanitized-output behavior.
+- `package.json`: load optional ignored local environment files for every standalone job.
 - `.env.example`: document the exact Airtable PAT scopes required by the schema command.
 - `docs/operations/onboarding.md`: canonical agent-led clone-to-deploy runbook and Railway MCP sequence.
 - `README.md`: short human entry point plus copyable agent prompt.
@@ -256,10 +260,10 @@ git commit -m "docs: correct Airtable setup scopes"
 **Interfaces:**
 
 - Consumes: package scripts `airtable:schema`, `import:initial`, `enrich`,
-  `test`, and `build`; Railway MCP capabilities `whoami`, `list_workspaces`,
-  `create_project`, `create_deployment`, `set_variables`, `update_service`,
-  `generate_domain`, `get_service_config`, `redeploy`, `get_status`, and
-  `get_logs`.
+  `test`, and `build`; Railway MCP read-only identity/workspace discovery plus
+  active operations `create_project`, `create_deployment`, `set_variables`,
+  `update_service`, `generate_domain`, `get_service_config`, `redeploy`,
+  `get_status`, and `get_logs`.
 - Produces: a canonical runbook at `docs/operations/onboarding.md` and a
   copyable README prompt that routes agents to it.
 
@@ -300,9 +304,9 @@ npm run enrich -- --provider-fixture tests/fixtures/providers/semrush-sample.jso
 npm run build -- --webpack
 npm run airtable:schema
 npm run import:initial -- --apollo <apollo.csv> --semrush <semrush.json> --dry-run
-npm run import:initial -- --apollo <apollo.csv> --apollo-only --domains <domains.txt> --dry-run
+npm run import:initial -- --apollo <apollo.csv> --apollo-only --domains <absolute-temp-domain-file> --dry-run
 npm run import:initial -- --apollo <apollo.csv> --semrush <semrush.json>
-npm run import:initial -- --apollo <apollo.csv> --apollo-only --domains <domains.txt>
+npm run import:initial -- --apollo <apollo.csv> --apollo-only --domains <absolute-temp-domain-file>
 npm run enrich
 ```
 
@@ -312,27 +316,36 @@ arguments. For the missing-export branch, require the agent to:
 
 1. Parse and normalize the Apollo websites through the dry-run command.
 2. Ask the user for a website-domain list or confirmation of the normalized
-   Apollo list, save it to an uncommitted line-delimited file, and pass that
-   file through `--domains`.
+   Apollo list, save it to a user-only line-delimited file in an OS temporary
+   directory outside the repository, and pass its absolute path through
+   `--domains` for preview and live import. Remove it after the flow.
 3. Let the CLI reject invalid, duplicate, unknown, extra, or incomplete
    confirmation; the first version requires exact equality with the valid
    active Apollo roster.
-4. Import with `--apollo-only --domains <domains.txt>` only after the live-import approval.
+4. Import with `--apollo-only --domains <absolute-temp-domain-file>` only after the live-import approval.
 5. Check refresh variable names as present/missing.
-6. Obtain separate approval for the live provider-costing enrichment, then run
+6. Before approval, start `npm run dev -- --webpack` from the same ignored
+   `.env.local` used by the job, with loopback `APP_BASE_URL` and one shared
+   local cache secret; require the health endpoint to succeed.
+7. Obtain separate approval for the live provider-costing enrichment, then run
    `npm run enrich`, which triggers `pro100chok/semrush-scraper` through the
    existing Apify client.
-7. Report processed, succeeded, failed, cache status, run ID, and domain
-   identities without raw provider records.
+8. Require succeeded status, true cache invalidation, and complete domain
+   coverage; otherwise enter the partial/result gate. Report processed,
+   succeeded, failed, cache status, run ID, and domain identities without raw
+   provider records.
 
-For Railway MCP, write a numbered tool sequence using the capability names in
-the Interfaces block. Before the Railway approval, use only `whoami`,
-`list_workspaces`, and user confirmation of GitHub `owner/name` plus branch.
-After approval, call `create_project`, then use `create_deployment` once to
-create each GitHub-backed service. Because this can trigger an initial build,
-configure with `update_service` and `set_variables` using `skipDeploys: true`,
-inspect with `get_service_config`, and call `redeploy` once per fully configured
-service. Configure:
+For Railway MCP, begin with read-only capability/schema discovery for every
+active operation in the Interfaces block. If a name or argument differs, stop
+before mutation and confirm an equivalent's schema. Never use `list_variables`;
+`get_service_config` returns `variableNames` without values. Before the Railway
+approval, use only read-only discovery, identity/workspace lookup, and user
+confirmation of GitHub `owner/name` plus branch. After approval, call
+`create_project`, then use `create_deployment` once to create each GitHub-backed
+service. Because this can trigger an unconfigured initial build, configure with
+`update_service` (which does not accept `skipDeploys`) and
+`set_variables(skipDeploys: true)`, inspect with `get_service_config`, and call
+`redeploy` once per fully configured service. Configure:
 
 - Web: `Dockerfile`, `npm start`, `/api/health`, `ON_FAILURE`, 3 retries, one
   generated public domain, Airtable variables plus `CACHE_INVALIDATION_SECRET`.
@@ -344,11 +357,11 @@ Include the exact rule: "The web service must not receive `APIFY_TOKEN` or
 `APP_BASE_URL`; both services receive the same server-only
 `CACHE_INVALIDATION_SECRET`; the refresh service has no public domain."
 
-Tell the agent to use `get_service_config` to verify variable names without
-retrieving values, `get_status` to follow deployments, and `get_logs` only for
-a failed service with secret-bearing output redacted. Resource creation or a
-triggered deployment is not success; `/api/health` must return `200` and
-`status: ok`.
+Tell the agent to use `get_service_config` to verify `variableNames` without
+retrieving values, `get_status` to follow configured redeployments, and
+redacted `get_logs` only for a failed service. Resource creation or an initial
+build is not success; `/api/health` must return `200` and `status: ok` after the
+configured redeploy.
 
 Correct `.env.example` and `docs/operations/deployment.md` so both services
 receive the same server-only `CACHE_INVALIDATION_SECRET`; only refresh receives

@@ -13,12 +13,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "airtable:schema": "tsx jobs/setup-airtable-schema.ts",
-    "import:initial": "tsx jobs/import-initial.ts",
-    "enrich": "tsx jobs/enrich.ts",
-    "insights:prepare": "tsx jobs/prepare-insights.ts",
-    "insights:submit": "tsx jobs/submit-insight.ts",
-    "insights:publish-approved": "tsx jobs/publish-approved-insights.ts"
+    "airtable:schema": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/setup-airtable-schema.ts",
+    "import:initial": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/import-initial.ts",
+    "enrich": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/enrich.ts",
+    "insights:prepare": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/prepare-insights.ts",
+    "insights:submit": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/submit-insight.ts",
+    "insights:publish-approved": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/publish-approved-insights.ts"
   },
   "dependencies": {
     "@carbon/charts": "^1.27.18",
