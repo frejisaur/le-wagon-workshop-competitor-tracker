@@ -90,14 +90,22 @@ function positiveFinite(value: number | null | undefined): boolean {
 }
 
 function keywordProjection(record: SemrushDomainOverview, context: TransformSemrushContext, issues: DataQualityIssue[]): CuratedKeyword[] {
-  return (record.organic?.top_keywords ?? []).flatMap((keyword, index) => {
-    if (!keyword.keyword || !keyword.url) return [];
+  const result: CuratedKeyword[] = [];
+  const identities = new Set<string>();
+  for (const [index, keyword] of (record.organic?.top_keywords ?? []).entries()) {
+    if (!keyword.keyword || !keyword.url) continue;
     const normalizedLandingUrl = normalizeUrl(keyword.url);
     if (!normalizedLandingUrl) {
       issues.push({code: 'invalid_keyword_landing_url', message: 'Keyword landing URL is not a public http/https URL', sourcePath: `organic.top_keywords[${index}].url`, summary: keyword.url});
-      return [];
+      continue;
     }
-    return [{
+    const keywordId = `${context.companyId}\u0000${keyword.keyword}\u0000${normalizedLandingUrl}`;
+    if (identities.has(keywordId)) {
+      issues.push({code: 'duplicate_keyword_identity', message: 'Repeated keyword identity omitted after the first provider-ranked observation', sourcePath: `organic.top_keywords[${index}]`, summary: 'repeated company, keyword, and normalized landing URL'});
+      continue;
+    }
+    identities.add(keywordId);
+    result.push({
       observed: {
         keyword: keyword.keyword, landingUrl: keyword.url, position: keyword.position, previousPosition: keyword.previous_position,
         positionDifference: keyword.position_difference, volume: keyword.volume, cpcUsd: keyword.cpc_usd,
@@ -106,11 +114,12 @@ function keywordProjection(record: SemrushDomainOverview, context: TransformSemr
         rawSerpCodes: keyword.serp_features_codes, results: keyword.results, ...observedMetadata(context, record.database),
       },
       calculated: {
-        companyId: context.companyId, keywordId: `${context.companyId}\u0000${keyword.keyword}\u0000${normalizedLandingUrl}`,
+        companyId: context.companyId, keywordId,
         normalizedLandingUrl, ...calculatedMetadata(context, ['companyId', `semrush.organic.top_keywords[${index}]`]),
       },
-    }];
-  });
+    });
+  }
+  return result;
 }
 
 function paidAdProjection(record: SemrushDomainOverview, context: TransformSemrushContext, issues: DataQualityIssue[]): CuratedPaidAd[] {
@@ -184,7 +193,7 @@ export function transformSemrushCompany(record: SemrushDomainOverview, context: 
     mozDomainAuthority: parseCompactNumber(record.moz_domain_authority), mozSpamScore: parseCompactNumber(record.moz_spam_score),
     mozTopPages, mozTopPagesObservedCount: mozTopPagesObserved.length, topKeywordSampleCount: organic?.top_keywords.length ?? 0,
     compactOrganicTrend: compactTrend(monthlyTrend),
-    landingPagePortfolio: buildLandingPagePortfolio((organic?.top_keywords ?? []).map((keyword) => ({keyword: keyword.keyword, url: keyword.url, traffic: keyword.traffic}))),
+    landingPagePortfolio: buildLandingPagePortfolio(keywords.map((keyword) => ({keyword: keyword.observed.keyword, url: keyword.observed.landingUrl, traffic: keyword.observed.traffic}))),
     paidActivityPresent: positiveFinite(record.paid_traffic) || positiveFinite(record.paid_keywords) || positiveFinite(record.paid_traffic_cost_usd) || paidAds.length > 0
       ? true
       : !paid || paid.top_ads.length > 0 || record.paid_traffic !== 0 || record.paid_keywords !== 0 || record.paid_traffic_cost_usd !== 0

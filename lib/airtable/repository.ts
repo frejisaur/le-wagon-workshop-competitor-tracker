@@ -87,13 +87,22 @@ export class AirtableCompetitorRepository implements CompetitorStore {
     } catch (error) {
       return {succeeded: 0, failed: keywords.length, results: keywords.map((keyword) => ({identity: keyword.calculated.keywordId, error: errorMessage(error)}))};
     }
-    const existingByIdentity = new Map(existing.map((record) => [String(record.fields['Identity • Keyword ID'] ?? ''), record]));
+    const existingByIdentity = new Map<string, AirtableRecord>();
+    const duplicateRecordIds: string[] = [];
+    for (const record of existing) {
+      const identity = String(record.fields['Identity • Keyword ID'] ?? '');
+      if (existingByIdentity.has(identity)) duplicateRecordIds.push(record.id);
+      else existingByIdentity.set(identity, record);
+    }
     const writes = keywords.map((keyword) => ({identity: keyword.calculated.keywordId, fields: toAirtableKeywordFields(keyword, companyRecord.id), recordId: existingByIdentity.get(keyword.calculated.keywordId)?.id}));
     const written = await this.performWrites(AIRTABLE_TABLES.keywords, writes, result);
     if (written.failed > 0) return written;
 
     const incoming = new Set(keywords.map((keyword) => keyword.calculated.keywordId));
-    const obsolete = existing.filter((record) => !incoming.has(String(record.fields['Identity • Keyword ID'] ?? ''))).map((record) => record.id);
+    const obsolete = [...new Set([
+      ...existing.filter((record) => !incoming.has(String(record.fields['Identity • Keyword ID'] ?? ''))).map((record) => record.id),
+      ...duplicateRecordIds,
+    ])];
     for (const batch of chunks(obsolete)) {
       try {
         await this.client.delete(AIRTABLE_TABLES.keywords, batch);

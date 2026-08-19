@@ -12,6 +12,8 @@ const requestBodies: Array<{records: unknown[]}> = [];
 let rateLimitedRequestCount = 0;
 let failCompanyWrites = false;
 let deletedKeywordIds: string[] = [];
+let duplicateExistingKeyword = false;
+let patchedKeywordIds: string[] = [];
 let companyUpdateCount = 0;
 const companyPatchBodies: Array<{records: Array<{fields: Record<string, unknown>}>}> = [];
 let keywordPostCount = 0;
@@ -49,13 +51,24 @@ const server = setupServer(
     companyPatchBodies.push(body);
     return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-update-${index}`, fields: {}}))});
   }),
-  http.get(`${endpoint}/v0/base/Keywords`, () => HttpResponse.json({records: [{id: 'rec-old-keyword', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Keyword ID': 'company-alpha\u0000old\u0000https://alpha.example/old'}}]})),
+  http.get(`${endpoint}/v0/base/Keywords`, () => HttpResponse.json({records: duplicateExistingKeyword
+    ? [
+      {id: 'rec-keyword-keep', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Keyword ID': 'company-alpha\u0000new\u0000https://alpha.example/new'}},
+      {id: 'rec-keyword-duplicate', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Keyword ID': 'company-alpha\u0000new\u0000https://alpha.example/new'}},
+    ]
+    : [{id: 'rec-old-keyword', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Keyword ID': 'company-alpha\u0000old\u0000https://alpha.example/old'}}]})),
   http.post(`${endpoint}/v0/base/Keywords`, async ({request}) => {
     const body = await request.json() as {records: Array<{fields: Record<string, unknown>}>};
     keywordPostCount += 1;
     if (failSecondKeywordBatch && keywordPostCount === 2) return HttpResponse.json({error: {type: 'UNPROCESSABLE_ENTITY'}}, {status: 422});
     keywordBodies.push(body);
     return HttpResponse.json({records: body.records.map((_, index) => ({id: `rec-keyword-${index}`, fields: {}}))});
+  }),
+  http.patch(`${endpoint}/v0/base/Keywords`, async ({request}) => {
+    const body = await request.json() as {records: Array<{id: string; fields: Record<string, unknown>}>};
+    patchedKeywordIds = body.records.map((record) => record.id);
+    keywordBodies.push(body);
+    return HttpResponse.json({records: body.records.map((record) => ({id: record.id, fields: record.fields}))});
   }),
   http.delete(`${endpoint}/v0/base/Keywords`, ({request}) => {
     deletedKeywordIds = new URL(request.url).searchParams.getAll('records[]');
@@ -102,7 +115,7 @@ const server = setupServer(
 );
 
 beforeAll(() => server.listen({onUnhandledRequest: 'error'}));
-afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; companyUpdateCount = 0; companyPatchBodies.length = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; companyLookupCount = 0; paidAdWriteCount = 0; paidAdIdentityLookupCount = 0; existingPaidAdIds.clear(); paidAdPatchBodies.length = 0; paidAdPostBodies.length = 0; insightPatchBodies.length = 0; systemPatchBodies.length = 0; });
+afterEach(() => { server.resetHandlers(); requestBodies.length = 0; rateLimitedRequestCount = 0; failCompanyWrites = false; deletedKeywordIds = []; duplicateExistingKeyword = false; patchedKeywordIds = []; companyUpdateCount = 0; companyPatchBodies.length = 0; keywordPostCount = 0; failSecondKeywordBatch = false; keywordBodies.length = 0; companyLookupCount = 0; paidAdWriteCount = 0; paidAdIdentityLookupCount = 0; existingPaidAdIds.clear(); paidAdPatchBodies.length = 0; paidAdPostBodies.length = 0; insightPatchBodies.length = 0; systemPatchBodies.length = 0; });
 afterAll(() => server.close());
 
 function makeCompanies(count: number): CompanyWrite[] {
@@ -263,6 +276,17 @@ describe('AirtableCompetitorRepository', () => {
     expect(result).toMatchObject({succeeded: 1, failed: 0});
     expect(deletedKeywordIds).toEqual(['rec-old-keyword']);
     expect(keywordBodies[0].records[0].fields['Identity • Company Link']).toEqual(['rec-company-alpha']);
+  });
+
+  it('converges duplicate stored keyword identities after the retained update succeeds', async () => {
+    duplicateExistingKeyword = true;
+    const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: 'base', apiToken: 'token', endpoint, jitter: () => 0}));
+
+    const result = await repository.replaceKeywords('company-alpha', [makeKeyword()]);
+
+    expect(result).toMatchObject({succeeded: 1, failed: 0});
+    expect(patchedKeywordIds).toEqual(['rec-keyword-keep']);
+    expect(deletedKeywordIds).toEqual(['rec-keyword-duplicate']);
   });
 
   it('retains obsolete keyword records when a later new-write batch fails', async () => {

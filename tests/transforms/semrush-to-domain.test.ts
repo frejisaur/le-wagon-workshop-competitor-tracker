@@ -92,6 +92,29 @@ describe('transformSemrushCompany', () => {
     expect(evidence.company.calculated.mozDomainAuthority).toEqual({raw: '1.6k', normalized: 1600});
   });
 
+  it('keeps one provider-ranked row per stable keyword identity and records repeated observations', () => {
+    const record = structuredClone(semrushFixture[0]);
+    const first = record.organic!.top_keywords[0];
+    record.organic!.top_keywords = [
+      first,
+      {...first, position: 99, traffic: (first.traffic ?? 0) + 1},
+    ];
+
+    const evidence = transformSemrushCompany(record, context);
+
+    expect(evidence.keywords).toHaveLength(1);
+    expect(evidence.keywords[0].observed.position).toBe(first.position);
+    expect(evidence.company.calculated.landingPagePortfolio).toEqual([
+      expect.objectContaining({keywordCount: 1}),
+    ]);
+    expect(evidence.qualityIssues).toContainEqual({
+      code: 'duplicate_keyword_identity',
+      message: 'Repeated keyword identity omitted after the first provider-ranked observation',
+      sourcePath: 'organic.top_keywords[1]',
+      summary: 'repeated company, keyword, and normalized landing URL',
+    });
+  });
+
   it('omits suspicious Moz pages from display data while retaining a quality issue and observed summary', () => {
     const evidence = transformSemrushCompany(semrushFixture[0], context);
 

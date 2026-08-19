@@ -17,6 +17,7 @@ const MAX_QUALITY_EVIDENCE = 25;
 const QUALITY_PATHS = {
   suspicious_moz_top_page: /^moz\.top_pages\[\d+\]\.url$/,
   invalid_keyword_landing_url: /^organic\.top_keywords\[\d+\]\.url$/,
+  duplicate_keyword_identity: /^organic\.top_keywords\[\d+\]$/,
   invalid_paid_ad_landing_url: /^paid\.top_ads\[\d+\]\.url$/,
   invalid_trend_date: /^organic\.trend_global_(?:daily|monthly)\[\d+\]\.date$/,
 } as const;

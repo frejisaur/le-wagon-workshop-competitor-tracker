@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "airtable:schema": "tsx jobs/setup-airtable-schema.ts",
     "import:initial": "tsx jobs/import-initial.ts",
     "enrich": "tsx jobs/enrich.ts",
     "insights:prepare": "tsx jobs/prepare-insights.ts",

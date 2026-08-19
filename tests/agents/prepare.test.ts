@@ -171,6 +171,7 @@ describe('prepareInsights', () => {
   it.each([
     ['suspicious_moz_top_page', 'moz.top_pages[12].url', 'organic.top_keywords[3].url'],
     ['invalid_keyword_landing_url', 'organic.top_keywords[12].url', 'paid.top_ads[3].url'],
+    ['duplicate_keyword_identity', 'organic.top_keywords[12]', 'organic.top_keywords[12].url'],
     ['invalid_paid_ad_landing_url', 'paid.top_ads[12].url', 'organic.trend_global_daily[3].date'],
     ['invalid_trend_date', 'organic.trend_global_monthly[12].date', 'moz.top_pages[3].url'],
   ] as const)('accepts only the trusted path for %s and never forwards mismatched/instruction paths', (code, validPath, mismatchedPath) => {
@@ -198,6 +199,7 @@ describe('prepareInsights', () => {
     const issues = [
       {code: 'suspicious_moz_top_page', sourcePath: 'moz.top_pages[2].url'},
       {code: 'invalid_keyword_landing_url', sourcePath: 'organic.top_keywords[1].url'},
+      {code: 'duplicate_keyword_identity', sourcePath: 'organic.top_keywords[7]'},
       {code: 'invalid_paid_ad_landing_url', sourcePath: 'paid.top_ads[4].url'},
       {code: 'invalid_trend_date', sourcePath: 'organic.trend_global_daily[3].date'},
       {code: 'invalid_keyword_landing_url', sourcePath: 'organic.top_keywords[1].url'},
@@ -217,10 +219,11 @@ describe('prepareInsights', () => {
 
     expect(reversed).toEqual(forward);
     expect(forward.map((row) => row.ref)).toEqual([
-      'quality:company:company-alpha:invalid_keyword_landing_url:0',
-      'quality:company:company-alpha:invalid_paid_ad_landing_url:1',
-      'quality:company:company-alpha:invalid_trend_date:2',
-      'quality:company:company-alpha:suspicious_moz_top_page:3',
+      'quality:company:company-alpha:duplicate_keyword_identity:0',
+      'quality:company:company-alpha:invalid_keyword_landing_url:1',
+      'quality:company:company-alpha:invalid_paid_ad_landing_url:2',
+      'quality:company:company-alpha:invalid_trend_date:3',
+      'quality:company:company-alpha:suspicious_moz_top_page:4',
     ]);
   });
 
