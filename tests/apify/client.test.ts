@@ -26,11 +26,12 @@ describe('ApifyClient', () => {
     await expect(client.getDatasetItems('dataset-1', {timeoutMs: 1})).rejects.toThrow('Apify operation timed out');
   });
 
-  it('polls boundedly and paginates dataset items without accepting an unknown run status', async () => {
+  it('polls with bounded exponential backoff and parses Apify array dataset pages and pagination headers', async () => {
     let runReads = 0;
     const urls: string[] = [];
+    const delays: number[] = [];
     const client = new ApifyClient({
-      token: 'safe', endpoint: 'https://apify.test/v2', maxPollAttempts: 2, pollDelayMs: 0, sleep: async () => {},
+      token: 'safe', endpoint: 'https://apify.test/v2', maxPollAttempts: 3, pollDelayMs: 50, sleep: async (milliseconds) => { delays.push(milliseconds); },
       fetch: async (input) => {
         const url = String(input);
         urls.push(url);
@@ -38,14 +39,19 @@ describe('ApifyClient', () => {
           runReads += 1;
           return new Response(JSON.stringify({data: {id: 'provider-run', status: runReads === 1 ? 'RUNNING' : 'SUCCEEDED', defaultDatasetId: 'dataset-1'}}));
         }
-        if (url.includes('offset=0')) return new Response(JSON.stringify({data: {items: [{domain: 'alpha.example'}], offset: 0, count: 1, total: 2}}));
-        return new Response(JSON.stringify({data: {items: [{domain: 'beta.example'}], offset: 1, count: 1, total: 2}}));
+        if (url.includes('offset=0')) return new Response(JSON.stringify([{domain: 'alpha.example'}]), {headers: {
+          'X-Apify-Pagination-Offset': '0', 'X-Apify-Pagination-Limit': '1000', 'X-Apify-Pagination-Count': '1', 'X-Apify-Pagination-Total': '2',
+        }});
+        return new Response(JSON.stringify([{domain: 'beta.example'}]), {headers: {
+          'X-Apify-Pagination-Offset': '1', 'X-Apify-Pagination-Limit': '1000', 'X-Apify-Pagination-Count': '1', 'X-Apify-Pagination-Total': '2',
+        }});
       },
     });
 
     await expect(client.waitForRun('provider-run', {timeoutMs: 100})).resolves.toMatchObject({status: 'SUCCEEDED', datasetId: 'dataset-1'});
     await expect(client.getDatasetItems('dataset-1', {timeoutMs: 100})).resolves.toEqual([{domain: 'alpha.example'}, {domain: 'beta.example'}]);
     expect(urls.filter((url) => url.includes('datasets'))).toHaveLength(2);
+    expect(delays).toEqual([50]);
   });
 
   it('rejects unsafe polling, pagination, and timeout caps before requesting the provider', () => {

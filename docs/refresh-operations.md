@@ -9,9 +9,10 @@ npm run enrich -- --provider-fixture tests/fixtures/providers/semrush-sample.jso
 
 Fixture execution uses the mutable fixture repository and keeps GTM Insights and
 Insight Reviews unchanged. Live execution validates server-only Airtable,
-`APIFY_TOKEN`, `APIFY_ACTOR_ID`, `APP_BASE_URL`, and cache-secret settings; an
-explicit `--actor-id` is an operator override, otherwise the validated env value
-is used.
+`APIFY_TOKEN`, `APIFY_ACTOR_ID`, `APP_BASE_URL`, and cache-secret settings.
+Railway validates `APIFY_ACTOR_ID=pro100chok/semrush-scraper`; an explicit
+`--actor-id` is a local/operator override, otherwise that reviewed env value is
+used.
 It validates provider data, replaces observed Keyword/Paid Ad snapshots, updates
 the canonical evidence fingerprint, preserves partial successes, and exits nonzero
 for partial or failed refreshes.

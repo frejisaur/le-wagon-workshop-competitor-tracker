@@ -148,7 +148,7 @@ export type CuratedPaidAd = {
 };
 
 export type DataQualityIssue = {
-  code: 'suspicious_moz_top_page' | 'invalid_keyword_landing_url' | 'duplicate_keyword_identity' | 'invalid_paid_ad_landing_url' | 'invalid_trend_date';
+  code: 'suspicious_moz_top_page' | 'invalid_keyword_landing_url' | 'duplicate_keyword_identity' | 'invalid_paid_ad_landing_url' | 'invalid_trend_date' | 'malformed_organic_module' | 'malformed_paid_module' | 'tracked_set_coverage_incomplete';
   message: string;
   sourcePath: string;
   summary: string;

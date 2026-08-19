@@ -11,7 +11,9 @@ export const AIRTABLE_TABLES = {
   system: 'System',
 } as const;
 
-export type AirtableTable = (typeof AIRTABLE_TABLES)[keyof typeof AIRTABLE_TABLES];
+/** Table names are deployment configuration, not a hard-coded schema contract. */
+export type AirtableTable = string;
+export type AirtableTableMap = {[Key in keyof typeof AIRTABLE_TABLES]: AirtableTable};
 export type AirtableFieldValue = string | number | boolean | null | string[];
 export type AirtableFields = Record<string, AirtableFieldValue | undefined>;
 export type AirtableRecord = {id: string; fields: AirtableFields; createdTime?: string};

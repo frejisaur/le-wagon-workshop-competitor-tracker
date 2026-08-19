@@ -156,6 +156,15 @@ function insight(insightId: string): InsightWireInput {
 }
 
 describe('AirtableCompetitorRepository', () => {
+  it('uses the configured table mapping rather than implicit canonical table names', async () => {
+    const tables: string[] = [];
+    const client = {list: async (table: string) => { tables.push(table); return []; }} as unknown as AirtableClient;
+    const repository = new AirtableCompetitorRepository(client, {companies: 'Tenant Companies', keywords: 'Tenant Keywords', paidAds: 'Tenant Paid Ads', insights: 'Tenant Insights', reviews: 'Tenant Reviews', system: 'Tenant System'});
+
+    await repository.getDashboardSnapshot();
+    expect(tables.sort()).toEqual(['Tenant Companies', 'Tenant Insights', 'Tenant Keywords', 'Tenant Paid Ads', 'Tenant Reviews', 'Tenant System'].sort());
+  });
+
   it('caps Retry-After waits, rejects invalid attempt counts, and rejects repeated page offsets', async () => {
     expect(() => new AirtableClient({baseId: 'base', apiToken: 'token', maxAttempts: 0})).toThrow('maxAttempts');
     const waits: number[] = [];

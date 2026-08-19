@@ -1,7 +1,7 @@
 import type {CuratedKeyword, CuratedPaidAd} from '@/lib/domain/metrics';
 import {AirtableClient, AirtableClientError} from './client';
 import {toAirtableCompanyFields, toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields, toAirtableSystemFields} from './mappers';
-import {AIRTABLE_TABLES, type AirtableFields, type AirtableRecord, type AirtableTable, type CompanyPersistenceWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type RecordResult, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
+import {AIRTABLE_TABLES, type AirtableFields, type AirtableRecord, type AirtableTable, type AirtableTableMap, type CompanyPersistenceWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type RecordResult, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
 
 const BATCH_SIZE = 10;
 
@@ -40,16 +40,17 @@ type WriteItem = {identity: string; fields: AirtableFields; recordId?: string};
 
 /** Server-only Airtable adapter. Its public methods expose curated domain inputs and typed wire records only. */
 export class AirtableCompetitorRepository implements CompetitorStore {
-  constructor(private readonly client: AirtableClient) {}
+  private readonly tables: AirtableTableMap;
+  constructor(private readonly client: AirtableClient, tables: AirtableTableMap = AIRTABLE_TABLES) { this.tables = tables; }
 
   async resolveCompanyIdentity(identity: {apolloAccountId: string; canonicalDomain: string}): Promise<{companyId: string; source: 'apollo_account_id' | 'canonical_domain'} | null> {
     if (identity.apolloAccountId) {
-      const byAccount = await this.client.list(AIRTABLE_TABLES.companies, {filterByFormula: equalityFormula('Observed • Apollo Account ID', identity.apolloAccountId)});
+      const byAccount = await this.client.list(this.tables.companies, {filterByFormula: equalityFormula('Observed • Apollo Account ID', identity.apolloAccountId)});
       const companyId = byAccount.map(firstCompanyId).find((value): value is string => value !== null);
       if (companyId) return {companyId, source: 'apollo_account_id'};
     }
     if (identity.canonicalDomain) {
-      const byDomain = await this.client.list(AIRTABLE_TABLES.companies, {filterByFormula: equalityFormula('Identity • Canonical Domain', identity.canonicalDomain)});
+      const byDomain = await this.client.list(this.tables.companies, {filterByFormula: equalityFormula('Identity • Canonical Domain', identity.canonicalDomain)});
       const companyId = byDomain.map(firstCompanyId).find((value): value is string => value !== null);
       if (companyId) return {companyId, source: 'canonical_domain'};
     }
@@ -73,7 +74,7 @@ export class AirtableCompetitorRepository implements CompetitorStore {
         result.results.push({identity: company.companyId, error: errorMessage(error)});
       }
     }
-    return this.performWrites(AIRTABLE_TABLES.companies, writes, result);
+    return this.performWrites(this.tables.companies, writes, result);
   }
 
   async replaceKeywords(companyId: string, keywords: CuratedKeyword[]): Promise<WriteResult> {
@@ -83,7 +84,7 @@ export class AirtableCompetitorRepository implements CompetitorStore {
     try {
       companyRecord = await this.findCompanyRecordById(companyId);
       if (!companyRecord) return {succeeded: 0, failed: keywords.length, results: keywords.map((keyword) => ({identity: keyword.calculated.keywordId, error: 'company_link_missing'}))};
-      existing = await this.client.list(AIRTABLE_TABLES.keywords, {filterByFormula: equalityFormula('Identity • Company ID', companyId)});
+      existing = await this.client.list(this.tables.keywords, {filterByFormula: equalityFormula('Identity • Company ID', companyId)});
     } catch (error) {
       return {succeeded: 0, failed: keywords.length, results: keywords.map((keyword) => ({identity: keyword.calculated.keywordId, error: errorMessage(error)}))};
     }
@@ -95,7 +96,7 @@ export class AirtableCompetitorRepository implements CompetitorStore {
       else existingByIdentity.set(identity, record);
     }
     const writes = keywords.map((keyword) => ({identity: keyword.calculated.keywordId, fields: toAirtableKeywordFields(keyword, companyRecord.id), recordId: existingByIdentity.get(keyword.calculated.keywordId)?.id}));
-    const written = await this.performWrites(AIRTABLE_TABLES.keywords, writes, result);
+    const written = await this.performWrites(this.tables.keywords, writes, result);
     if (written.failed > 0) return written;
 
     const incoming = new Set(keywords.map((keyword) => keyword.calculated.keywordId));
@@ -105,7 +106,7 @@ export class AirtableCompetitorRepository implements CompetitorStore {
     ])];
     for (const batch of chunks(obsolete)) {
       try {
-        await this.client.delete(AIRTABLE_TABLES.keywords, batch);
+        await this.client.delete(this.tables.keywords, batch);
       } catch (error) {
         written.failed += batch.length;
         written.results.push(...batch.map((identity) => ({identity, error: errorMessage(error)})));
@@ -119,7 +120,7 @@ export class AirtableCompetitorRepository implements CompetitorStore {
     let existing: AirtableRecord[];
     let writes: WriteItem[];
     try {
-      const companies = await this.client.list(AIRTABLE_TABLES.companies, {filterByFormula: equalityFormula('Identity • Company ID', companyId)});
+      const companies = await this.client.list(this.tables.companies, {filterByFormula: equalityFormula('Identity • Company ID', companyId)});
       if (!companies.length) return replacementFailure(companyId, 'company_link_missing');
       if (companies.length !== 1) return replacementFailure(companyId, 'duplicate_company_records');
       company = companies[0];
@@ -131,7 +132,7 @@ export class AirtableCompetitorRepository implements CompetitorStore {
         incomingIds.add(ad.calculated.paidAdId);
       }
 
-      existing = await this.client.list(AIRTABLE_TABLES.paidAds, {filterByFormula: equalityFormula('Identity • Company ID', companyId)});
+      existing = await this.client.list(this.tables.paidAds, {filterByFormula: equalityFormula('Identity • Company ID', companyId)});
       const existingByIdentity = new Map<string, AirtableRecord>();
       for (const record of existing) {
         const identity = record.fields['Identity • Paid Ad ID'];
@@ -153,14 +154,14 @@ export class AirtableCompetitorRepository implements CompetitorStore {
       return replacementFailure(companyId, errorMessage(error));
     }
 
-    const written = await this.performWrites(AIRTABLE_TABLES.paidAds, writes, emptyResult());
+    const written = await this.performWrites(this.tables.paidAds, writes, emptyResult());
     if (written.failed) return written;
 
     const incomingIds = new Set(ads.map((ad) => ad.calculated.paidAdId));
     const obsolete = existing.filter((record) => !incomingIds.has(String(record.fields['Identity • Paid Ad ID']))).map((record) => record.id);
     for (const batch of chunks(obsolete)) {
       try {
-        await this.client.delete(AIRTABLE_TABLES.paidAds, batch);
+        await this.client.delete(this.tables.paidAds, batch);
       } catch (error) {
         written.failed += batch.length;
         written.results.push(...batch.map((recordId) => ({identity: recordId, error: errorMessage(error)})));
@@ -188,7 +189,7 @@ export class AirtableCompetitorRepository implements CompetitorStore {
         }
         const groupWrites: WriteItem[] = [];
         for (const ad of ads) {
-          const existing = await this.client.list(AIRTABLE_TABLES.paidAds, {filterByFormula: equalityFormula('Identity • Paid Ad ID', ad.calculated.paidAdId)});
+          const existing = await this.client.list(this.tables.paidAds, {filterByFormula: equalityFormula('Identity • Paid Ad ID', ad.calculated.paidAdId)});
           const firstObservedAt = existing[0]?.fields['Observed • First Observed At'];
           const lastObservedAt = existing[0]?.fields['Observed • Last Observed At'];
           groupWrites.push({identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, companyRecord.id, typeof firstObservedAt === 'string' ? firstObservedAt : undefined, typeof lastObservedAt === 'string' ? lastObservedAt : undefined), recordId: existing[0]?.id});
@@ -199,18 +200,18 @@ export class AirtableCompetitorRepository implements CompetitorStore {
         result.results.push(...ads.map((ad) => ({identity: ad.calculated.paidAdId, error: errorMessage(error)})));
       }
     }
-    return this.performWrites(AIRTABLE_TABLES.paidAds, writes, result);
+    return this.performWrites(this.tables.paidAds, writes, result);
   }
 
   async getDashboardSnapshot(): Promise<DashboardSnapshot> {
     const [companies, keywords, paidAds, publishedInsights, reviews, system] = await Promise.all([
-      this.client.list(AIRTABLE_TABLES.companies), this.client.list(AIRTABLE_TABLES.keywords), this.client.list(AIRTABLE_TABLES.paidAds), this.client.list(AIRTABLE_TABLES.insights), this.client.list(AIRTABLE_TABLES.reviews), this.client.list(AIRTABLE_TABLES.system),
+      this.client.list(this.tables.companies), this.client.list(this.tables.keywords), this.client.list(this.tables.paidAds), this.client.list(this.tables.insights), this.client.list(this.tables.reviews), this.client.list(this.tables.system),
     ]);
     return {companies, keywords, paidAds, publishedInsights, reviews, system};
   }
 
   async getDueInsightInputs(): Promise<DueInsightInput[]> {
-    const [companies, insights, reviews] = await Promise.all([this.client.list(AIRTABLE_TABLES.companies), this.client.list(AIRTABLE_TABLES.insights), this.client.list(AIRTABLE_TABLES.reviews)]);
+    const [companies, insights, reviews] = await Promise.all([this.client.list(this.tables.companies), this.client.list(this.tables.insights), this.client.list(this.tables.reviews)]);
     const byCompany = (records: AirtableRecord[]) => new Map(records.map((record) => [String(record.fields['Identity • Company ID'] ?? ''), record]));
     const published = byCompany(insights);
     const review = byCompany(reviews);
@@ -228,9 +229,9 @@ export class AirtableCompetitorRepository implements CompetitorStore {
 
   async upsertReview(review: ReviewWireInput): Promise<WriteResult> {
     try {
-      const existing = await this.client.list(AIRTABLE_TABLES.reviews, {filterByFormula: equalityFormula('Identity • Company ID', review.companyId)});
+      const existing = await this.client.list(this.tables.reviews, {filterByFormula: equalityFormula('Identity • Company ID', review.companyId)});
       if (existing.length > 1) return {succeeded: 0, failed: 1, results: [{identity: review.companyId, error: 'duplicate_review_records'}]};
-      return this.upsertCompanyLinked(AIRTABLE_TABLES.reviews, 'Identity • Company ID', review.companyId, (companyRecordId) => toAirtableReviewFields(review, companyRecordId));
+      return this.upsertCompanyLinked(this.tables.reviews, 'Identity • Company ID', review.companyId, (companyRecordId) => toAirtableReviewFields(review, companyRecordId));
     } catch (error) {
       return {succeeded: 0, failed: 1, results: [{identity: review.companyId, error: errorMessage(error)}]};
     }
@@ -240,32 +241,32 @@ export class AirtableCompetitorRepository implements CompetitorStore {
     try {
       const company = await this.findCompanyRecordById(insight.companyId);
       if (!company) return {succeeded: 0, failed: 1, results: [{identity: insight.companyId, error: 'company_link_missing'}]};
-      const existing = await this.client.list(AIRTABLE_TABLES.insights, {filterByFormula: equalityFormula('Identity • Company ID', insight.companyId)});
+      const existing = await this.client.list(this.tables.insights, {filterByFormula: equalityFormula('Identity • Company ID', insight.companyId)});
       if (existing.length > 1) return {succeeded: 0, failed: 1, results: [{identity: insight.companyId, error: 'duplicate_published_insights'}]};
       // Company identity, not generated insight identity, enforces one current
       // published row. The write cannot target another company's record.
-      return this.performWrites(AIRTABLE_TABLES.insights, [{identity: insight.companyId, fields: toAirtableInsightFields(insight, company.id), recordId: existing[0]?.id}], emptyResult());
+      return this.performWrites(this.tables.insights, [{identity: insight.companyId, fields: toAirtableInsightFields(insight, company.id), recordId: existing[0]?.id}], emptyResult());
     } catch (error) {
       return {succeeded: 0, failed: 1, results: [{identity: insight.companyId, error: errorMessage(error)}]};
     }
   }
 
   async updateSystem(system: SystemWireInput): Promise<WriteResult> {
-    return this.upsertOne(AIRTABLE_TABLES.system, 'Identity • System ID', system.systemId, toAirtableSystemFields(system));
+    return this.upsertOne(this.tables.system, 'Identity • System ID', system.systemId, toAirtableSystemFields(system));
   }
 
   private async findCompanyRecord(company: CompanyPersistenceWrite): Promise<AirtableRecord | undefined> {
     if (company.identity.apolloAccountId) {
-      const byAccount = await this.client.list(AIRTABLE_TABLES.companies, {filterByFormula: equalityFormula('Observed • Apollo Account ID', company.identity.apolloAccountId)});
+      const byAccount = await this.client.list(this.tables.companies, {filterByFormula: equalityFormula('Observed • Apollo Account ID', company.identity.apolloAccountId)});
       if (byAccount[0]) return byAccount[0];
     }
-    const byDomain = await this.client.list(AIRTABLE_TABLES.companies, {filterByFormula: equalityFormula('Identity • Canonical Domain', company.identity.canonicalDomain)});
+    const byDomain = await this.client.list(this.tables.companies, {filterByFormula: equalityFormula('Identity • Canonical Domain', company.identity.canonicalDomain)});
     if (byDomain[0]) return byDomain[0];
     return this.findCompanyRecordById(company.companyId);
   }
 
   private async findCompanyRecordById(companyId: string): Promise<AirtableRecord | undefined> {
-    const records = await this.client.list(AIRTABLE_TABLES.companies, {filterByFormula: equalityFormula('Identity • Company ID', companyId)});
+    const records = await this.client.list(this.tables.companies, {filterByFormula: equalityFormula('Identity • Company ID', companyId)});
     return records[0];
   }
 

@@ -20,6 +20,9 @@ const QUALITY_PATHS = {
   duplicate_keyword_identity: /^organic\.top_keywords\[\d+\]$/,
   invalid_paid_ad_landing_url: /^paid\.top_ads\[\d+\]\.url$/,
   invalid_trend_date: /^organic\.trend_global_(?:daily|monthly)\[\d+\]\.date$/,
+  malformed_organic_module: /^organic$/,
+  malformed_paid_module: /^paid$/,
+  tracked_set_coverage_incomplete: /^refresh\.coverage$/,
 } as const;
 type QualityCode = keyof typeof QUALITY_PATHS;
 

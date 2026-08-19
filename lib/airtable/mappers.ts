@@ -149,7 +149,7 @@ export function toAirtableKeywordFields(keyword: CuratedKeyword, companyAirtable
     'Identity • Keyword ID': calculated.keywordId,
     'Identity • Company ID': calculated.companyId,
     'Identity • Company Link': [companyAirtableRecordId],
-    'Observed • Source': observed.source, 'Observed • At': observed.observedAt, 'Observed • Database': observed.database,
+    'Observed • Source': observed.source, 'Observed • At': observed.observedAt, 'Observed • Database': observed.database, 'Observed • Raw Ref': observed.rawRef,
     'Observed • Keyword': observed.keyword, 'Observed • Landing URL': observed.landingUrl, 'Observed • Position': observed.position,
     'Observed • Previous Position': observed.previousPosition, 'Observed • Position Difference': observed.positionDifference,
     'Observed • Volume': observed.volume, 'Observed • CPC USD': observed.cpcUsd, 'Observed • Keyword Difficulty': observed.keywordDifficulty,
@@ -180,7 +180,7 @@ export function toAirtablePaidAdFields(ad: CuratedPaidAd, companyAirtableRecordI
   const observationRange = paidAdObservationRange(observed.observedAt, storedFirstAt, storedLastAt);
   return {
     'Identity • Paid Ad ID': calculated.paidAdId, 'Identity • Company ID': calculated.companyId, 'Identity • Company Link': [companyAirtableRecordId],
-    'Observed • Source': observed.source, 'Observed • At': observed.observedAt, 'Observed • Database': observed.database,
+    'Observed • Source': observed.source, 'Observed • At': observed.observedAt, 'Observed • Database': observed.database, 'Observed • Raw Ref': observed.rawRef,
     'Observed • Keyword': observed.keyword, 'Observed • Title': observed.title, 'Observed • Description': observed.description,
     'Observed • Visible URL': observed.visibleUrl, 'Observed • Landing URL': observed.landingUrl, 'Observed • Position': observed.position,
     'Observed • Previous Position': observed.previousPosition, 'Observed • Volume': observed.volume, 'Observed • CPC USD': observed.cpcUsd,

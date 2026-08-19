@@ -50,7 +50,7 @@ before Railway sends TERM.
 | --- | --- |
 | Provider boundary | Validate required Company metrics and `database: "worldwide"` before transformation; malformed nested keyword/ad entries are reported and omitted without discarding a valid company. |
 | Identity | Existing Company IDs are updated; Keyword and Paid Ad identities are stable deterministic data identities. Conflicting duplicate provider records are rejected while canonical duplicates are idempotent. |
-| Evidence | One canonical curated Company + Keyword + Paid Ad evidence-package builder feeds the fingerprint. Operational IDs, timestamps, workflow/status, and generated text are excluded. |
+| Evidence | One canonical curated Company + Keyword + Paid Ad evidence-package builder feeds the fingerprint. Generated text and top-level operational metadata are excluded; a provenance-exclusion migration remains pending. |
 | Partial persistence | Repository outcomes are per record/batch. Already committed records remain succeeded if a later batch fails. |
 | Cache | After data writes and terminal status, `System.Cache Version` advances through the repository. This is concrete invalidation, not an HTTP purge. |
 | Server config | The active plain-name `AIRTABLE_SCHEMA` is supported. No legacy layered field-map compatibility is claimed. |
@@ -127,3 +127,64 @@ Tests  9 passed (9)
 The live command requires all refresh-only server variables and an Airtable base
 matching the active plain-name schema. The existing tests cover those contracts;
 live credentials were not used in this task.
+
+## Round 3 safe checkpoint
+
+This checkpoint intentionally contains only independently complete refresh
+contracts. It does not claim the unfinished whole-roster write redesign.
+
+### Included
+
+- `ApifyClient.getDatasetItems` now parses the real top-level array response
+  and validates `X-Apify-Pagination-Offset`, `-Limit`, `-Count`, and `-Total`.
+  It preserves `Response` access internally, performs bounded exponential poll
+  delays, and exposes a best-effort remote abort for an owned nonterminal run.
+- Domain Overview returns `{items, datasetId}`. The workflow stores a distinct,
+  token-free dataset item URL for validated Company/Keyword/Paid Ad provenance;
+  browser shaping remains allow-listed.
+- The live refresh environment pins Railway's default actor to
+  `pro100chok/semrush-scraper`; `--actor-id` remains an explicit local override.
+  Configured Airtable table names are passed to the live repository.
+- Provider validation requires `database: "worldwide"`. Missing Moz does not
+  erase persisted Moz evidence. Malformed organic/paid modules retain existing
+  child snapshots, add bounded quality evidence, and surface sanitized run
+  errors. Valid empty arrays still replace the corresponding snapshot.
+- Roster validation now counts missing IDs, invalid domains, and every duplicate
+  canonical domain as deterministic failures. The safely implemented traffic
+  share is calculated only when the full roster is represented by the validated
+  provider batch; otherwise it persists `null` plus a coverage issue.
+
+### RED/GREEN evidence
+
+RED before the Apify change:
+
+```text
+npm test -- tests/apify/client.test.ts
+1 failed: the old invented {data:{items,offset,count,total}} response parser
+rejected the official-shaped top-level array plus pagination headers.
+```
+
+GREEN:
+
+```text
+npm test -- tests/apify tests/airtable/repository.test.ts tests/config/server-env.test.ts tests/jobs/enrich.test.ts tests/workflows/enrich.test.ts tests/contracts/provider-schemas.test.ts tests/transforms/semrush-to-domain.test.ts
+9 files passed; 84 tests passed.
+```
+
+Final verification:
+
+- `npm run build -- --webpack` — passed.
+- `npm test` — 40 files, 315 tests passed.
+- Sanitized fixture refresh — partial as designed (1 persisted, 1 unresolved),
+  exited 1 without secrets or raw payload logging.
+
+### Explicitly excluded remaining split
+
+1. Stage and validate the whole active provider set before any transformation,
+   compute all-52 tracked-set traffic shares, and batch Company/child/fingerprint
+   writes while preserving per-record outcomes after a later batch fails.
+2. Thread a parent deadline through repository calls and Airtable 429 retry
+   sleeps, add bounded fresh-signal terminal cleanup, and prove that behavior.
+3. Introduce a versioned fingerprint migration that excludes observation
+   timestamps and dataset IDs without making existing approved insight fixtures
+   unexpectedly stale; then add the full budget/provenance regression coverage.

@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {DEFAULT_APIFY_ACTOR_ID} from '@/lib/apify/constants';
 
 const AirtableEnvSchema = z.object({
   AIRTABLE_PAT: z.string().min(1),
@@ -13,7 +14,7 @@ const AirtableEnvSchema = z.object({
 
 const RefreshOnlyEnvSchema = z.object({
   APIFY_TOKEN: z.string().min(1),
-  APIFY_ACTOR_ID: z.string().min(1),
+  APIFY_ACTOR_ID: z.literal(DEFAULT_APIFY_ACTOR_ID),
   APP_BASE_URL: z.string().url(),
   CACHE_INVALIDATION_SECRET: z.string().min(1),
 });

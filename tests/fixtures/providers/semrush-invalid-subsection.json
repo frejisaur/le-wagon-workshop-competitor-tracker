@@ -1,6 +1,6 @@
 [
   {
-    "domain": "alpha.example", "database": "us", "is_root_domain": false,
+    "domain": "alpha.example", "database": "worldwide", "is_root_domain": false,
     "authority_score": 42, "backlinks": 1000, "referring_domains": 100, "follow_backlinks": 400, "nofollow_backlinks": 200,
     "organic_traffic": 300, "total_traffic": 320, "organic_keywords": 40, "organic_traffic_cost_usd": 50, "organic_competitors_count": 2,
     "paid_traffic": 0, "paid_keywords": 0, "paid_traffic_cost_usd": 0, "paid_competitors_count": 0,

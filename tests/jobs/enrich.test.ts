@@ -1,4 +1,5 @@
 import {describe, expect, it} from 'vitest';
+import {DEFAULT_APIFY_ACTOR_ID} from '@/lib/apify/constants';
 import {assertDistinctFixturePaths, resolveLiveActorId, runEnrichCli} from '@/jobs/enrich';
 
 describe('enrich CLI fixture safety', () => {
@@ -16,7 +17,7 @@ describe('enrich CLI fixture safety', () => {
   });
 
   it('uses the validated server actor ID unless an operator passes an explicit override', () => {
-    expect(resolveLiveActorId(undefined, {APIFY_ACTOR_ID: 'owner/default'})).toBe('owner/default');
-    expect(resolveLiveActorId('owner/override', {APIFY_ACTOR_ID: 'owner/default'})).toBe('owner/override');
+    expect(resolveLiveActorId(undefined, {APIFY_ACTOR_ID: DEFAULT_APIFY_ACTOR_ID})).toBe(DEFAULT_APIFY_ACTOR_ID);
+    expect(resolveLiveActorId('owner/override', {APIFY_ACTOR_ID: DEFAULT_APIFY_ACTOR_ID})).toBe('owner/override');
   });
 });

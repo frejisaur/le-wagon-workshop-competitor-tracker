@@ -1,4 +1,5 @@
 import {describe, expect, it} from 'vitest';
+import {DEFAULT_APIFY_ACTOR_ID} from '@/lib/apify/constants';
 import {getInsightEnv, getRefreshEnv, getWebEnv} from '@/lib/config/server-env';
 
 const airtableEnv = {
@@ -17,9 +18,10 @@ describe('server environment scopes', () => {
     expect(() => getRefreshEnv({})).toThrow(/APIFY_TOKEN.*APIFY_ACTOR_ID/);
   });
 
-  it('requires a server-only actor ID and returns it only to refresh code', () => {
+  it('requires the reviewed server-only scheduled actor ID and returns it only to refresh code', () => {
     expect(() => getRefreshEnv({...airtableEnv, APIFY_TOKEN: 'token', APP_BASE_URL: 'https://app.example', CACHE_INVALIDATION_SECRET: 'cache-secret'})).toThrow(/APIFY_ACTOR_ID/);
-    expect(getRefreshEnv({...airtableEnv, APIFY_TOKEN: 'token', APIFY_ACTOR_ID: 'owner/actor', APP_BASE_URL: 'https://app.example', CACHE_INVALIDATION_SECRET: 'cache-secret'}).APIFY_ACTOR_ID).toBe('owner/actor');
+    expect(() => getRefreshEnv({...airtableEnv, APIFY_TOKEN: 'token', APIFY_ACTOR_ID: 'owner/actor', APP_BASE_URL: 'https://app.example', CACHE_INVALIDATION_SECRET: 'cache-secret'})).toThrow(/APIFY_ACTOR_ID/);
+    expect(getRefreshEnv({...airtableEnv, APIFY_TOKEN: 'token', APIFY_ACTOR_ID: DEFAULT_APIFY_ACTOR_ID, APP_BASE_URL: 'https://app.example', CACHE_INVALIDATION_SECRET: 'cache-secret'}).APIFY_ACTOR_ID).toBe(DEFAULT_APIFY_ACTOR_ID);
   });
 
   it('does not expose refresh or model values to the web serving process', () => {

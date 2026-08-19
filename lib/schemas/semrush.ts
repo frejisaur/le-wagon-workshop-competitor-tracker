@@ -91,7 +91,7 @@ const sections = {authority: AuthoritySchema, backlinks_detail: BacklinksDetailS
 
 /** Strictly validates independently useful, provider-observed root metrics. */
 export const SemrushDomainOverviewSchema = z.object({
-  domain: z.string().min(1), database: z.string().min(1), is_root_domain: z.boolean(),
+  domain: z.string().min(1), database: z.string().refine((value): boolean => value === 'worldwide', 'database must be worldwide'), is_root_domain: z.boolean(),
   authority_score: nullableNumber, backlinks: nullableNumber, referring_domains: nullableNumber,
   follow_backlinks: nullableNumber, nofollow_backlinks: nullableNumber, organic_traffic: nullableNumber,
   total_traffic: nullableNumber, organic_keywords: nullableNumber, organic_traffic_cost_usd: nullableNumber,
@@ -100,8 +100,8 @@ export const SemrushDomainOverviewSchema = z.object({
   ai_visibility_benchmark: nullableNumber, ai_mentions: nullableNumber, ai_cited_pages: nullableNumber,
   top_country: nullableString, top_country_traffic: nullableNumber, moz_domain_authority: nullableString,
   moz_spam_score: nullableString,
-  authority: z.unknown(), backlinks_detail: z.unknown(), organic: z.unknown(), paid: z.unknown(),
-  ai_search: z.unknown(), serp_features: z.unknown(), moz: z.unknown(),
+  authority: z.unknown().optional(), backlinks_detail: z.unknown().optional(), organic: z.unknown().optional(), paid: z.unknown().optional(),
+  ai_search: z.unknown().optional(), serp_features: z.unknown().optional(), moz: z.unknown().optional(),
 }).strict();
 
 type SectionName = keyof typeof sections;

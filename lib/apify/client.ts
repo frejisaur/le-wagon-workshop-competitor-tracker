@@ -73,6 +73,15 @@ function runFromUnknown(value: unknown): ApifyRun {
   return {id, status: status as ApifyRunStatus, datasetId: typeof datasetId === 'string' ? datasetId : null};
 }
 
+/** Apify dataset pagination is carried by response headers, never a JSON envelope. */
+function paginationHeader(response: Response, name: string): number {
+  const raw = response.headers.get(name);
+  if (raw === null || !/^\d+$/.test(raw)) throw new ApifyClientError('Apify dataset response is invalid');
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) throw new ApifyClientError('Apify dataset response is invalid');
+  return value;
+}
+
 /** Server-only Apify boundary. Authentication and raw response details never leave this module. */
 export class ApifyClient {
   private readonly endpoint: URL;
@@ -104,7 +113,7 @@ export class ApifyClient {
     try {
       const actorPath = actorId.split('/').map(encodeURIComponent).join('~');
       const response = await this.request(`acts/${actorPath}/runs`, {method: 'POST', body: JSON.stringify(input)}, signal.signal);
-      return runFromUnknown(response);
+      return runFromUnknown(await this.json(response));
     } finally {
       signal.cleanup();
     }
@@ -116,15 +125,15 @@ export class ApifyClient {
     try {
       for (let attempt = 0; attempt < this.maxPollAttempts; attempt += 1) {
         this.throwIfAborted(operation.signal);
-        const raw = await this.request(`actor-runs/${encodeURIComponent(runId)}`, {method: 'GET'}, operation.signal);
-        const run = runFromUnknown(raw);
+        const response = await this.request(`actor-runs/${encodeURIComponent(runId)}`, {method: 'GET'}, operation.signal);
+        const run = runFromUnknown(await this.json(response));
         if (TERMINAL.has(run.status)) {
           if (run.status !== 'SUCCEEDED') throw new ApifyClientError(`Apify run ended (${run.status})`);
           if (!run.datasetId) throw new ApifyClientError('Apify run has no dataset');
           return run;
         }
         if (!RUNNING.has(run.status)) throw new ApifyClientError('Apify run status is invalid');
-        if (attempt + 1 < this.maxPollAttempts) await this.wait(this.pollDelayMs, operation.signal);
+        if (attempt + 1 < this.maxPollAttempts) await this.wait(Math.min(MAX_POLL_DELAY_MS, this.pollDelayMs * (2 ** attempt)), operation.signal);
       }
       throw new ApifyClientError('Apify polling exceeded maximum attempts');
     } finally {
@@ -142,18 +151,16 @@ export class ApifyClient {
       while (true) {
         if (pages >= this.maxDatasetPages) throw new ApifyClientError('Apify dataset pagination exceeded maximum pages');
         const query = new URLSearchParams({offset: String(offset), limit: '1000'});
-        const raw = await this.request(`datasets/${encodeURIComponent(datasetId)}/items?${query.toString()}`, {method: 'GET'}, operation.signal);
-        if (!raw || typeof raw !== 'object') throw new ApifyClientError('Apify dataset response is invalid');
-        const data = (raw as {data?: unknown}).data;
-        if (!data || typeof data !== 'object') throw new ApifyClientError('Apify dataset response is invalid');
-        const page = data as {items?: unknown; offset?: unknown; count?: unknown; total?: unknown};
-        const pageOffset = page.offset;
-        const pageCount = page.count;
-        const pageTotal = page.total;
-        if (!Array.isArray(page.items) || typeof pageOffset !== 'number' || !Number.isInteger(pageOffset) || typeof pageCount !== 'number' || !Number.isInteger(pageCount) || typeof pageTotal !== 'number' || !Number.isInteger(pageTotal) || pageOffset !== offset || pageCount !== page.items.length || pageTotal < offset + pageCount) {
+        const response = await this.request(`datasets/${encodeURIComponent(datasetId)}/items?${query.toString()}`, {method: 'GET'}, operation.signal);
+        const items = await this.json(response);
+        const pageOffset = paginationHeader(response, 'X-Apify-Pagination-Offset');
+        const pageLimit = paginationHeader(response, 'X-Apify-Pagination-Limit');
+        const pageCount = paginationHeader(response, 'X-Apify-Pagination-Count');
+        const pageTotal = paginationHeader(response, 'X-Apify-Pagination-Total');
+        if (!Array.isArray(items) || pageOffset !== offset || pageLimit < 1 || pageCount !== items.length || pageTotal < offset + pageCount) {
           throw new ApifyClientError('Apify dataset response is invalid');
         }
-        all.push(...page.items);
+        all.push(...items);
         pages += 1;
         if (offset + pageCount >= pageTotal) return all;
         if (pageCount === 0) throw new ApifyClientError('Apify dataset pagination made no progress');
@@ -164,7 +171,17 @@ export class ApifyClient {
     }
   }
 
-  private async request(path: string, init: RequestInit, signal: AbortSignal): Promise<unknown> {
+  /** Best-effort cleanup for a run this client started but could not observe to a terminal state. */
+  async abortRun(runId: string, options: ApifyOperationOptions = {}): Promise<void> {
+    if (!runId.trim()) throw new TypeError('runId is required');
+    const operation = operationSignal(options, this.defaultTimeoutMs);
+    try {
+      const response = await this.request(`actor-runs/${encodeURIComponent(runId)}/abort`, {method: 'POST'}, operation.signal);
+      await this.json(response);
+    } finally { operation.cleanup(); }
+  }
+
+  private async request(path: string, init: RequestInit, signal: AbortSignal): Promise<Response> {
     this.throwIfAborted(signal);
     const url = new URL(path, `${this.endpoint.toString()}/`);
     try {
@@ -174,11 +191,7 @@ export class ApifyClient {
         headers: {authorization: `Bearer ${this.options.token}`, accept: 'application/json', ...(init.body ? {'content-type': 'application/json'} : {})},
       });
       if (!response.ok) throw new ApifyClientError(`Apify request failed (${response.status})`, response.status);
-      try {
-        return await response.json();
-      } catch {
-        throw new ApifyClientError('Apify response is invalid');
-      }
+      return response;
     } catch (error) {
       if (signal.aborted) {
         if (signal.reason instanceof ApifyClientError) throw signal.reason;
@@ -187,6 +200,11 @@ export class ApifyClient {
       if (error instanceof ApifyClientError) throw error;
       throw new ApifyClientError('Apify request failed');
     }
+  }
+
+  private async json(response: Response): Promise<unknown> {
+    try { return await response.json(); }
+    catch { throw new ApifyClientError('Apify response is invalid'); }
   }
 
   private async wait(milliseconds: number, signal: AbortSignal): Promise<void> {

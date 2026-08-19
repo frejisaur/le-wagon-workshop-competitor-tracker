@@ -70,6 +70,23 @@ describe('runEnrichment', () => {
     expect(snapshot.reviews).toEqual([]);
   });
 
+  it('calculates tracked-set traffic share only for complete validated coverage', async () => {
+    const store = repository();
+    const existing = structuredClone(providerRecords[1]);
+    existing.domain = 'existing.example';
+    const complete = await runEnrichment({repository: store, batchSize: 2, runDomainOverview: async () => [providerRecords[0], existing]});
+    const completeSnapshot = await store.getDashboardSnapshot();
+    const shares = completeSnapshot.companies.map((company) => company.fields['Calculated • Tracked Set Traffic Share']).filter((value): value is number => typeof value === 'number');
+    expect(complete.status).toBe('succeeded');
+    expect(shares.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1);
+
+    const partialStore = repository();
+    await runEnrichment({repository: partialStore, batchSize: 2, runDomainOverview: async () => [providerRecords[0]]});
+    const partial = (await partialStore.getDashboardSnapshot()).companies.find((company) => company.fields['Identity • Company ID'] === 'company-alpha')!;
+    expect(partial.fields['Calculated • Tracked Set Traffic Share']).toBeNull();
+    expect(String(partial.fields['Quality • Issues JSON'])).toContain('tracked_set_coverage_incomplete');
+  });
+
   it('retries failed batches, validates every dataset item, and never persists raw provider objects', async () => {
     const store = repository();
     let attempts = 0;
@@ -263,6 +280,20 @@ describe('runEnrichment', () => {
     expect(report.status).toBe('succeeded');
     expect(snapshot.paidAds).toEqual([]);
     expect(company.fields['Workflow • Evidence Fingerprint']).toBe(expected);
+  });
+
+  it('preserves prior Moz evidence when the include_moz:false response omits the optional module', async () => {
+    const store = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'airtable/refresh-system-snapshot.json'));
+    await runEnrichment({repository: store, runDomainOverview: async () => [providerRecords[0]]});
+    const before = (await store.getDashboardSnapshot()).companies[0].fields['Observed • Moz Top Pages JSON'];
+    const noMoz = structuredClone(providerRecords[0]);
+    delete noMoz.moz;
+
+    const report = await runEnrichment({repository: store, runDomainOverview: async () => [noMoz]});
+    const after = (await store.getDashboardSnapshot()).companies[0].fields['Observed • Moz Top Pages JSON'];
+
+    expect(report.status).toBe('succeeded');
+    expect(after).toBe(before);
   });
 
   it('does not delete old paid ads or mark evidence current when the replacement write fails', async () => {
