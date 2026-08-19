@@ -6,6 +6,7 @@ RUN npm ci
 
 FROM dependencies AS builder
 COPY . .
+RUN node scripts/restore-skill-links.mjs
 RUN npm run build -- --webpack
 
 FROM builder AS test
