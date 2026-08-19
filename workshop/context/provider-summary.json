@@ -1,0 +1,19 @@
+{
+  "sourceLabel": "sanitized-fixture",
+  "generatedAt": "2026-08-19T00:00:00.000Z",
+  "apollo": {
+    "rows": 3,
+    "validWebsiteRows": 2,
+    "missingWebsiteRows": 1
+  },
+  "semrush": {
+    "records": 2,
+    "malformedSections": {}
+  },
+  "join": {
+    "accepted": 2,
+    "unmatchedApollo": 0,
+    "apifyOnly": 0,
+    "rejected": 1
+  }
+}

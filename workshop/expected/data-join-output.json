@@ -1,0 +1,10 @@
+{
+  "status": "ready",
+  "apolloRows": 3,
+  "semrushRecords": 2,
+  "acceptedCompanies": 2,
+  "rejectedRows": 1,
+  "rejectionCodes": {
+    "missing_apollo_website": 1
+  }
+}

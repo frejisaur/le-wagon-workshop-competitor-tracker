@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "audience": "marketers-learning-claude-code",
+  "segments": [
+    {"id":"reveal","title":"Reverse reveal","startMinute":0,"endMinute":7,"liveDependency":true,"fallbackArtifact":"workshop/expected/railway-health-output.json"},
+    {"id":"context","title":"Context anatomy","startMinute":7,"endMinute":15,"liveDependency":false},
+    {"id":"source","title":"Source acquisition","startMinute":15,"endMinute":25,"liveDependency":true,"fallbackArtifact":"workshop/expected/data-join-output.json"},
+    {"id":"data-skill","title":"Data skill and join","startMinute":25,"endMinute":36,"liveDependency":true,"fallbackArtifact":"workshop/expected/data-join-output.json"},
+    {"id":"airtable","title":"Airtable serving layer","startMinute":36,"endMinute":45,"liveDependency":true,"fallbackArtifact":"workshop/expected/airtable-import-output.json"},
+    {"id":"visual","title":"Visual brainstorming","startMinute":45,"endMinute":56,"liveDependency":true,"fallbackArtifact":"workshop/design/selected-all-companies.html"},
+    {"id":"dashboard-skill","title":"Dashboard skill and handoff","startMinute":56,"endMinute":63,"liveDependency":true,"fallbackArtifact":"workshop/design/selected-all-companies.html"},
+    {"id":"inspect","title":"Inspect the build","startMinute":63,"endMinute":73,"liveDependency":true,"fallbackArtifact":"workshop/design/selected-all-companies.html"},
+    {"id":"deploy","title":"Deploy and schedule","startMinute":73,"endMinute":85,"liveDependency":true,"fallbackArtifact":"workshop/expected/railway-health-output.json"},
+    {"id":"proof","title":"Proof and recap","startMinute":85,"endMinute":90,"liveDependency":false}
+  ],
+  "contextPackets": [
+    "workshop/context/01-data-join-brief.md",
+    "workshop/context/02-airtable-brief.md",
+    "workshop/context/03-dashboard-brief.md",
+    "workshop/context/04-railway-brief.md"
+  ],
+  "canonicalSkills": [
+    ".agents/skills/competitor-data-contracts/SKILL.md",
+    ".agents/skills/building-competitor-dashboard/SKILL.md",
+    ".agents/skills/generating-gtm-battlecards/SKILL.md",
+    ".agents/skills/operating-competitor-intelligence/SKILL.md"
+  ]
+}
