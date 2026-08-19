@@ -145,6 +145,28 @@ describe('transformSemrushCompany', () => {
     expect(evidence.paidAds[0].calculated.paidAdId).toHaveLength(64);
   });
 
+  it('normalizes the observed compact provider dates before calculating and persisting history', () => {
+    const record = structuredClone(semrushFixture[1]);
+    record.organic!.trend_global_daily = [
+      {...semrushFixture[0].organic!.trend_global_daily[0], date: '20260101', organic_traffic: 20},
+      {...semrushFixture[0].organic!.trend_global_daily[0], date: '20260131', organic_traffic: 30},
+    ];
+    record.organic!.trend_global_monthly = [
+      {...semrushFixture[0].organic!.trend_global_monthly[0], date: '20250315', organic_traffic: 100, organic_keywords: 40, organic_traffic_cost_usd: 500, branded_traffic: 25, non_branded_traffic: 75, paid_traffic: 4, paid_keywords: 2, paid_traffic_cost_usd: 30, serp_feature_traffic: 12},
+      {...semrushFixture[0].organic!.trend_global_monthly[0], date: '20260315', organic_traffic: 125, organic_keywords: 55, organic_traffic_cost_usd: 650, branded_traffic: 30, non_branded_traffic: 95, paid_traffic: 6, paid_keywords: 3, paid_traffic_cost_usd: 45, serp_feature_traffic: 18},
+    ];
+
+    const evidence = transformSemrushCompany(record, context);
+
+    expect(evidence.company.calculated.organicTraffic30DayMovement).toBe(0.5);
+    expect(evidence.company.calculated.organicTraffic12MonthMovement).toBe(0.25);
+    expect(evidence.company.calculated.compactOrganicTrend).toEqual([
+      {date: '2025-03-15', organicTraffic: 100, organicKeywords: 40, organicTrafficCostUsd: 500, brandedTraffic: 25, nonBrandTraffic: 75, paidTraffic: 4, paidKeywords: 2, paidTrafficCostUsd: 30, serpFeatureTraffic: 12},
+      {date: '2026-03-15', organicTraffic: 125, organicKeywords: 55, organicTrafficCostUsd: 650, brandedTraffic: 30, nonBrandTraffic: 95, paidTraffic: 6, paidKeywords: 3, paidTrafficCostUsd: 45, serpFeatureTraffic: 18},
+    ]);
+    expect(evidence.qualityIssues).not.toContainEqual(expect.objectContaining({code: 'invalid_trend_date'}));
+  });
+
   it('uses the analogous calendar month for the 12-month monthly movement', () => {
     const record = structuredClone(semrushFixture[1]);
     record.organic!.trend_global_monthly = [

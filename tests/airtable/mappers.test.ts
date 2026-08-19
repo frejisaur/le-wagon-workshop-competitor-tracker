@@ -54,7 +54,7 @@ describe('Airtable mappers', () => {
     oversized.observed.organicCompetitors = Array.from({length: 11}, (_, index) => ({domain: `competitor-${index}.example`, commonKeywords: null, competitionLevel: null, organicKeywords: null, organicTraffic: null, organicTrafficCostUsd: null, paidKeywords: null, paidTraffic: null, paidTrafficCostUsd: null, serpFeatureKeywords: null, serpFeatureTraffic: null, totalTraffic: null, totalTrafficCostUsd: null}));
     oversized.observed.aiByLlm = Array.from({length: 5}, (_, index) => ({llm: `model-${index}`, llmCode: `m-${index}`, mentions: 1, selfMentions: 0, citedPages: 1}));
     oversized.observed.rawSerpCodes = Array.from({length: 100}, () => 'x'.repeat(2_000));
-    oversized.calculated.compactOrganicTrend = Array.from({length: 30}, (_, index) => ({date: `2026-01-${String((index % 28) + 1).padStart(2, '0')}`, organicTraffic: index}));
+    oversized.calculated.compactOrganicTrend = Array.from({length: 30}, (_, index) => ({date: `2026-01-${String((index % 28) + 1).padStart(2, '0')}`, organicTraffic: index, organicKeywords: index, organicTrafficCostUsd: index, brandedTraffic: index, nonBrandTraffic: index, paidTraffic: index, paidKeywords: index, paidTrafficCostUsd: index, serpFeatureTraffic: index}));
     const fields = toAirtableCompanyFields(oversized);
 
     expect(JSON.parse(fields['Observed • Organic Competitors JSON'] as string)).toHaveLength(10);

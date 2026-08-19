@@ -28,5 +28,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({children}: Readonly<{children: ReactNode}>) {
-  return <html lang="en"><body className={`${plexSans.variable} ${plexMono.variable}`}><Theme theme="white">{children}</Theme></body></html>;
+  return <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}><body><Theme theme="white">{children}</Theme></body></html>;
 }

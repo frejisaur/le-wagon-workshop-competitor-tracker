@@ -1,5 +1,15 @@
 import {expect, test} from '@playwright/test';
 
+test('applies the approved IBM Plex interface font at the document root', async ({page}) => {
+  await page.goto('/');
+  const typography = await page.evaluate(() => ({
+    body: getComputedStyle(document.body).fontFamily,
+    title: getComputedStyle(document.querySelector('.page-title')!).fontFamily,
+  }));
+  expect(typography.body).toContain('plexSans');
+  expect(typography.title).toContain('plexSans');
+});
+
 test('supports skip navigation, polite filter counts, and keyboard map traversal', async ({page}) => {
   await page.goto('/');
   await page.keyboard.press('Tab');
@@ -13,7 +23,10 @@ test('supports skip navigation, polite filter counts, and keyboard map traversal
   await alpha.focus();
   await page.keyboard.press('ArrowDown');
   await expect(bravo).toBeFocused();
-  await expect(page.getByRole('table', {name: 'Market map accessible data'})).toBeVisible();
+  const chartData = page.getByRole('table', {name: 'Market map accessible data'});
+  await expect(chartData).toBeHidden();
+  await page.getByText(/view chart data/i).click();
+  await expect(chartData).toBeVisible();
 });
 
 test('exposes stale evidence state and keyboard-operable workspace tabs', async ({page}) => {

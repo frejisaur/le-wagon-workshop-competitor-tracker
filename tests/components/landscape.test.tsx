@@ -86,6 +86,40 @@ describe('competitive landscape', () => {
     expect(screen.getByText(/unavailable axis values.*zero organic traffic.*excluded/i)).toBeInTheDocument();
   });
 
+  it('fits map positions and point areas to the filtered cohort instead of fixed global ranges', () => {
+    render(<LandscapeScreen initialData={fixture} />);
+    const alpha = screen.getByRole('button', {name: /alpha.*authority 42.*traffic 12,000/i});
+    const bravo = screen.getByRole('button', {name: /bravo.*authority 65.*traffic 8,000/i});
+
+    expect(alpha.style.getPropertyValue('--map-x')).toBe('7%');
+    expect(bravo.style.getPropertyValue('--map-x')).toBe('93%');
+    expect(alpha.style.getPropertyValue('--map-y')).toBe('7%');
+    expect(bravo.style.getPropertyValue('--map-y')).toBe('93%');
+    expect(Number.parseFloat(alpha.style.getPropertyValue('--map-dot-size'))).toBeGreaterThan(Number.parseFloat(bravo.style.getPropertyValue('--map-dot-size')));
+    expect(within(screen.getByTestId('market-map')).getByText('48')).toBeInTheDocument();
+    expect(within(screen.getByTestId('market-map')).getByText('10K')).toBeInTheDocument();
+  });
+
+  it('keeps labels out of the plot and exposes encodings through a focusable tooltip and legend', () => {
+    render(<LandscapeScreen initialData={fixture} />);
+    const alpha = screen.getByRole('button', {name: /alpha.*authority 42.*traffic 12,000/i});
+    const tooltip = document.getElementById('market-map-tooltip-alpha');
+
+    expect(alpha.querySelector('.market-map__dot')).toHaveTextContent('');
+    expect(tooltip).toHaveAttribute('role', 'tooltip');
+    expect(tooltip).toHaveTextContent(/alpha\.example.*authority score.*42.*estimated organic traffic.*12,000.*tracked-set traffic share.*60%.*source.*semrush.*2026-08-18 12:00 utc/i);
+    expect(screen.getByLabelText('Market map legend')).toHaveTextContent(/point size.*tracked-set traffic share.*blue fill.*ai benchmark outperformance.*outer ring.*selected company/i);
+  });
+
+  it('serializes fitted coordinates deterministically for server hydration', () => {
+    const threePointFixture: LandscapeResponse = {...fixture, companies: fixture.companies.map((company) => company.companyId === 'charlie' ? {...company, authorityScore: observed(51), organicTraffic: observed(9_000)} : company)};
+    render(<LandscapeScreen initialData={threePointFixture} />);
+    const charlie = screen.getByRole('button', {name: /charlie.*authority 51.*traffic 9,000/i});
+
+    expect(charlie.style.getPropertyValue('--map-x')).toBe('40.65%');
+    expect(charlie.style.getPropertyValue('--map-y')).toMatch(/^\d+(?:\.\d{1,2})?%$/);
+  });
+
   it('derives map shares and eligible signals from the filtered cohort instead of global pre-capped response rows', async () => {
     const user = userEvent.setup();
     const cohort: LandscapeResponse = {...fixture, signals: [], companies: fixture.companies.map((company) => company.companyId === 'bravo' ? {...company, organicTraffic30DayMovement: calculated(0.12), nonBrandShare: calculated(0.8), paidActivity: calculated(true), aiBenchmarkGap: calculated(0.3)} : company)};

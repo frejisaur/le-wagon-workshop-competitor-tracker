@@ -20,6 +20,7 @@ function observed(fields: AirtableFields, field: string): DashboardValue { retur
 function calculated(fields: AirtableFields, field: string): DashboardValue { return {classification: 'calculated', value: number(fields, `Calculated • ${field}`), ...(iso(text(fields, 'Calculated • At')) ? {calculatedAt: iso(text(fields, 'Calculated • At'))} : {})}; }
 function calculatedBool(fields: AirtableFields, field: string): DashboardValue { return {classification: 'calculated', value: bool(fields, `Calculated • ${field}`), ...(iso(text(fields, 'Calculated • At')) ? {calculatedAt: iso(text(fields, 'Calculated • At'))} : {})}; }
 function calculatedWithObservedProvenance(fields: AirtableFields, field: string): DashboardValue { return {...calculated(fields, field), ...(text(fields, 'Observed • Source') ? {source: text(fields, 'Observed • Source')} : {}), ...(text(fields, 'Observed • Database') ? {database: text(fields, 'Observed • Database')} : {})}; }
+function calculatedTrendValue(fields: AirtableFields, value: unknown): DashboardValue { return {classification: 'calculated', value: finite(value), ...(text(fields, 'Observed • Source') ? {source: text(fields, 'Observed • Source')} : {}), ...(text(fields, 'Observed • Database') ? {database: text(fields, 'Observed • Database')} : {}), ...(iso(text(fields, 'Calculated • At')) ? {calculatedAt: iso(text(fields, 'Calculated • At'))} : {})}; }
 
 function reviewReasons(record: AirtableRecord): CandidateReviewReason[] { return [...new Set(stringList(record.fields, 'Inferred • Review Reasons JSON').flatMap((reason) => CandidateReviewReasonSchema.safeParse(reason).success ? [reason as CandidateReviewReason] : []))].sort().slice(0, 7) as CandidateReviewReason[]; }
 type PublishedClaim = CandidateClaim;
@@ -93,7 +94,21 @@ export function shapeCompany(snapshot: DashboardSnapshot, company: AirtableRecor
   // Trend is calculated from curated observed Semrush measurements. Carry the
   // same curated provider/database provenance so the chart can disclose it
   // without accepting raw records in the browser.
-  const trend = parsedArray(fields, 'Calculated • Compact Organic Trend JSON').flatMap((item) => { const date = string(item.date); return date ? [{date, organicTraffic: {classification: 'calculated' as const, value: finite(item.organicTraffic), ...(text(fields, 'Observed • Source') ? {source: text(fields, 'Observed • Source')} : {}), ...(text(fields, 'Observed • Database') ? {database: text(fields, 'Observed • Database')} : {}), ...(iso(text(fields, 'Calculated • At')) ? {calculatedAt: iso(text(fields, 'Calculated • At'))} : {})}}] : []; }).sort((left, right) => left.date.localeCompare(right.date));
+  const trend = parsedArray(fields, 'Calculated • Compact Organic Trend JSON').flatMap((item) => {
+    const date = string(item.date);
+    return date ? [{
+      date,
+      organicTraffic: calculatedTrendValue(fields, item.organicTraffic),
+      organicKeywords: calculatedTrendValue(fields, item.organicKeywords),
+      organicTrafficCostUsd: calculatedTrendValue(fields, item.organicTrafficCostUsd),
+      brandedTraffic: calculatedTrendValue(fields, item.brandedTraffic),
+      nonBrandTraffic: calculatedTrendValue(fields, item.nonBrandTraffic),
+      paidTraffic: calculatedTrendValue(fields, item.paidTraffic),
+      paidKeywords: calculatedTrendValue(fields, item.paidKeywords),
+      paidTrafficCostUsd: calculatedTrendValue(fields, item.paidTrafficCostUsd),
+      serpFeatureTraffic: calculatedTrendValue(fields, item.serpFeatureTraffic),
+    }] : [];
+  }).sort((left, right) => left.date.localeCompare(right.date));
   const landingPages = parsedArray(fields, 'Calculated • Landing Page Portfolio JSON').flatMap((item) => { const normalizedLandingUrl = string(item.normalizedLandingUrl); const keywordCount = finite(item.keywordCount); const keywordsForPage = Array.isArray(item.keywords) && item.keywords.every((keyword) => typeof keyword === 'string') ? item.keywords : []; return normalizedLandingUrl && URL.canParse(normalizedLandingUrl) && keywordCount !== null ? [{normalizedLandingUrl, keywordCount, estimatedTraffic: finite(item.estimatedTraffic), keywords: keywordsForPage}] : []; }).sort((left, right) => left.normalizedLandingUrl.localeCompare(right.normalizedLandingUrl));
   const mozTopPages = parsedArray(fields, 'Calculated • Moz Top Pages JSON').flatMap((item) => { const url = string(item.normalizedUrl); const normalized = url ? normalizeUrl(url) : null; return normalized ? [{url: normalized, pageAuthority: finite(item.pageAuthority)}] : []; }).sort((left, right) => left.url.localeCompare(right.url));
   const published = snapshot.publishedInsights.find((record) => record.fields['Identity • Company ID'] === companyId);

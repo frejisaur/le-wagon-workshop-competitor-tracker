@@ -11,7 +11,7 @@ const snapshot: DashboardSnapshot = {
     'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example', 'Observed • Source': 'semrush', 'Observed • At': '2026-08-18T12:00:00.000Z', 'Observed • Database': 'ca',
     'Observed • Organic Traffic': 20, 'Observed • Organic Keywords': 2, 'Observed • Authority Score': 40, 'Observed • AI Visibility': 0, 'Observed • AI Visibility Benchmark': 1,
     'Observed • Organic Competitors JSON': JSON.stringify([{domain: 'rival.example', organicTraffic: 10}]),
-    'Calculated • Compact Organic Trend JSON': JSON.stringify([{date: '2026-08-01', organicTraffic: 20}]),
+    'Calculated • Compact Organic Trend JSON': JSON.stringify([{date: '2026-08-01', organicTraffic: 20, organicKeywords: 9, organicTrafficCostUsd: 31, brandedTraffic: 8, nonBrandTraffic: 12, paidTraffic: 4, paidKeywords: 2, paidTrafficCostUsd: 7, serpFeatureTraffic: 6}]),
     'Calculated • Landing Page Portfolio JSON': JSON.stringify([{normalizedLandingUrl: 'https://alpha.example/', keywordCount: 2, estimatedTraffic: 20, keywords: ['alpha']}]),
     'Calculated • Paid Activity Present': false,
   }}],
@@ -35,6 +35,16 @@ describe('company response', () => {
     expect(response?.reviewCandidate).toEqual({status: 'needs_review', reasons: ['insufficient_evidence', 'prompt_injection_content']});
     expect(JSON.stringify(response)).not.toMatch(/rec-|ignore these instructions|reviewer/i);
     expect(response?.trend[0]?.organicTraffic).toMatchObject({source: 'semrush', database: 'ca'});
+    expect(response?.trend[0]).toMatchObject({
+      organicKeywords: {classification: 'calculated', value: 9},
+      organicTrafficCostUsd: {classification: 'calculated', value: 31},
+      brandedTraffic: {classification: 'calculated', value: 8},
+      nonBrandTraffic: {classification: 'calculated', value: 12},
+      paidTraffic: {classification: 'calculated', value: 4},
+      paidKeywords: {classification: 'calculated', value: 2},
+      paidTrafficCostUsd: {classification: 'calculated', value: 7},
+      serpFeatureTraffic: {classification: 'calculated', value: 6},
+    });
   });
 
   it('keeps only the ordered, unique canonical review reasons at the browser boundary', () => {

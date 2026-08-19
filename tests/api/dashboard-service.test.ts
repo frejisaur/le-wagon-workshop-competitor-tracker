@@ -44,7 +44,7 @@ describe('DashboardService singleton contract', () => {
     expect(workspace?.comparisons).toHaveLength(51);
     expect(workspace?.comparisons.map((item) => item.companyId)).toEqual(Array.from({length: 51}, (_, index) => `company-${String(index).padStart(2, '0')}`));
     expect(JSON.stringify(workspace?.comparisons)).not.toMatch(/evidence|publishedInsight|reviewCandidate|raw/i);
-    expect(workspace?.comparisons[0]).toEqual({companyId: 'company-00', identity: {domain: 'company-00.example'}, trend: [{date: '2026-08-01', organicTraffic: expect.any(Object)}]});
+    expect(workspace?.comparisons[0]).toEqual({companyId: 'company-00', identity: {domain: 'company-00.example'}, trend: [expect.objectContaining({date: '2026-08-01', organicTraffic: expect.any(Object), organicKeywords: expect.any(Object), paidTraffic: expect.any(Object), serpFeatureTraffic: expect.any(Object)})]});
     expect(CompanyComparisonSchema.safeParse({...workspace?.comparisons[0], evidence: []}).success).toBe(false);
   });
 });

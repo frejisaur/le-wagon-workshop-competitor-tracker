@@ -15,9 +15,9 @@ const company: CompanyResponse = {
   companyId: 'alpha', identity: {domain: 'alpha.example', displayName: 'Alpha', country: 'Canada', segment: 'Enterprise'}, status: 'succeeded', freshness,
   kpis: {authorityScore: observed(42), organicTraffic: observed(12_000), organicTraffic30DayMovement: calculated(0.15), organicKeywords: observed(900), aiBenchmarkGap: calculated(0.2), referringDomains: observed(450)},
   trend: [
-    {date: '2024-08-01', organicTraffic: calculated(9_000)},
-    {date: '2024-09-01', organicTraffic: calculated(null)},
-    {date: '2026-08-01', organicTraffic: calculated(12_000)},
+    {date: '2024-08-01', organicTraffic: calculated(9_000), organicKeywords: calculated(700), organicTrafficCostUsd: calculated(30_000), brandedTraffic: calculated(2_700), nonBrandTraffic: calculated(6_300), paidTraffic: calculated(80), paidKeywords: calculated(12), paidTrafficCostUsd: calculated(1_200), serpFeatureTraffic: calculated(900)},
+    {date: '2024-09-01', organicTraffic: calculated(null), organicKeywords: calculated(760), organicTrafficCostUsd: calculated(31_000), brandedTraffic: calculated(2_800), nonBrandTraffic: calculated(6_500), paidTraffic: calculated(null), paidKeywords: calculated(null), paidTrafficCostUsd: calculated(null), serpFeatureTraffic: calculated(950)},
+    {date: '2026-08-01', organicTraffic: calculated(12_000), organicKeywords: calculated(900), organicTrafficCostUsd: calculated(42_000), brandedTraffic: calculated(3_600), nonBrandTraffic: calculated(8_400), paidTraffic: calculated(110), paidKeywords: calculated(18), paidTrafficCostUsd: calculated(1_800), serpFeatureTraffic: calculated(1_400)},
   ],
   demand: {nonBrandShare: calculated(0.7)},
   keywords: [{keywordId: 'keyword-alpha', classification: 'observed', keyword: 'competitor research', landingUrl: 'https://alpha.example/research', position: 1, volume: 800, cpcUsd: 4.5, difficulty: 40, traffic: 100, intents: ['informational']}],
@@ -67,6 +67,19 @@ describe('company research workspace', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent('Date: 2024-08-01');
     expect(screen.getByRole('tooltip')).toHaveTextContent('Source: semrush');
     expect(screen.getByRole('tooltip')).toHaveTextContent('Database: ca');
+  });
+
+  it('switches the historical chart and accessible table to every curated scraper metric', async () => {
+    const user = userEvent.setup();
+    render(<CompanyWorkspace company={company} initialTab="overview" />);
+
+    await user.click(screen.getByRole('combobox', {name: 'Metric'}));
+    await user.click(screen.getByRole('option', {name: 'Organic keywords'}));
+
+    expect(screen.getByRole('img', {name: /organic keywords over time/i})).toBeInTheDocument();
+    expect(screen.getByText('900', {selector: '.historical-chart__stat-value'})).toBeInTheDocument();
+    expect(screen.getByRole('table', {name: /organic keywords historical data/i})).toHaveTextContent('Estimated organic keywords');
+    expect(screen.queryByText(/keyword history is not available/i)).not.toBeInTheDocument();
   });
 
   it('keeps valid summary data when the authority subsection is malformed', () => {
@@ -142,9 +155,9 @@ describe('company research workspace', () => {
   it('lets researchers choose at most two additional curated comparisons and shows their dated values', async () => {
     const user = userEvent.setup();
     const comparisons = [
-      {...company, companyId: 'bravo', identity: {...company.identity, displayName: 'Bravo', domain: 'bravo.example'}, trend: [{date: '2024-08-01', organicTraffic: calculated(8_000)}]},
-      {...company, companyId: 'charlie', identity: {...company.identity, displayName: 'Charlie', domain: 'charlie.example'}, trend: [{date: '2024-08-01', organicTraffic: calculated(null)}]},
-      {...company, companyId: 'delta', identity: {...company.identity, displayName: 'Delta', domain: 'delta.example'}, trend: [{date: '2024-08-01', organicTraffic: calculated(4_000)}]},
+      {...company, companyId: 'bravo', identity: {...company.identity, displayName: 'Bravo', domain: 'bravo.example'}, trend: [{...company.trend[0], organicTraffic: calculated(8_000)}]},
+      {...company, companyId: 'charlie', identity: {...company.identity, displayName: 'Charlie', domain: 'charlie.example'}, trend: [{...company.trend[0], organicTraffic: calculated(null)}]},
+      {...company, companyId: 'delta', identity: {...company.identity, displayName: 'Delta', domain: 'delta.example'}, trend: [{...company.trend[0], organicTraffic: calculated(4_000)}]},
     ];
     render(<CompanyWorkspace company={company} initialTab="overview" comparison={comparisons} />);
     const picker = screen.getByLabelText(/add comparison/i);

@@ -4,13 +4,14 @@ const at = '2026-08-18T12:00:00.000Z';
 const freshness = {lastSuccessfulRunAt: at, cachedAt: '2026-08-18T12:01:00.000Z', isStale: false};
 const observed = (value: number | null): DashboardValue => ({classification: 'observed', value, source: 'semrush', database: 'ca', observedAt: at});
 const calculated = (value: number | null): DashboardValue => ({classification: 'calculated', value, source: 'semrush', database: 'ca', calculatedAt: at});
+const trendPoint = (date: string, organicTraffic: number | null) => ({date, organicTraffic: calculated(organicTraffic), organicKeywords: calculated(organicTraffic === null ? null : organicTraffic / 10), organicTrafficCostUsd: calculated(organicTraffic === null ? null : organicTraffic * 3), brandedTraffic: calculated(organicTraffic === null ? null : organicTraffic * .3), nonBrandTraffic: calculated(organicTraffic === null ? null : organicTraffic * .7), paidTraffic: calculated(null), paidKeywords: calculated(null), paidTrafficCostUsd: calculated(null), serpFeatureTraffic: calculated(organicTraffic === null ? null : organicTraffic * .1)});
 const claim = {claimId: 'claim-search-strength', conclusion: 'Search demand supports a focused competitive response.', classification: 'inferred' as const, confidence: 'high' as const, confidenceReason: 'Two current curated observations support this interpretation.', evidenceRefs: ['company:alpha:traffic', 'keyword:alpha:research']};
 const publishedInsight = {overallConfidence: 'high' as const, generatedAt: at, workflow: {evidenceFingerprint: 'fixture-current-fingerprint', runId: 'fixture-run', harness: 'fixture-harness', model: 'fixture-model', skillVersion: '1.0.0', workflowVersion: '1.0.0'}, claims: [claim]};
 
 const base = CompanyResponseSchema.parse({
   companyId: 'alpha', identity: {domain: 'alpha.example', displayName: 'Alpha', country: 'Canada', segment: 'Enterprise'}, status: 'succeeded', freshness,
   kpis: {authorityScore: observed(42), organicTraffic: observed(12_000), organicTraffic30DayMovement: calculated(0.15), organicKeywords: observed(900), aiBenchmarkGap: calculated(0.2), referringDomains: observed(450)},
-  trend: [{date: '2026-06-01', organicTraffic: calculated(10_000)}, {date: '2026-07-01', organicTraffic: calculated(null)}, {date: '2026-08-01', organicTraffic: calculated(12_000)}],
+  trend: [trendPoint('2026-06-01', 10_000), trendPoint('2026-07-01', null), trendPoint('2026-08-01', 12_000)],
   demand: {nonBrandShare: calculated(0.7)},
   keywords: [{keywordId: 'keyword-alpha', classification: 'observed', keyword: 'competitor research', landingUrl: 'https://alpha.example/research', position: 1, volume: 800, cpcUsd: 4.5, difficulty: 40, traffic: 100, intents: ['informational']}],
   landingPages: [{normalizedLandingUrl: 'https://alpha.example/research', keywordCount: 1, estimatedTraffic: 100, keywords: ['competitor research']}],

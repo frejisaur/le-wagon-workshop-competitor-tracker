@@ -176,6 +176,14 @@ describe('shared dashboard components', () => {
     expect(compiled).not.toContain('.cds--theme--white');
   });
 
+  it('ships Carbon component styles for the Carbon controls rendered by the dashboard', () => {
+    const compiled = compile('styles/globals.scss', {loadPaths: ['node_modules']}).css;
+    expect(compiled).toMatch(/\.cds--btn\s*\{[^}]*display:\s*inline-flex/s);
+    expect(compiled).toMatch(/\.cds--select-input\s*\{[^}]*appearance:\s*none/s);
+    expect(compiled).toMatch(/\.cds--text-input\s*\{[^}]*background-color:\s*var\(--cds-field\)/s);
+    expect(compiled).toMatch(/:root\s*\{[^}]*--cds-layout-size-height-md:\s*2\.5rem/s);
+  });
+
   it('applies the approved tokenized page title style after Carbon reset', () => {
     const compiled = compile('styles/globals.scss', {loadPaths: ['node_modules']}).css;
     expect(compiled).toMatch(/\.page-title\s*\{[^}]*font-size:\s*var\(--type-page-size\);[^}]*font-weight:\s*var\(--weight-medium\);[^}]*line-height:\s*var\(--type-page-line\)/s);

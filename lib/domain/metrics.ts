@@ -31,7 +31,19 @@ export type LandingPagePortfolio = {
   keywords: string[];
 };
 
-export type CompactOrganicTrendPoint = {date: string; organicTraffic: number | null};
+/** Bounded monthly projection of the provider's global trend record. */
+export type CompactOrganicTrendPoint = {
+  date: string;
+  organicTraffic: number | null;
+  organicKeywords: number | null;
+  organicTrafficCostUsd: number | null;
+  brandedTraffic: number | null;
+  nonBrandTraffic: number | null;
+  paidTraffic: number | null;
+  paidKeywords: number | null;
+  paidTrafficCostUsd: number | null;
+  serpFeatureTraffic: number | null;
+};
 
 export type CuratedCompanyObserved = {
   domain: string;

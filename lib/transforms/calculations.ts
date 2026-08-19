@@ -8,17 +8,19 @@ function finiteNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-export type ParsedIsoCalendarDate = {year: number; month: number; day: number; timestamp: number};
+export type ParsedIsoCalendarDate = {year: number; month: number; day: number; timestamp: number; isoDate: string};
 
-/** Validates a provider date as an actual ISO calendar date without rewriting its string form. */
+/** Validates ISO or Semrush compact calendar dates and returns one canonical ISO date. */
 export function parseIsoCalendarDate(value: string): ParsedIsoCalendarDate | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const match = /^(\d{4})(?:-?)(\d{2})(?:-?)(\d{2})$/.exec(value);
   if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
   const timestamp = Date.UTC(year, month - 1, day);
-  return Number.isFinite(timestamp) && new Date(timestamp).getUTCFullYear() === year && new Date(timestamp).getUTCMonth() === month - 1 && new Date(timestamp).getUTCDate() === day ? {year, month, day, timestamp} : null;
+  return Number.isFinite(timestamp) && new Date(timestamp).getUTCFullYear() === year && new Date(timestamp).getUTCMonth() === month - 1 && new Date(timestamp).getUTCDate() === day
+    ? {year, month, day, timestamp, isoDate: `${match[1]}-${match[2]}-${match[3]}`}
+    : null;
 }
 
 function sortedValidDates(points: DatedMetricPoint[]) {

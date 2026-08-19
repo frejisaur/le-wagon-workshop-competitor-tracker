@@ -61,7 +61,7 @@ function validatedTrendPoints(points: ProviderTrendPoint[], sourcePath: string, 
       addInvalidTrendIssue(issues, `${sourcePath}[${index}].date`);
       return [];
     }
-    return [{...point, timestamp: parsedDate.timestamp}];
+    return [{...point, date: parsedDate.isoDate, timestamp: parsedDate.timestamp}];
   });
 }
 
@@ -69,7 +69,18 @@ function compactTrend(points: ValidTrendPoint[]): CompactOrganicTrendPoint[] {
   return [...points]
     .sort((left, right) => left.timestamp - right.timestamp)
     .slice(-24)
-    .map((point) => ({date: point.date, organicTraffic: point.organic_traffic}));
+    .map((point) => ({
+      date: point.date,
+      organicTraffic: point.organic_traffic,
+      organicKeywords: point.organic_keywords,
+      organicTrafficCostUsd: point.organic_traffic_cost_usd,
+      brandedTraffic: point.branded_traffic,
+      nonBrandTraffic: point.non_branded_traffic,
+      paidTraffic: point.paid_traffic,
+      paidKeywords: point.paid_keywords,
+      paidTrafficCostUsd: point.paid_traffic_cost_usd,
+      serpFeatureTraffic: point.serp_feature_traffic,
+    }));
 }
 
 function requiresHttpLandingUrl(value: string): string | null {
