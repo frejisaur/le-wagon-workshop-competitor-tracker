@@ -6,6 +6,11 @@ This is an operator-run procedure. Never deploy, clean up, or mutate production 
 
 Check only whether each required name is **present** or **missing**. Never print, echo, log, paste, or browser-expose its value.
 
+Use an Airtable PAT limited to the selected base with
+`data.records:read`, `data.records:write`, `schema.bases:read`, and
+`schema.bases:write`. The schema command creates missing tables and fields, so
+read-only schema access is insufficient.
+
 | Variable | Web | Weekly refresh |
 |---|---:|---:|
 | `AIRTABLE_PAT` | present | present |

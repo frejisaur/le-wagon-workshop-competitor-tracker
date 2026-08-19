@@ -1,8 +1,24 @@
+import {readFileSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
 import {AIRTABLE_SCHEMA, ensureAirtableSchema} from '@/lib/airtable/schema';
 import {runAirtableSchemaCli} from '@/jobs/setup-airtable-schema';
 
 describe('Airtable schema bootstrap', () => {
+  it('documents every Airtable scope required by schema and record setup', () => {
+    const example = readFileSync('.env.example', 'utf8');
+    const deployment = readFileSync('docs/operations/deployment.md', 'utf8');
+    for (const scope of [
+      'data.records:read',
+      'data.records:write',
+      'schema.bases:read',
+      'schema.bases:write',
+    ]) {
+      expect(example).toContain(scope);
+      expect(deployment).toContain(scope);
+    }
+    expect(example).toMatch(/scoped to this one .*base/i);
+  });
+
   it('defines the six serving tables with company links and typed evidence fields', () => {
     expect(AIRTABLE_SCHEMA.map((table) => table.name)).toEqual([
       'Companies', 'Keywords', 'Paid Ads', 'GTM Insights', 'Insight Reviews', 'System',
