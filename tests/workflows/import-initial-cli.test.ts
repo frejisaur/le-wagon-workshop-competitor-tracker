@@ -35,6 +35,7 @@ describe('initial import CLI', () => {
       succeeded: 0,
     });
     expect(result.stdout.split('\n')).toHaveLength(1);
+    expect(result.stdout).not.toContain('www.alpha.example');
     expect(result.stdout).not.toMatch(/acct-alpha|rec-alpha|https:\/\/alpha\.example/);
   });
 
