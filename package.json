@@ -20,7 +20,8 @@
     "insights:submit": "tsx jobs/submit-insight.ts",
     "insights:publish-approved": "tsx jobs/publish-approved-insights.ts",
     "workshop:context": "tsx jobs/generate-workshop-context.ts",
-    "workshop:preflight": "tsx jobs/workshop-preflight.ts"
+    "workshop:preflight": "tsx jobs/workshop-preflight.ts",
+    "workshop:audit-skill": "tsx jobs/audit-workshop-skill.ts"
   },
   "dependencies": {
     "@carbon/charts": "^1.27.18",

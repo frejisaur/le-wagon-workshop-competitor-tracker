@@ -1,0 +1,20 @@
+{
+  "companies": [
+    {
+      "domain": "northstar.example",
+      "name": "Northstar",
+      "freshness": "current",
+      "observed": {"monthlyVisits": 1800000, "paidKeywords": 48, "source": "semrush"},
+      "calculated": {"trafficGrowthPercent": 14},
+      "inferred": {"attentionLabel": "Watch paid acquisition", "evidenceCount": 3}
+    },
+    {
+      "domain": "orbit.example",
+      "name": "Orbit",
+      "freshness": "stale",
+      "observed": {"monthlyVisits": 1000000, "paidKeywords": null, "source": "semrush"},
+      "calculated": {"trafficGrowthPercent": 7},
+      "inferred": {"attentionLabel": "Review freshness", "evidenceCount": 1}
+    }
+  ]
+}

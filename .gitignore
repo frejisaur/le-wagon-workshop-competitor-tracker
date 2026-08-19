@@ -1,4 +1,5 @@
 .superpowers/
+workshop/generated/
 node_modules/
 .next/
 playwright-report/
