@@ -99,3 +99,28 @@ dashboard response test and remains entirely inside the curated allow-list.
 - `npm test` — 27 files / 228 tests passed.
 - `npx tsc --noEmit`, `git diff --check`, and `npm run build -- --webpack` — passed.
 - Default Turbopack build remains restricted by the sandbox Sass helper’s local-port bind.
+
+## Fix Round 2
+
+### RED → GREEN
+
+- RED: selecting a country, typing an unapplied traffic minimum, and clearing
+  filters left the stale local draft intact; a later Apply resurrected the
+  cleared URL constraint.
+- GREEN: the focused landscape/API suite passes 18 tests, including the exact
+  sequence and the existing all-four-range popstate restoration regression.
+
+### Correction
+
+- The parent now owns an explicit numeric-draft reset generation. It advances
+  only for Clear and browser history restoration, and the filter panel resets
+  every draft and validation message from the parent state for that generation.
+  Ordinary country/paid/AI/segment changes leave an in-progress numeric draft
+  intact.
+
+### Fix Round 2 validation
+
+- `npm test -- tests/components/landscape.test.tsx tests/api/dashboard.test.ts` — 18 passed.
+- `npm test` — 27 files / 229 tests passed.
+- `npx tsc --noEmit`, `git diff --check`, and `npm run build -- --webpack` — passed.
+- Default Turbopack build remains sandbox-restricted by the Sass helper local-port bind.

@@ -4,17 +4,17 @@ import {Button, Select, SelectItem, TextInput} from '@carbon/react';
 import {useEffect, useState} from 'react';
 import type {LandscapeFilterState} from './filter-state';
 
-type Props = {state: LandscapeFilterState; countries: readonly string[]; segments: readonly string[]; paidAvailable: boolean; aiAvailable: boolean; onChange: (change: Partial<LandscapeFilterState>) => void; onClear: () => void; active: boolean};
+type Props = {state: LandscapeFilterState; countries: readonly string[]; segments: readonly string[]; paidAvailable: boolean; aiAvailable: boolean; draftResetGeneration: number; onChange: (change: Partial<LandscapeFilterState>) => void; onClear: () => void; active: boolean};
 
 function present(value: number | undefined): string { return value === undefined ? '' : String(value); }
 
-export function LandscapeFilters({state, countries, segments, paidAvailable, aiAvailable, onChange, onClear, active}: Props) {
+export function LandscapeFilters({state, countries, segments, paidAvailable, aiAvailable, draftResetGeneration, onChange, onClear, active}: Props) {
   const [trafficMin, setTrafficMin] = useState(present(state.trafficMin));
   const [trafficMax, setTrafficMax] = useState(present(state.trafficMax));
   const [authorityMin, setAuthorityMin] = useState(present(state.authorityMin));
   const [authorityMax, setAuthorityMax] = useState(present(state.authorityMax));
   const [rangeError, setRangeError] = useState<string>();
-  useEffect(() => { setTrafficMin(present(state.trafficMin)); setTrafficMax(present(state.trafficMax)); setAuthorityMin(present(state.authorityMin)); setAuthorityMax(present(state.authorityMax)); setRangeError(undefined); }, [state.trafficMin, state.trafficMax, state.authorityMin, state.authorityMax]);
+  useEffect(() => { setTrafficMin(present(state.trafficMin)); setTrafficMax(present(state.trafficMax)); setAuthorityMin(present(state.authorityMin)); setAuthorityMax(present(state.authorityMax)); setRangeError(undefined); }, [draftResetGeneration]);
   const number = (value: string, max: number) => value === '' ? undefined : /^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) && Number(value) <= max ? Number(value) : null;
   const applyRanges = () => {
     const nextTrafficMin = number(trafficMin, 1_000_000_000_000); const nextTrafficMax = number(trafficMax, 1_000_000_000_000);

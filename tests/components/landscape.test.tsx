@@ -119,6 +119,19 @@ describe('competitive landscape', () => {
     expect(window.location.search).toContain('trafficMin=8000');
   });
 
+  it('clears an unapplied numeric draft after a committed country filter is cleared and does not resurrect it on Apply', async () => {
+    const user = userEvent.setup();
+    render(<LandscapeScreen initialData={fixture} />);
+    await user.selectOptions(screen.getByLabelText('Country'), 'Canada');
+    await user.type(screen.getByLabelText('Traffic minimum'), '999999');
+    expect(window.location.search).toContain('country=Canada');
+    await user.click(screen.getByRole('button', {name: /clear filters/i}));
+    expect(screen.getByLabelText('Traffic minimum')).toHaveValue('');
+    await user.click(screen.getByRole('button', {name: /apply numeric filters/i}));
+    expect(window.location.search).not.toContain('trafficMin');
+    expect(window.location.search).not.toContain('country');
+  });
+
   it('shows missing values, range validation, constraint-specific empty state, and clear only for active filters', async () => {
     const user = userEvent.setup();
     render(<LandscapeScreen initialData={fixture} />);
