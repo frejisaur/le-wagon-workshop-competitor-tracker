@@ -1,0 +1,7 @@
+{
+  "companies": [
+    {"recordId": "rec-alpha", "companyId": "company-alpha", "canonicalDomain": "alpha.example"},
+    {"recordId": "rec-beta", "companyId": "company-beta", "canonicalDomain": "beta.example"}
+  ],
+  "insights": [{"companyId": "company-alpha", "status": "published"}]
+}

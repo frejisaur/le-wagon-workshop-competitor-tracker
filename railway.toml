@@ -1,0 +1,7 @@
+[build]
+builder = "RAILPACK"
+
+[deploy]
+startCommand = "timeout --signal=TERM --kill-after=30s 15m npm run enrich"
+restartPolicyType = "NEVER"
+cronSchedule = "0 15 * * 1"

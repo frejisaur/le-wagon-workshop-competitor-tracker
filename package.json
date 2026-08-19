@@ -1,0 +1,11 @@
+{
+  "name": "competitor-tracker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "enrich": "node scripts/enrich.mjs",
+    "airtable:schema": "node scripts/setup-airtable-schema.mjs --apply",
+    "airtable:schema:check": "node scripts/setup-airtable-schema.mjs --check"
+  }
+}
