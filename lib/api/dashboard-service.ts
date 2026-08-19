@@ -25,3 +25,7 @@ export async function getLandscapeResponse(): Promise<LandscapeResponse> {
 export async function getCompanyResponse(companyId: string): Promise<CompanyResponse | undefined> {
   return dashboardService.company(companyId);
 }
+
+export async function getCompanyWorkspaceResponse(companyId: string): Promise<{company: CompanyResponse; comparisons: CompanyResponse[]} | undefined> {
+  return dashboardService.companyWorkspace(companyId);
+}

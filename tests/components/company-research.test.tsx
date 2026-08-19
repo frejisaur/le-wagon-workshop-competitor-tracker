@@ -87,9 +87,8 @@ describe('company research workspace', () => {
   it('caps explicit comparison input deterministically and renders responsive chart/table hooks', () => {
     const comparison = [company, {...company, companyId: 'bravo', identity: {...company.identity, domain: 'bravo.example'}}, {...company, companyId: 'charlie', identity: {...company.identity, domain: 'charlie.example'}}, {...company, companyId: 'delta', identity: {...company.identity, domain: 'delta.example'}}, {...company, companyId: 'echo', identity: {...company.identity, domain: 'echo.example'}}];
     const {container} = render(<CompanyWorkspace company={company} initialTab="overview" comparison={comparison} />);
-    expect(screen.getByText(/first 3 comparison companies/i)).toBeInTheDocument();
-    expect(screen.getByTestId('historical-chart')).toHaveAttribute('data-comparison-count', '3');
-    expect(within(screen.getByRole('list', {name: /comparison companies/i})).getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getByLabelText(/add comparison/i)).toBeInTheDocument();
+    expect(screen.getByTestId('historical-chart')).toHaveAttribute('data-comparison-count', '0');
     expect(container.querySelector('.company-workspace__ledger')).toBeInTheDocument();
     expect(container.querySelector('.historical-chart__canvas')).toBeInTheDocument();
     const styles = readFileSync('components/company/company.module.scss', 'utf8');
@@ -107,5 +106,55 @@ describe('company research workspace', () => {
     rerender(<CompanyWorkspace company={{...company, status: 'stale', recoveryMessage: 'Data is stale but remains available.'}} initialTab="search" />);
     expect(screen.getByText(/data is stale/i)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('heading', {name: /core keyword evidence/i})).toBeInTheDocument());
+  });
+
+  it('sizes the demand band from the validated 70/30 composition instead of equal segments', () => {
+    render(<CompanyWorkspace company={company} initialTab="overview" />);
+    expect(screen.getByText('Non-brand 70%')).toHaveStyle({flexGrow: '0.7'});
+    expect(screen.getByText('Branded 30%')).toHaveStyle({flexGrow: '0.30000000000000004'});
+  });
+
+  it('keeps foreign query keys out of the canonical workspace URL', async () => {
+    render(<CompanyWorkspace company={company} initialSearch="?tab=ai&claim=claim-1&foreign=value" />);
+    await waitFor(() => expect(window.location.search).toBe('?tab=ai'));
+    window.history.pushState(null, '', '?tab=bad&foreign=value');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await waitFor(() => expect(window.location.search).toBe(''));
+  });
+
+  it('lets researchers choose at most two additional curated comparisons and shows their dated values', async () => {
+    const user = userEvent.setup();
+    const comparisons = [
+      {...company, companyId: 'bravo', identity: {...company.identity, displayName: 'Bravo', domain: 'bravo.example'}, trend: [{date: '2024-08-01', organicTraffic: calculated(8_000)}]},
+      {...company, companyId: 'charlie', identity: {...company.identity, displayName: 'Charlie', domain: 'charlie.example'}, trend: [{date: '2024-08-01', organicTraffic: calculated(null)}]},
+      {...company, companyId: 'delta', identity: {...company.identity, displayName: 'Delta', domain: 'delta.example'}, trend: [{date: '2024-08-01', organicTraffic: calculated(4_000)}]},
+    ];
+    render(<CompanyWorkspace company={company} initialTab="overview" comparison={comparisons} />);
+    const picker = screen.getByLabelText(/add comparison/i);
+    await user.selectOptions(picker, 'bravo');
+    await user.selectOptions(picker, 'charlie');
+    expect(screen.getByRole('table', {name: /organic traffic historical data/i})).toHaveTextContent('Bravo');
+    expect(screen.getByRole('table', {name: /organic traffic historical data/i})).toHaveTextContent('8,000');
+    expect(screen.getByRole('table', {name: /organic traffic historical data/i})).toHaveTextContent('Charlie');
+    expect(screen.getAllByTestId('historical-comparison-series')).toHaveLength(2);
+    expect(screen.getByText('Comparison limit reached: select at most two additional companies.')).toBeInTheDocument();
+    expect(picker).toBeDisabled();
+  });
+
+  it('renders observed keyword CPC, difficulty, and intents without replacing missing values with zero', () => {
+    render(<CompanyWorkspace company={company} initialTab="search" />);
+    const table = screen.getByRole('table', {name: /observed keyword sample/i});
+    expect(within(table).getByRole('columnheader', {name: /cpc usd/i})).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', {name: /difficulty/i})).toBeInTheDocument();
+    expect(within(table).getByRole('columnheader', {name: /intents/i})).toBeInTheDocument();
+    expect(within(table).getByText('4.5')).toBeInTheDocument();
+    expect(within(table).getByText('informational')).toBeInTheDocument();
+  });
+
+  it('fails soft when paid input is malformed and excludes URL access to the paid tab', () => {
+    const malformed = {...company, paid: {traffic: observed(4), keywords: observed(1), ads: null} as never};
+    render(<CompanyWorkspace company={malformed} initialSearch="?tab=paid" />);
+    expect(screen.queryByRole('tab', {name: /paid activity/i})).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', {name: /alpha/i})).toBeInTheDocument();
   });
 });

@@ -39,3 +39,17 @@ Populated/current, loading through shared skeleton behavior, partial retained, s
 ## Unresolved data-contract needs
 
 None for Task 13. `CompanyResponse` does not yet include a second historical metric, so the metric control explicitly marks organic-keyword history unavailable instead of fabricating a series.
+
+## Fix Round 1
+
+- The demand band now uses validated `0..1` share values as proportional flex weights: the tested 70% non-brand value produces a 70/30 non-brand/branded band. Out-of-range or unavailable values render no band.
+- Company comparison now uses the shared server snapshot through `DashboardService.companyWorkspace`, capped at 52 deterministic sanitized `CompanyResponse` records for the workshop cohort. The client can select at most two additional companies, giving three plotted/tabled series including the researched company; the historical table retains per-date value, provenance, and gaps.
+- Keyword evidence now includes observed CPC USD, difficulty, and intents. Missing values remain `Not available`.
+- The response allow-list now includes classified paid-competitor samples plus calculated Moz domain authority, spam score, and validated top-page URLs. Authority and AI modules explicitly state that anchor/backlink/linking-source/cited-source-domain samples are unavailable when they are absent from the curated snapshot.
+- Self competitors are removed with the shared server domain normalizer and rechecked in the browser. This covers bare domains and URL/www/path/port variants.
+- Paid content is runtime-validated before determining visibility or rendering; malformed nested paid data fails soft while the identity/KPI header remains usable.
+- Task 13 canonicalization now emits only `?tab=<valid-tab>` or no query. Foreign/invalid parameters are removed on hydration, selection, and popstate; Task 14 can extend this explicit allow-list when claim/evidence navigation is implemented.
+
+The plotted comparison series has an explicit regression assertion for two selected companies, and its point disclosure reports the selected company alongside date, value, source, and database.
+
+Fix Round 1 validation: focused tests 18 passed; full suite 28 files / 242 tests passed; schema drift check, TypeScript, Webpack build, and diff check passed. The default Turbopack build remains blocked by the sandbox Sass-helper port binding restriction.

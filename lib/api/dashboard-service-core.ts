@@ -25,4 +25,13 @@ export class DashboardService {
     if (!result.snapshot) return undefined;
     return shapeDashboardSnapshot(result.snapshot, this.state(result)).companies.get(companyId);
   }
+  /** Bounded, sanitized comparison set for the company workspace; never raw records. */
+  async companyWorkspace(companyId: string): Promise<{company: CompanyResponse; comparisons: CompanyResponse[]} | undefined> {
+    const result = await this.cache.getOrLoad(this.loader, {background: true});
+    if (!result.snapshot) return undefined;
+    const shaped = shapeDashboardSnapshot(result.snapshot, this.state(result)); const company = shaped.companies.get(companyId);
+    if (!company) return undefined;
+    const comparisons = [...shaped.companies.values()].filter((item) => item.companyId !== companyId).sort((left, right) => left.identity.domain.localeCompare(right.identity.domain) || left.companyId.localeCompare(right.companyId)).slice(0, 52);
+    return {company, comparisons};
+  }
 }

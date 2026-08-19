@@ -17,6 +17,10 @@
 :global(.historical-chart__canvas) { display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--touch-target-min), 1fr)); min-height: var(--company-chart-min-height); align-items: end; gap: var(--space-2); border: var(--rule-width) solid var(--color-rule); padding: var(--space-4); background: var(--color-surface); }
 :global(.historical-chart__point) { min-height: var(--touch-target-min); border: var(--rule-width) solid var(--color-accent); border-radius: var(--radius-control); background: var(--color-accent-subtle); color: var(--color-accent); font-family: var(--font-data); font-size: var(--type-data-size); }
 :global(.historical-chart__gap) { display: grid; min-height: var(--touch-target-min); place-items: center; border: var(--rule-width) dashed var(--color-rule-strong); color: var(--color-text-quiet); font-size: var(--type-metadata-size); }
+:global(.historical-chart__comparison-series) { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--touch-target-min), 1fr)); gap: var(--space-2); border-top: var(--rule-width) solid var(--color-rule); padding-top: var(--space-3); }
+:global(.historical-chart__comparison-label) { grid-column: 1 / -1; color: var(--color-text-secondary); font-size: var(--type-metadata-size); font-weight: var(--weight-semibold); }
+:global(.historical-chart__comparison-point) { min-height: var(--touch-target-min); border: var(--rule-width) solid var(--color-rule-strong); border-radius: var(--radius-control); background: var(--color-surface-subtle); color: var(--color-ink); font-family: var(--font-data); font-size: var(--type-data-size); }
+:global(.historical-chart__comparison-gap) { display: grid; min-height: var(--touch-target-min); place-items: center; border: var(--rule-width) dashed var(--color-rule); color: var(--color-text-quiet); font-size: var(--type-metadata-size); }
 :global(.historical-chart__tooltip) { border: var(--rule-width) solid var(--color-rule-strong); padding: var(--space-3); background: var(--color-surface-raised); color: var(--color-ink); }
 :global(.historical-chart__tooltip p) { margin: 0; font-family: var(--font-data); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
 :global(.historical-chart__comparisons) { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; color: var(--color-text-secondary); font-size: var(--type-metadata-size); }
@@ -36,5 +40,6 @@
   :global(.company-workspace__ledger .kpi-ledger) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   :global(.company-module__heading) { display: grid; }
   :global(.historical-chart__canvas) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  :global(.historical-chart__comparison-series) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 }
