@@ -1,7 +1,27 @@
 {
   "companies": [
-    {"recordId": "rec-alpha", "companyId": "company-alpha", "canonicalDomain": "alpha.example"},
-    {"recordId": "rec-beta", "companyId": "company-beta", "canonicalDomain": "beta.example"}
+    {
+      "id": "rec-alpha",
+      "fields": {
+        "Identity • Company ID": "company-alpha",
+        "Identity • Canonical Domain": "alpha.example",
+        "Observed • Apollo Account ID": "acct-alpha",
+        "Observed • Organic Traffic": 200,
+        "Workflow • Evidence Fingerprint": "fixture-fingerprint-alpha"
+      }
+    },
+    {
+      "id": "rec-company-existing",
+      "fields": {
+        "Identity • Company ID": "company-existing",
+        "Identity • Canonical Domain": "existing.example",
+        "Observed • Apollo Account ID": "acct-1"
+      }
+    }
   ],
-  "insights": [{"companyId": "company-alpha", "status": "published"}]
+  "keywords": [],
+  "paidAds": [],
+  "insights": [],
+  "reviews": [],
+  "system": []
 }

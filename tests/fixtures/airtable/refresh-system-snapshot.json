@@ -1,0 +1,12 @@
+{
+  "companies": [
+    {"id":"rec-alpha","fields":{"Identity • Company ID":"company-alpha","Identity • Canonical Domain":"alpha.example","Observed • Apollo Account ID":"acct-alpha"}}
+  ],
+  "keywords": [],
+  "paidAds": [],
+  "insights": [],
+  "reviews": [],
+  "system": [
+    {"id":"rec-system","fields":{"Identity • System ID":"system","Workflow • Status":"succeeded","Agent • Last Run At":"2026-08-01T00:00:00.000Z","Agent • Skill Version":"1.0.0","Agent • Processed Companies":4,"Agent • Review Count":2,"Agent • Error Summary":"agent preserved"}}
+  ]
+}

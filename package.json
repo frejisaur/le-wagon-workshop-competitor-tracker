@@ -1,11 +1,52 @@
 {
-  "name": "competitor-tracker",
+  "name": "competitor-intelligence",
   "private": true,
+  "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
-    "test": "node --test",
-    "enrich": "node scripts/enrich.mjs",
-    "airtable:schema": "node scripts/setup-airtable-schema.mjs --apply",
-    "airtable:schema:check": "node scripts/setup-airtable-schema.mjs --check"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "airtable:schema": "tsx jobs/setup-airtable-schema.ts",
+    "import:initial": "tsx jobs/import-initial.ts",
+    "enrich": "tsx jobs/enrich.ts",
+    "insights:prepare": "tsx jobs/prepare-insights.ts",
+    "insights:submit": "tsx jobs/submit-insight.ts",
+    "insights:publish-approved": "tsx jobs/publish-approved-insights.ts"
+  },
+  "dependencies": {
+    "@carbon/charts": "^1.27.18",
+    "@carbon/charts-react": "^1.27.18",
+    "@carbon/react": "^1.114.0",
+    "@carbon/styles": "^1.113.0",
+    "next": "^16.3.1",
+    "papaparse": "^5.6.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tsx": "^4.23.12",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.5",
+    "@types/node": "^22.20.1",
+    "@types/papaparse": "^5.5.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.1",
+    "jsdom": "^29.1.1",
+    "msw": "^2.15.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
   }
 }

@@ -1,0 +1,8 @@
+import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@carbon/react';
+import type {CompanyResponse} from '@/lib/domain/dashboard';
+import {canonicalDomain, valueText} from './company-utils';
+
+export function CompetitorTable({competitors, domain}: {competitors: CompanyResponse['competitors']; domain: string}) {
+  const self = canonicalDomain(domain); const rows = competitors.filter((competitor) => canonicalDomain(competitor.domain) !== self);
+  return <section className="competitor-table" aria-labelledby="competitor-table-heading"><div className="company-module__heading"><div><h2 id="competitor-table-heading">Organic competitors</h2><p>Observed competitor sample, excluding this company&apos;s canonical domain.</p></div></div>{rows.length === 0 ? <p className="company-module__unavailable">No organic competitors were returned.</p> : <div className="company-table__scroll"><Table aria-label="Organic competitors"><TableHead><TableRow><TableHeader>Domain</TableHeader><TableHeader className="company-table__numeric">Estimated traffic</TableHeader><TableHeader className="company-table__numeric">Keywords</TableHeader><TableHeader className="company-table__numeric">Common keywords</TableHeader></TableRow></TableHead><TableBody>{rows.map((competitor) => <TableRow key={competitor.domain}><TableCell>{competitor.domain}</TableCell><TableCell className="company-table__numeric">{valueText(competitor.organicTraffic)}</TableCell><TableCell className="company-table__numeric">{valueText(competitor.organicKeywords)}</TableCell><TableCell className="company-table__numeric">{valueText(competitor.commonKeywords)}</TableCell></TableRow>)}</TableBody></Table></div>}</section>;
+}

@@ -1,1 +1,17 @@
 .superpowers/
+node_modules/
+.next/
+playwright-report/
+test-results/
+dogfood-output/
+next-env.d.ts
+*.tsbuildinfo
+
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example
+
+# Local source exports may contain unsanitized provider data.
+data/apollo/*.csv
+data/apify/*.json

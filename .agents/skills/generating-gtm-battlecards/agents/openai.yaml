@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generate GTM Battlecards"
+  short_description: "Create evidence-backed GTM battlecards"
+  default_prompt: "Use $generating-gtm-battlecards to generate the currently due competitor battlecards."

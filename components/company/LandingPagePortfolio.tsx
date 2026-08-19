@@ -1,0 +1,7 @@
+import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@carbon/react';
+import type {CompanyResponse} from '@/lib/domain/dashboard';
+import {safeExternalUrl, valueText} from './company-utils';
+
+export function LandingPagePortfolio({landingPages}: {landingPages: CompanyResponse['landingPages']}) {
+  return <section className="landing-page-portfolio" aria-labelledby="landing-pages-heading"><div className="company-module__heading"><div><h2 id="landing-pages-heading">Landing page portfolio</h2><p>Calculated grouping of observed keyword landing pages.</p></div></div>{landingPages.length === 0 ? <p className="company-module__unavailable">No landing page portfolio is available.</p> : <div className="company-table__scroll"><Table aria-label="Landing page portfolio"><TableHead><TableRow><TableHeader>Landing page</TableHeader><TableHeader className="company-table__numeric">Keywords</TableHeader><TableHeader className="company-table__numeric">Estimated traffic</TableHeader></TableRow></TableHead><TableBody>{landingPages.map((page) => { const link = safeExternalUrl(page.normalizedLandingUrl); return <TableRow key={page.normalizedLandingUrl}><TableCell>{link ? <a href={link} target="_blank" rel="noreferrer">{new URL(link).pathname || '/'}</a> : 'Not available'}</TableCell><TableCell className="company-table__numeric">{valueText(page.keywordCount)}</TableCell><TableCell className="company-table__numeric">{valueText(page.estimatedTraffic)}</TableCell></TableRow>; })}</TableBody></Table></div>}</section>;
+}

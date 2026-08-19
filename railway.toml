@@ -1,7 +1,6 @@
+# This shared build configuration is linked to both Railway services. Runtime
+# and cron settings are service-specific and are intentionally documented in
+# docs/operations/deployment.md instead of being ambiguous here.
 [build]
-builder = "RAILPACK"
-
-[deploy]
-startCommand = "timeout --signal=TERM --kill-after=30s 15m npm run enrich"
-restartPolicyType = "NEVER"
-cronSchedule = "0 15 * * 1"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"

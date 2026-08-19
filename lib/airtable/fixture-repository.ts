@@ -1,0 +1,251 @@
+import {readFileSync} from 'node:fs';
+import type {CuratedKeyword, CuratedPaidAd} from '@/lib/domain/metrics';
+import {toAirtableCompanyFields, toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields, toAirtableSystemFields} from './mappers';
+import {type AirtableRecord, type CompanyPersistenceWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
+
+export type FixtureSnapshot = Partial<Record<'companies' | 'keywords' | 'paidAds' | 'insights' | 'reviews' | 'system', AirtableRecord[]>>;
+
+function recordId(table: string, identity: string): string {
+  return `fixture-${table.toLowerCase().replace(/\s+/g, '-')}-${encodeURIComponent(identity)}`;
+}
+
+function clone<T>(value: T): T {
+  return structuredClone(value);
+}
+
+/** In-memory fixture implementation. The source JSON is read once and is never written or mutated. */
+export class FixtureCompetitorRepository implements CompetitorStore {
+  private readonly tables = new Map<string, Map<string, AirtableRecord>>();
+
+  private constructor(snapshot: FixtureSnapshot) {
+    const tableKeys: Array<keyof FixtureSnapshot> = ['companies', 'keywords', 'paidAds', 'insights', 'reviews', 'system'];
+    for (const key of tableKeys) {
+      const records = snapshot[key] ?? [];
+      if (!Array.isArray(records)) throw new TypeError(`Fixture ${key} must be an array`);
+      this.tables.set(key, new Map(records.map((record) => [record.id, clone(record)])));
+    }
+  }
+
+  static fromSnapshot(path: string): FixtureCompetitorRepository {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new TypeError('Fixture snapshot must be an object');
+    return new FixtureCompetitorRepository(parsed as FixtureSnapshot);
+  }
+
+  async resolveCompanyIdentity(identity: {apolloAccountId: string; canonicalDomain: string}): Promise<{companyId: string; source: 'apollo_account_id' | 'canonical_domain'} | null> {
+    const companies = this.records('companies');
+    if (identity.apolloAccountId) {
+      const match = companies.find((record) => record.fields['Observed • Apollo Account ID'] === identity.apolloAccountId);
+      const companyId = match?.fields['Identity • Company ID'];
+      if (typeof companyId === 'string') return {companyId, source: 'apollo_account_id'};
+    }
+    const match = companies.find((record) => record.fields['Identity • Canonical Domain'] === identity.canonicalDomain);
+    const companyId = match?.fields['Identity • Company ID'];
+    return typeof companyId === 'string' ? {companyId, source: 'canonical_domain'} : null;
+  }
+
+  async upsertCompanies(companies: CompanyPersistenceWrite[]): Promise<WriteResult> {
+    const results: WriteResult['results'] = [];
+    for (const company of companies) {
+      const existing = this.findCompanyRecord(company);
+      if (existing && existing.fields['Identity • Company ID'] !== company.companyId) {
+        results.push({identity: company.companyId, error: 'identity_conflict'});
+        continue;
+      }
+      const id = existing?.id ?? recordId('companies', company.companyId);
+      this.table('companies').set(id, {id, fields: clone(toAirtableCompanyFields(company))});
+      results.push({identity: company.companyId, recordId: id});
+    }
+    return {succeeded: results.filter((item) => !item.error).length, failed: results.filter((item) => item.error).length, results};
+  }
+
+  async replaceKeywords(companyId: string, keywords: CuratedKeyword[]): Promise<WriteResult> {
+    const company = this.findCompanyRecordById(companyId);
+    if (!company) return {succeeded: 0, failed: keywords.length, results: keywords.map((keyword) => ({identity: keyword.calculated.keywordId, error: 'company_link_missing'}))};
+    const writes = await this.upsertMany('keywords', keywords.map((keyword) => ({identity: keyword.calculated.keywordId, fields: toAirtableKeywordFields(keyword, company.id), lookupField: 'Identity • Keyword ID'})));
+    if (writes.failed) return writes;
+    const incoming = new Set(keywords.map((keyword) => keyword.calculated.keywordId));
+    for (const [id, record] of this.table('keywords')) {
+      if (record.fields['Identity • Company ID'] === companyId && !incoming.has(String(record.fields['Identity • Keyword ID']))) this.table('keywords').delete(id);
+    }
+    return writes;
+  }
+
+  async replacePaidAds(companyId: string, ads: CuratedPaidAd[]): Promise<WriteResult> {
+    const companies = this.records('companies').filter((record) => record.fields['Identity • Company ID'] === companyId);
+    if (!companies.length) return replacementFailure(companyId, 'company_link_missing');
+    if (companies.length !== 1) return replacementFailure(companyId, 'duplicate_company_records');
+    const company = companies[0];
+
+    const incomingIds = new Set<string>();
+    for (const ad of ads) {
+      if (ad.calculated.companyId !== companyId) return replacementFailure(companyId, 'paid_ad_company_mismatch');
+      if (!ad.calculated.paidAdId || incomingIds.has(ad.calculated.paidAdId)) return replacementFailure(companyId, 'duplicate_incoming_paid_ad_identity');
+      incomingIds.add(ad.calculated.paidAdId);
+    }
+
+    const existing = this.records('paidAds').filter((record) => record.fields['Identity • Company ID'] === companyId);
+    const existingByIdentity = new Map<string, AirtableRecord>();
+    for (const record of existing) {
+      const identity = record.fields['Identity • Paid Ad ID'];
+      const link = record.fields['Identity • Company Link'];
+      if (!Array.isArray(link) || link.length !== 1 || link[0] !== company.id) return replacementFailure(companyId, 'paid_ad_company_link_mismatch');
+      if (typeof identity !== 'string' || !identity || existingByIdentity.has(identity)) return replacementFailure(companyId, 'duplicate_existing_paid_ad_identity');
+      existingByIdentity.set(identity, record);
+    }
+
+    let staged: Array<{identity: string; recordId?: string; fields: AirtableRecord['fields']}>;
+    try {
+      // Map the complete set before altering fixture state, matching production.
+      staged = ads.map((ad) => {
+        const stored = existingByIdentity.get(ad.calculated.paidAdId);
+        const first = stored?.fields['Observed • First Observed At'];
+        const last = stored?.fields['Observed • Last Observed At'];
+        return {identity: ad.calculated.paidAdId, recordId: stored?.id, fields: toAirtablePaidAdFields(ad, company.id, typeof first === 'string' ? first : undefined, typeof last === 'string' ? last : undefined)};
+      });
+    } catch {
+      // Keep fixture failure semantics aligned with the production adapter,
+      // which intentionally does not expose mapper internals.
+      return replacementFailure(companyId, 'Airtable request failed');
+    }
+
+    const table = this.table('paidAds');
+    for (const write of staged) {
+      const id = write.recordId ?? recordId('paidAds', write.identity);
+      const previous = write.recordId ? table.get(write.recordId) : undefined;
+      const present = Object.fromEntries(Object.entries(write.fields).filter(([, value]) => value !== undefined));
+      table.set(id, {id, fields: clone({...previous?.fields, ...present})});
+    }
+    for (const record of existing) {
+      if (!incomingIds.has(String(record.fields['Identity • Paid Ad ID']))) table.delete(record.id);
+    }
+    return {succeeded: staged.length, failed: 0, results: staged.map((write) => ({identity: write.identity, recordId: write.recordId ?? recordId('paidAds', write.identity)}))};
+  }
+
+  async upsertPaidAds(paidAds: CuratedPaidAd[]): Promise<WriteResult> {
+    const results: WriteResult['results'] = [];
+    const byCompany = new Map<string, CuratedPaidAd[]>();
+    for (const ad of paidAds) {
+      const group = byCompany.get(ad.calculated.companyId) ?? [];
+      group.push(ad);
+      byCompany.set(ad.calculated.companyId, group);
+    }
+    for (const [companyId, ads] of byCompany) {
+      try {
+        const company = this.findCompanyRecordById(companyId);
+        if (!company) {
+          results.push(...ads.map((ad) => ({identity: ad.calculated.paidAdId, error: 'company_link_missing'})));
+          continue;
+        }
+        const staged = ads.map((ad) => {
+          const existing = [...this.table('paidAds').values()].find((record) => record.fields['Identity • Paid Ad ID'] === ad.calculated.paidAdId);
+          const firstObservedAt = existing?.fields['Observed • First Observed At'];
+          const lastObservedAt = existing?.fields['Observed • Last Observed At'];
+          return {identity: ad.calculated.paidAdId, fields: toAirtablePaidAdFields(ad, company.id, typeof firstObservedAt === 'string' ? firstObservedAt : undefined, typeof lastObservedAt === 'string' ? lastObservedAt : undefined), lookupField: 'Identity • Paid Ad ID'};
+        });
+        const written = await this.upsertMany('paidAds', staged);
+        results.push(...written.results);
+      } catch {
+        results.push(...ads.map((ad) => ({identity: ad.calculated.paidAdId, error: 'paid_ad_group_failed'})));
+      }
+    }
+    return {succeeded: results.filter((item) => !item.error).length, failed: results.filter((item) => item.error).length, results};
+  }
+
+  async getDashboardSnapshot(): Promise<DashboardSnapshot> {
+    return {companies: this.records('companies'), keywords: this.records('keywords'), paidAds: this.records('paidAds'), publishedInsights: this.records('insights'), reviews: this.records('reviews'), system: this.records('system')};
+  }
+
+  /** Sanitized fixture state for explicit CLI write-back; source fixture files are never mutated implicitly. */
+  toSnapshot(): FixtureSnapshot {
+    return {companies: this.records('companies'), keywords: this.records('keywords'), paidAds: this.records('paidAds'), insights: this.records('insights'), reviews: this.records('reviews'), system: this.records('system')};
+  }
+
+  async getDueInsightInputs(): Promise<DueInsightInput[]> {
+    const insights = new Map(this.records('insights').map((record) => [String(record.fields['Identity • Company ID']), record]));
+    const reviews = new Map(this.records('reviews').map((record) => [String(record.fields['Identity • Company ID']), record]));
+    const now = Date.now();
+    return this.records('companies').flatMap((company) => {
+      const companyId = company.fields['Identity • Company ID'];
+      if (typeof companyId !== 'string') return [];
+      const publishedInsight = insights.get(companyId);
+      const dueAt = company.fields['Workflow • Next Insight Due At'];
+      const changed = publishedInsight?.fields['Workflow • Evidence Fingerprint'] !== company.fields['Workflow • Evidence Fingerprint'];
+      return !publishedInsight || changed || (typeof dueAt === 'string' && Date.parse(dueAt) <= now) ? [{company, publishedInsight, review: reviews.get(companyId)}] : [];
+    });
+  }
+
+  async upsertReview(review: ReviewWireInput): Promise<WriteResult> {
+    const company = this.findCompanyRecordById(review.companyId);
+    if (this.records('reviews').filter((record) => record.fields['Identity • Company ID'] === review.companyId).length > 1) return {succeeded: 0, failed: 1, results: [{identity: review.companyId, error: 'duplicate_review_records'}]};
+    return company ? this.upsertMany('reviews', [{identity: review.companyId, fields: toAirtableReviewFields(review, company.id), lookupField: 'Identity • Company ID'}]) : {succeeded: 0, failed: 1, results: [{identity: review.companyId, error: 'company_link_missing'}]};
+  }
+
+  async upsertPublishedInsight(insight: InsightWireInput): Promise<WriteResult> {
+    const company = this.findCompanyRecordById(insight.companyId);
+    if (!company) return {succeeded: 0, failed: 1, results: [{identity: insight.insightId, error: 'company_link_missing'}]};
+    const existing = this.records('insights').filter((record) => record.fields['Identity • Company ID'] === insight.companyId);
+    if (existing.length > 1) return {succeeded: 0, failed: 1, results: [{identity: insight.companyId, error: 'duplicate_published_insights'}]};
+    // Exactly one current published row per company: replace that row only. The
+    // immutable insight ID remains a provenance field, never the lookup key.
+    return this.upsertMany('insights', [{identity: insight.companyId, fields: toAirtableInsightFields(insight, company.id), lookupField: 'Identity • Company ID'}]);
+  }
+
+  async updateSystem(system: SystemWireInput): Promise<WriteResult> {
+    return this.upsertMany('system', [{identity: system.systemId, fields: toAirtableSystemFields(system), lookupField: 'Identity • System ID'}]);
+  }
+
+  /** Test-only inspection helpers; they expose only stored curated identities/counts. */
+  companyIds(): string[] {
+    return this.records('companies')
+      .map((record) => record.fields['Identity • Company ID'])
+      .filter((companyId): companyId is string => typeof companyId === 'string')
+      .sort();
+  }
+
+  counts(): {companies: number; keywords: number; paidAds: number} {
+    return {companies: this.records('companies').length, keywords: this.records('keywords').length, paidAds: this.records('paidAds').length};
+  }
+
+  private async upsertMany(key: keyof FixtureSnapshot, writes: Array<{identity: string; fields: AirtableRecord['fields']; lookupField: string}>): Promise<WriteResult> {
+    const table = this.table(key);
+    const results = writes.map((write) => {
+      const existing = [...table.values()].find((record) => record.fields[write.lookupField] === write.identity);
+      const id = existing?.id ?? recordId(key, write.identity);
+      // Airtable PATCH leaves omitted fields untouched. Matching that behavior in
+      // fixture mode preserves agent workflow fields during a Railway-only update
+      // while still honoring explicit null invalidations.
+      const present = Object.fromEntries(Object.entries(write.fields).filter(([, value]) => value !== undefined));
+      table.set(id, {id, fields: clone({...existing?.fields, ...present})});
+      return {identity: write.identity, recordId: id};
+    });
+    return {succeeded: results.length, failed: 0, results};
+  }
+
+  private findCompanyRecord(company: CompanyPersistenceWrite): AirtableRecord | undefined {
+    if (company.identity.apolloAccountId) {
+      const byAccount = this.records('companies').find((record) => record.fields['Observed • Apollo Account ID'] === company.identity.apolloAccountId);
+      if (byAccount) return byAccount;
+    }
+    const byDomain = this.records('companies').find((record) => record.fields['Identity • Canonical Domain'] === company.identity.canonicalDomain);
+    return byDomain ?? this.findCompanyRecordById(company.companyId);
+  }
+
+  private findCompanyRecordById(companyId: string): AirtableRecord | undefined {
+    return this.records('companies').find((record) => record.fields['Identity • Company ID'] === companyId);
+  }
+
+  private table(key: keyof FixtureSnapshot): Map<string, AirtableRecord> {
+    const table = this.tables.get(key);
+    if (!table) throw new TypeError(`Missing fixture table ${key}`);
+    return table;
+  }
+
+  private records(key: keyof FixtureSnapshot): AirtableRecord[] {
+    return [...this.table(key).values()].map(clone);
+  }
+}
+
+function replacementFailure(companyId: string, error: string): WriteResult {
+  return {succeeded: 0, failed: 1, results: [{identity: companyId, error}]};
+}

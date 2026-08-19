@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build Competitor Dashboard"
+  short_description: "Implement the evidence-first dashboard interface"
+  default_prompt: "Use $building-competitor-dashboard to implement or review this dashboard change against the approved interface system."

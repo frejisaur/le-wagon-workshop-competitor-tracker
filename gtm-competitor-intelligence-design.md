@@ -61,7 +61,47 @@ By the end of the session, attendees should have:
 
 ## 4. Source data analysis
 
-The supplied file `apollo-accounts-semrush-scraper.json` is a 37 MB array containing 52 Domain Overview records. It contains 32 top-level fields and 295 distinct normalized scalar paths.
+The supplied file `apollo-accounts-semrush-scraper.json` is a 37 MB array containing 52 Domain Overview records. It contains 32 top-level fields and 297 distinct normalized scalar paths, including the all-false `is_root_domain` path and the all-null `organic.country_summary` path.
+
+### 4.1 Initial two-file join and company identity
+
+The initial import combines two independently downloaded files: the Apollo
+account CSV is the company roster and the Apify Domain Overview JSON is its SEO
+enrichment. Join Apollo `Website` to Apify `domain` through the shared domain
+normalizer. The normalized domain is a join key, not the permanent company
+identity.
+
+The normalizer extracts the hostname, lowercases it, removes a leading `www.`,
+and removes any trailing dot. Schemes, ports, paths, query strings, and
+fragments do not participate in the key. Preserve both providers' original
+values for provenance. Do not join on company name: the supplied Apify records
+have no company-name field, and names are mutable and non-unique.
+
+Each accepted company receives an immutable internal `company_id` on first
+import. Persist the normalized domain as the unique `canonical_domain`, and
+retain Apollo Account ID and Apollo Record ID as source identifiers. On retry,
+resolve an existing company by Apollo Account ID when available, then by
+`canonical_domain`; never mint a second `company_id` for the same resolved
+company.
+
+Apply these deterministic exception rules:
+
+- Reject and report Apollo rows whose `Website` is missing or cannot produce a
+  valid domain; do not infer a domain from company name.
+- Keep an Apollo row with a valid domain but no Apify match as an unenriched
+  company, with provider metrics absent rather than zero.
+- Reject and report an Apify-only domain instead of silently creating a company
+  outside the Apollo roster.
+- Treat duplicate normalized Apollo domains or conflicting Apollo source IDs as
+  identity conflicts requiring resolution.
+- Accept canonically identical duplicate Apify observations idempotently;
+  reject conflicting duplicates for the same domain, database, and observation
+  time. Keep observations from different databases or times separate.
+
+In the supplied files, Apollo contains 53 rows: 52 have unique valid website
+domains and one has no website. Apify contains 52 unique domains. All 52 valid
+Apollo domains match an Apify domain, so the initial import produces 52 Company
+records and one reported Apollo rejection.
 
 ### Top-level fields
 
@@ -192,7 +232,10 @@ Airtable is the editable serving layer, not the raw warehouse. The design target
 
 Contains:
 
-- Apollo identity and segmentation.
+- Immutable internal `company_id`.
+- Unique normalized `canonical_domain`, used as the Apollo-to-Apify join key.
+- Apollo Account ID, Apollo Record ID, display identity, and segmentation.
+- Original Apollo website and Apify domain values for provenance.
 - Current top-level Domain Overview metrics.
 - Deterministic calculations: 30-day and 12-month changes, non-brand percentage, benchmark gap, and tracked-set traffic share.
 - Compact 24-month trend JSON for the UI.
@@ -360,7 +403,17 @@ All other valid candidates are upserted into Insight Reviews with `needs_review`
 
 ## 10. Enrichment workflow
 
-### 10.1 Weekly deterministic scraper refresh
+### 10.1 Initial two-file import
+
+1. Validate the Apollo CSV and Apify JSON independently at their provider boundaries.
+2. Normalize Apollo `Website` and Apify `domain` with the shared domain normalizer.
+3. Apply the identity-conflict and rejection rules from Section 4.1.
+4. Left-join valid Apollo roster rows to Apify enrichment by `canonical_domain`.
+5. Resolve or assign the immutable internal `company_id` idempotently.
+6. Transform observed fields and deterministic calculations without merging their provenance layers.
+7. Batch-upsert accepted Companies, Keywords, and Paid Ads and report rejected or unmatched rows.
+
+### 10.2 Weekly deterministic scraper refresh
 
 1. Read active company domains from Airtable.
 2. Create a run ID and mark the Railway workflow in the System record as running.
@@ -378,7 +431,7 @@ All other valid candidates are upserted into Insight Reviews with `needs_review`
 14. Invalidate the web cache.
 15. Close connections and exit.
 
-### 10.2 Independently scheduled semantic enrichment
+### 10.3 Independently scheduled semantic enrichment
 
 1. The selected agent harness invokes the `generating-gtm-battlecards` skill on its own schedule.
 2. The skill calls `insights:prepare` to retrieve only companies currently due and a bounded evidence package for each one.
@@ -390,7 +443,7 @@ All other valid candidates are upserted into Insight Reviews with `needs_review`
 
 An insight is due when it has no published version, its configured refresh timestamp has passed, its current agent-evidence fingerprint differs from the published insight's fingerprint, its skill version changed, or a reviewer requested regeneration. A pending review candidate is not overwritten unless it becomes stale or the reviewer requests another attempt.
 
-### 10.3 Review and promotion
+### 10.4 Review and promotion
 
 1. The reviewer opens Airtable's `Needs Review` view.
 2. The reviewer checks the candidate, confidence reason, and linked evidence.
@@ -437,6 +490,8 @@ AGENTS.md
 CLAUDE.md
 .agents/
   skills/
+    building-competitor-dashboard/
+      SKILL.md
     competitor-data-contracts/
       SKILL.md
       references/
@@ -457,6 +512,7 @@ CLAUDE.md
     dashboard-builder.md
     evidence-reviewer.md
   skills/
+    building-competitor-dashboard -> ../../.agents/skills/building-competitor-dashboard
     competitor-data-contracts -> ../../.agents/skills/competitor-data-contracts
     generating-gtm-battlecards -> ../../.agents/skills/generating-gtm-battlecards
     operating-competitor-intelligence -> ../../.agents/skills/operating-competitor-intelligence
@@ -501,21 +557,27 @@ Harness-specific agent files contain only role and tool configuration.
 
 | Definition | Responsibility |
 |---|---|
+| `building-competitor-dashboard` | Applies the approved interface system to dashboard navigation, components, visualizations, responsive behavior, accessibility, and visual states. |
 | `competitor-data-contracts` | Provider validation, transformations, Airtable identities, evidence fingerprints, and fixtures. |
 | `generating-gtm-battlecards` | Due-work selection, structured candidates, evidence, confidence, review routing, and publication. |
 | `operating-competitor-intelligence` | Refreshes, freshness, failure diagnosis, safe retries, smoke checks, and workshop fallbacks. |
 | `pipeline-builder` | Implements and tests schemas, transforms, Airtable access, and enrichment commands. |
-| `dashboard-builder` | Implements the two screens against validated types and sanitized fixtures. |
+| `dashboard-builder` | Loads `building-competitor-dashboard` and `competitor-data-contracts`, then implements the two screens against validated types and sanitized fixtures. |
 | `evidence-reviewer` | Performs read-only review for unsupported claims, unsafe data, security leaks, and missing tests. |
 
-The workshop explicitly invokes one data-contract skill, one battlecard run,
-and the read-only reviewer. Routine operation defaults to one agent using the
-relevant skill; parallel agents are optional and receive neither production
-secrets nor unattended deployment authority.
+The workshop explicitly invokes the data-contract and dashboard skills, one
+battlecard run, and the read-only reviewer. Routine operation defaults to one
+agent using the relevant skill; parallel agents are optional and receive
+neither production secrets nor unattended deployment authority.
 
 ## 14. Testing strategy
 
 - Preserve a small sanitized fixture derived from the supplied payload.
+- Contract-test Apollo `Website` to Apify `domain` normalization and joining,
+  including scheme, case, `www.`, port, trailing-dot, path, query, and fragment
+  variants.
+- Test immutable `company_id` reuse and deterministic handling of missing,
+  unmatched, duplicate, and conflicting import identities.
 - Unit-test provider-response validation and every deterministic calculation.
 - Test the known data-quality cases: self-competitors, zero AI countries, inconsistent backlink totals, formatted Moz strings, suspicious Moz page values, absent paid data, and unknown SERP codes.
 - Test idempotent Airtable record identities and batched writes.
@@ -541,7 +603,9 @@ The repository should be prepared in checkpoints so the presenter can recover fr
 - Start from the working Apollo CSV and a sanitized scraper fixture.
 - Demonstrate one live Apify enrichment batch, while retaining the fixture as fallback.
 - Build or reveal the Airtable transformation and inspect the resulting records.
-- Use `dashboard-builder` to construct the two primary screens against sanitized fixtures.
+- Use `building-competitor-dashboard` with `dashboard-builder` to construct the
+  two primary screens against the approved design system, validated types, and
+  sanitized fixtures.
 - Run `generating-gtm-battlecards` in one supported agent harness and retain pre-generated candidates as fallback.
 - Show one high-confidence battlecard auto-publish and one low-confidence candidate enter Airtable's `Needs Review` view.
 - Add a reviewer note, approve the candidate, run `npm run insights:publish-approved`, and show the promoted battlecard in the dashboard.
@@ -552,7 +616,9 @@ The repository should be prepared in checkpoints so the presenter can recover fr
 
 Version 1 is complete when:
 
-1. The Apollo list can be imported without manual code changes.
+1. The Apollo CSV and Apify JSON can be joined idempotently by normalized domain
+   without manual code changes; company names are not used as join keys, and
+   missing, unmatched, or duplicate identities are reported deterministically.
 2. A Domain Overview run can enrich at least the supplied 52 domains.
 3. Curated records remain below the Airtable Free-plan record limit for the sample dataset.
 4. No Airtable or provider secret is sent to the browser.
