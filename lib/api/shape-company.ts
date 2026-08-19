@@ -2,6 +2,7 @@ import type {AirtableFields, AirtableRecord, DashboardSnapshot} from '@/lib/airt
 import {buildEvidencePackage} from '@/lib/agents/evidence/build-package';
 import {fingerprintEvidence} from '@/lib/agents/evidence/fingerprint';
 import {CompanyResponseSchema, type CompanyResponse, type DashboardValue, type Freshness} from '@/lib/domain/dashboard';
+import {CandidateReviewReasonSchema, type CandidateReviewReason} from '@/lib/schemas/insight-candidate';
 import {normalizeDomain, normalizeUrl} from '@/lib/transforms/normalize';
 
 type JsonRecord = Record<string, unknown>;
@@ -20,13 +21,21 @@ function calculated(fields: AirtableFields, field: string): DashboardValue { ret
 function calculatedBool(fields: AirtableFields, field: string): DashboardValue { return {classification: 'calculated', value: bool(fields, `Calculated • ${field}`), ...(iso(text(fields, 'Calculated • At')) ? {calculatedAt: iso(text(fields, 'Calculated • At'))} : {})}; }
 function calculatedWithObservedProvenance(fields: AirtableFields, field: string): DashboardValue { return {...calculated(fields, field), ...(text(fields, 'Observed • Source') ? {source: text(fields, 'Observed • Source')} : {}), ...(text(fields, 'Observed • Database') ? {database: text(fields, 'Observed • Database')} : {})}; }
 
-function reviewReasons(record: AirtableRecord): string[] { return stringList(record.fields, 'Inferred • Review Reasons JSON').filter((reason) => reason.length > 0).sort(); }
-function claims(record: AirtableRecord, field: string): Array<{claimId: string; conclusion: string; classification: 'observed' | 'inferred'; confidence: 'high' | 'medium' | 'low'; confidenceReason: string; evidenceRefs: string[]}> {
-  return parsedArray(record.fields, field).flatMap((claim) => {
+function reviewReasons(record: AirtableRecord): CandidateReviewReason[] { return [...new Set(stringList(record.fields, 'Inferred • Review Reasons JSON').flatMap((reason) => CandidateReviewReasonSchema.safeParse(reason).success ? [reason as CandidateReviewReason] : []))].sort().slice(0, 7) as CandidateReviewReason[]; }
+type PublishedClaim = {claimId: string; conclusion: string; classification: 'observed' | 'inferred'; confidence: 'high' | 'medium' | 'low'; confidenceReason: string; evidenceRefs: string[]};
+function claims(record: AirtableRecord, field: string): {claims: PublishedClaim[]; complete: boolean} {
+  const serialized = text(record.fields, field);
+  if (!serialized) return {claims: [], complete: true};
+  let parsed: unknown;
+  try { parsed = JSON.parse(serialized); } catch { return {claims: [], complete: false}; }
+  if (!Array.isArray(parsed) || !parsed.every((item) => !!item && typeof item === 'object' && !Array.isArray(item))) return {claims: [], complete: false};
+  const raw = parsed as JsonRecord[];
+  const valid = raw.flatMap((claim) => {
     const claimId = string(claim.claimId); const conclusion = string(claim.conclusion); const classification = claim.classification;
     const confidence = claim.confidence; const confidenceReason = string(claim.confidenceReason); const evidenceRefs = Array.isArray(claim.evidenceRefs) && claim.evidenceRefs.every((item) => typeof item === 'string' && item.length > 0) ? claim.evidenceRefs : [];
-    return claimId && conclusion && (classification === 'observed' || classification === 'inferred') && (confidence === 'high' || confidence === 'medium' || confidence === 'low') && confidenceReason && evidenceRefs.length ? [{claimId, conclusion, classification, confidence, confidenceReason, evidenceRefs}] : [];
+    return claimId && claimId.length <= 200 && conclusion && (classification === 'observed' || classification === 'inferred') && (confidence === 'high' || confidence === 'medium' || confidence === 'low') && confidenceReason && evidenceRefs.length && evidenceRefs.length <= 100 && evidenceRefs.every((ref) => ref.length <= 500) ? [{claimId, conclusion, classification: classification as PublishedClaim['classification'], confidence: confidence as PublishedClaim['confidence'], confidenceReason, evidenceRefs: evidenceRefs as string[]}] : [];
   });
+  return {claims: valid, complete: raw.length === valid.length};
 }
 
 export function freshnessFor(snapshot: DashboardSnapshot, cachedAt: string | null, status: Freshness['isStale']): Freshness {
@@ -73,11 +82,12 @@ export function shapeCompany(snapshot: DashboardSnapshot, company: AirtableRecor
   const evidencePackage = buildEvidencePackage({company, keywords: snapshot.keywords.filter((record) => record.fields['Identity • Company ID'] === companyId), paidAds: snapshot.paidAds.filter((record) => record.fields['Identity • Company ID'] === companyId), publishedInsight: published, review});
   const evidence = evidencePackage.evidence;
   const resolvable = new Set(evidence.map((item) => item.ref));
-  const publishedClaims = published ? [...claims(published, 'Observed • Themes JSON'), ...claims(published, 'Inferred • Claims JSON'), ...claims(published, 'Inferred • Recommendations JSON')].filter((claim) => claim.evidenceRefs.every((ref) => resolvable.has(ref))) : [];
+  const publishedCollections = published ? ['Observed • Themes JSON', 'Inferred • Claims JSON', 'Inferred • Recommendations JSON'].map((field) => claims(published, field)) : [];
+  const publishedClaims = publishedCollections.flatMap((collection) => collection.claims);
   // Task 7's canonical hash deliberately ignores publication metadata, so only
   // the current curated company/keyword/ad evidence determines freshness.
   const currentFingerprint = fingerprintEvidence(evidencePackage);
-  const publishedIsCurrent = published && text(published.fields, 'Workflow • Evidence Fingerprint') === currentFingerprint;
+  const publishedIsCurrent = Boolean(published && text(published.fields, 'Workflow • Evidence Fingerprint') === currentFingerprint && publishedClaims.length > 0 && publishedCollections.every((collection) => collection.complete) && publishedClaims.every((claim) => claim.evidenceRefs.every((ref) => resolvable.has(ref))));
   const reviewStatus = review ? text(review.fields, 'Review • Status') : undefined;
   const paidPresent = bool(fields, 'Calculated • Paid Activity Present') === true && (number(fields, 'Observed • Paid Traffic') !== null || number(fields, 'Observed • Paid Keywords') !== null || paidAds.length > 0);
   return CompanyResponseSchema.parse({

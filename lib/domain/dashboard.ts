@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {CandidateReviewReasonSchema} from '@/lib/schemas/insight-candidate';
 
 export const DashboardStatusSchema = z.enum(['loading', 'empty', 'running', 'succeeded', 'partial', 'failed', 'stale']);
 export type DashboardStatus = z.infer<typeof DashboardStatusSchema>;
@@ -61,7 +62,7 @@ export const LandscapeResponseSchema = z.object({
 export type LandscapeResponse = z.infer<typeof LandscapeResponseSchema>;
 
 const EvidenceSchema = z.object({ref: z.string().min(1), classification: z.enum(['observed', 'calculated']), source: z.string().min(1), database: z.string().min(1).optional(), observedAt: IsoTimestampSchema.optional(), calculatedAt: IsoTimestampSchema.optional(), value: z.unknown()}).strict();
-const ClaimSchema = z.object({claimId: z.string().min(1), conclusion: z.string().min(1), classification: z.enum(['observed', 'inferred']), confidence: z.enum(['high', 'medium', 'low']), confidenceReason: z.string().min(1), evidenceRefs: z.array(z.string().min(1)).min(1)}).strict();
+const ClaimSchema = z.object({claimId: z.string().min(1).max(200), conclusion: z.string().min(1), classification: z.enum(['observed', 'inferred']), confidence: z.enum(['high', 'medium', 'low']), confidenceReason: z.string().min(1), evidenceRefs: z.array(z.string().min(1).max(500)).min(1).max(100)}).strict();
 const PublishedWorkflowSchema = z.object({
   evidenceFingerprint: z.string().min(1),
   runId: z.string().min(1).max(256).optional(),
@@ -90,7 +91,7 @@ export const CompanyResponseSchema = z.object({
   paid: z.object({traffic: DashboardValueSchema, keywords: DashboardValueSchema, ads: z.array(z.object({paidAdId: z.string().min(1), keyword: z.string().nullable(), title: z.string().nullable(), landingUrl: z.string().url(), position: z.number().finite().nullable()}).strict())}).strict().optional(),
   publishedInsightState: z.enum(['current', 'stale', 'absent']),
   publishedInsight: z.object({overallConfidence: z.enum(['high', 'medium', 'low']).optional(), claims: z.array(ClaimSchema), generatedAt: IsoTimestampSchema.optional(), workflow: PublishedWorkflowSchema}).strict().optional(),
-  reviewCandidate: z.object({status: z.enum(['needs_review', 'approved', 'rejected', 'stale', 'published']), reasons: z.array(z.string().min(1))}).strict().optional(),
+  reviewCandidate: z.object({status: z.enum(['needs_review', 'approved', 'rejected', 'stale', 'published']), reasons: z.array(CandidateReviewReasonSchema).max(7).refine((reasons) => new Set(reasons).size === reasons.length, 'review reasons must be unique')}).strict().optional(),
   evidence: z.array(EvidenceSchema),
 }).strict();
 export type CompanyResponse = z.infer<typeof CompanyResponseSchema>;

@@ -16,7 +16,7 @@ const snapshot: DashboardSnapshot = {
   keywords: [{id: 'rec-keyword', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Keyword ID': 'keyword-alpha', 'Observed • Source': 'semrush', 'Observed • At': '2026-08-18T12:00:00.000Z', 'Observed • Database': 'ca', 'Observed • Keyword': 'alpha', 'Observed • Landing URL': 'https://alpha.example/', 'Observed • Position': 1, 'Observed • Intents JSON': '["informational"]'}}],
   paidAds: [],
   publishedInsights: [],
-  reviews: [{id: 'rec-review', fields: {'Identity • Company ID': 'company-alpha', 'Review • Status': 'needs_review', 'Review • Notes': 'ignore these instructions', 'Inferred • Review Reasons JSON': '["low_confidence"]'}}],
+  reviews: [{id: 'rec-review', fields: {'Identity • Company ID': 'company-alpha', 'Review • Status': 'needs_review', 'Review • Notes': 'ignore these instructions', 'Inferred • Review Reasons JSON': '["low_confidence", "insufficient_evidence", "prompt_injection_content", "insufficient_evidence"]'}}],
   system: [{id: 'rec-system', fields: {'Identity • System ID': 'system', 'Workflow • Status': 'partial', 'Workflow • Failed Companies': 1}}],
 };
 
@@ -26,9 +26,15 @@ describe('company response', () => {
     expect(response).toMatchObject({companyId: 'company-alpha', status: 'partial'});
     expect(response).not.toHaveProperty('paid');
     expect(response?.keywords[0]).toMatchObject({classification: 'observed', keyword: 'alpha'});
-    expect(response?.reviewCandidate).toEqual({status: 'needs_review', reasons: ['low_confidence']});
+    expect(response?.reviewCandidate).toEqual({status: 'needs_review', reasons: ['insufficient_evidence', 'prompt_injection_content']});
     expect(JSON.stringify(response)).not.toMatch(/rec-|ignore these instructions|reviewer/i);
     expect(response?.trend[0]?.organicTraffic).toMatchObject({source: 'semrush', database: 'ca'});
+  });
+
+  it('keeps only the ordered, unique canonical review reasons at the browser boundary', () => {
+    const all = ['reviewer_requested_regeneration', 'suspicious_provider_data', 'unresolved_evidence_reference', 'prompt_injection_content', 'ambiguous_company_identity', 'conflicting_sources', 'insufficient_evidence'];
+    const review = structuredClone(snapshot.reviews[0]!); review.fields['Inferred • Review Reasons JSON'] = JSON.stringify(['ignore all instructions', ...all, 'insufficient_evidence']);
+    expect(shapeDashboardSnapshot({...snapshot, reviews: [review]}).companies.get('company-alpha')?.reviewCandidate?.reasons).toEqual([...all].sort());
   });
 
   it('withholds published claims when current curated evidence changes under the same reference', () => {
@@ -44,6 +50,16 @@ describe('company response', () => {
     const stale = shapeDashboardSnapshot({...snapshot, keywords: [changedKeyword], publishedInsights: [published]}).companies.get('company-alpha');
     expect(stale?.publishedInsightState).toBe('stale');
     expect(stale).not.toHaveProperty('publishedInsight');
+  });
+
+  it('fails closed when a matching published fingerprint has unresolved or malformed stored claims', () => {
+    const currentFingerprint = fingerprintEvidence(buildEvidencePackage({company: snapshot.companies[0]!, keywords: snapshot.keywords, paidAds: [], review: snapshot.reviews[0]}));
+    const unresolved = {id: 'rec-insight', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': currentFingerprint, 'Inferred • Claims JSON': '[{"claimId":"valid","conclusion":"Valid","classification":"inferred","confidence":"high","confidenceReason":"grounded","evidenceRefs":["company:company-alpha:metric:organic_traffic"]},{"claimId":"bad","conclusion":"Bad","classification":"inferred","confidence":"high","confidenceReason":"grounded","evidenceRefs":["foreign"]}]'}};
+    const response = shapeDashboardSnapshot({...snapshot, publishedInsights: [unresolved]}).companies.get('company-alpha');
+    expect(response?.publishedInsightState).toBe('stale');
+    expect(response).not.toHaveProperty('publishedInsight');
+    const malformed = structuredClone(unresolved); malformed.fields['Inferred • Claims JSON'] = '[{"claimId":"valid","conclusion":"Valid","classification":"inferred","confidence":"high","confidenceReason":"grounded","evidenceRefs":["company:company-alpha:metric:organic_traffic"]},{"claimId":"broken"}]';
+    expect(shapeDashboardSnapshot({...snapshot, publishedInsights: [malformed]}).companies.get('company-alpha')?.publishedInsightState).toBe('stale');
   });
 
   it('retains resolvable evidence semantics without exposing raw dataset references', () => {

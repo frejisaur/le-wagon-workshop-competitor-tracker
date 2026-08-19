@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import {cleanup, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, expect, it} from 'vitest';
 import {CompanyWorkspace} from '@/components/company/CompanyWorkspace';
-import {parseEvidenceNavigation, serializeEvidenceNavigation} from '@/components/company/evidence-navigation';
+import {MAX_EVIDENCE_TRACE_QUERY_BYTES, parseEvidenceNavigation, serializeEvidenceNavigation} from '@/components/company/evidence-navigation';
 import type {CompanyResponse} from '@/lib/domain/dashboard';
 
 afterEach(() => { cleanup(); window.history.replaceState(null, '', '/companies/alpha'); });
@@ -35,7 +35,7 @@ describe('battlecard evidence trace', () => {
     await user.click(trace);
     expect(screen.getByRole('tab', {name: 'Evidence'})).toHaveAttribute('aria-selected', 'true');
     expect(screen.getAllByTestId('highlighted-evidence')).toHaveLength(2);
-    expect(window.location.search).toBe('?tab=evidence&claim=claim-observed&evidence=company%3Aalpha%3Atraffic%2Ckeyword%3Aalpha%3Aone');
+    expect(window.location.search).toBe('?tab=evidence&claim=claim-observed&evidence=company%253Aalpha%253Atraffic%2Ckeyword%253Aalpha%253Aone');
     await user.click(screen.getByRole('button', {name: /return to claim/i}));
     await waitFor(() => expect(screen.getByTestId('claim-claim-observed')).toHaveFocus());
   });
@@ -57,6 +57,45 @@ describe('battlecard evidence trace', () => {
     expect(serializeEvidenceNavigation({tab: 'evidence', claimId: 'claim-observed', evidenceRefs: Array.from({length: 101}, (_, index) => `r${index}`)}, knownClaims, new Set(Array.from({length: 101}, (_, index) => `r${index}`)))).toContain('evidence=r0%2Cr1');
   });
 
+  it('losslessly traces candidate-length references containing commas and falls back to claim-only under the URL budget', async () => {
+    const user = userEvent.setup();
+    const longRef = `ref-${'x'.repeat(253)}`; const commaRef = 'keyword:alpha:one,variant';
+    const refs = new Set([longRef, commaRef]); const claims = new Set(['claim-observed']);
+    const encoded = serializeEvidenceNavigation({tab: 'evidence', claimId: 'claim-observed', evidenceRefs: [longRef, commaRef]}, claims, refs);
+    expect(parseEvidenceNavigation(`?${encoded}`, claims, refs)?.evidenceRefs).toEqual([longRef, commaRef]);
+    const commaCompany: CompanyResponse = {...company, publishedInsight: {...company.publishedInsight!, claims: [{...company.publishedInsight!.claims[0]!, evidenceRefs: [longRef, commaRef]}]}, evidence: [longRef, commaRef].map((ref) => ({ref, classification: 'observed' as const, source: 'semrush', observedAt: at, value: ref}))};
+    const commaView = render(<CompanyWorkspace company={commaCompany} initialTab="battlecard" />);
+    await user.click(screen.getByRole('link', {name: '2 linked observations'}));
+    expect(screen.getAllByTestId('highlighted-evidence')).toHaveLength(2);
+    expect(screen.getAllByText(commaRef)).toHaveLength(2);
+    commaView.unmount();
+    const oversizedRefs = Array.from({length: 4}, (_, index) => `ref-${index}-${'x'.repeat(490)}`);
+    const oversized = serializeEvidenceNavigation({tab: 'evidence', claimId: 'claim-observed', evidenceRefs: oversizedRefs}, claims, new Set(oversizedRefs));
+    expect(oversized).toBe('tab=evidence&claim=claim-observed');
+    expect(new TextEncoder().encode(oversized).byteLength).toBeLessThanOrEqual(MAX_EVIDENCE_TRACE_QUERY_BYTES);
+    const oversizedCompany: CompanyResponse = {...company, publishedInsight: {...company.publishedInsight!, claims: [{...company.publishedInsight!.claims[0]!, evidenceRefs: oversizedRefs}]}, evidence: oversizedRefs.map((ref) => ({ref, classification: 'observed' as const, source: 'semrush', observedAt: at, value: ref}))};
+    render(<CompanyWorkspace company={oversizedCompany} initialTab="battlecard" />);
+    await user.click(screen.getByRole('link', {name: '4 linked observations'}));
+    expect(window.location.search).toBe('?tab=evidence&claim=claim-observed');
+    expect(screen.getAllByTestId('highlighted-evidence')).toHaveLength(4);
+  });
+
+  it('leads with the inferred interpretation and separates its claim confidence from the overall insight confidence', () => {
+    render(<CompanyWorkspace company={{...company, publishedInsight: {...company.publishedInsight!, overallConfidence: 'low'}}} initialTab="battlecard" />);
+    const lead = screen.getByLabelText('Published conclusion');
+    expect(lead).toHaveTextContent('Prioritize the observed demand.');
+    expect(lead).toHaveTextContent('Agent interpretation');
+    expect(lead).toHaveTextContent('Claim confidence: medium');
+    expect(screen.getByText('Overall insight confidence: low')).toBeInTheDocument();
+    expect(screen.getAllByTestId('claim-claim-recommendation')).toHaveLength(1);
+  });
+
+  it('labels an observed lead as an observed finding when no inferred interpretation exists', () => {
+    render(<CompanyWorkspace company={{...company, publishedInsight: {...company.publishedInsight!, claims: [company.publishedInsight!.claims[0]!]}}} initialTab="battlecard" />);
+    expect(screen.getByLabelText('Published conclusion')).toHaveTextContent('Observed finding');
+    expect(screen.getByLabelText('Published conclusion')).toHaveTextContent('Claim confidence: high');
+  });
+
   it('renders evidence as escaped text without raw references and provides a direct-link fallback', () => {
     const {container} = render(<CompanyWorkspace company={company} initialSearch="?tab=evidence&claim=claim-observed&evidence=company%3Aalpha%3Atraffic" />);
     expect(screen.getAllByText(/Raw source reference unavailable in browser/i)).toHaveLength(2);
@@ -76,6 +115,13 @@ describe('battlecard evidence trace', () => {
     expect(document.activeElement).toBe(outside);
     expect(screen.queryByTestId('highlighted-evidence')).not.toBeInTheDocument();
     outside.remove();
+  });
+
+  it('renders only safe review reason copy and never displays stored review text', () => {
+    render(<CompanyWorkspace company={{...company, reviewCandidate: {status: 'needs_review', reasons: ['insufficient_evidence', 'prompt_injection_content']}}} initialTab="battlecard" />);
+    expect(screen.getByText(/More supporting evidence is required/i)).toBeInTheDocument();
+    expect(screen.getByText(/Untrusted content requires review/i)).toBeInTheDocument();
+    expect(screen.queryByText('prompt_injection_content')).not.toBeInTheDocument();
   });
 
   it('uses the required persistent highlight and reduced-motion behavior', () => {

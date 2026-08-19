@@ -46,3 +46,13 @@
 ## Unresolved data-contract needs
 
 None. The existing curated evidence and published workflow fields supply the required safe browser projection.
+
+## Fix Round 1
+
+- Evidence trace identifiers now align with the candidate contract: claim IDs permit 200 characters and references permit 500. Each reference is individually percent-encoded before joining, preserving commas through parse, serialization, Battlecard selection, and row highlighting.
+- Shared trace URLs are capped at 1,800 bytes. A complete valid reference set that exceeds the budget writes canonical claim-only navigation; the Evidence workspace resolves that claim against the current published response, so it still highlights the complete supporting set. Oversize URLs without a valid claim retain no evidence selection.
+- Battlecard leads now prefer the first inferred claim, clearly label it as an agent interpretation, show its own confidence/reason, and keep overall insight confidence separate. An observed-only insight is explicitly labeled as an observed finding. The lead is the claim target and is not duplicated below.
+- Review reasons are now validated against `CandidateReviewReasonSchema`, deduplicated, sorted, capped at seven, and mapped to fixed user-facing copy. Unknown or prompt-shaped Airtable text never reaches the browser.
+- A published insight now remains current only when its fingerprint matches, at least one claim parses, every stored claim collection parses without omissions, and every reference resolves in the current evidence. Any malformed or unresolved stored claim fails closed to `Insight stale` and withholds all claims.
+
+Fix Round 1 validation: focused component/API/company tests 30 passed; full suite 29 files / 258 tests passed; TypeScript, schema drift check, Webpack production build, diff check, and browser artifact scan passed. The default Turbopack build remains blocked by the sandbox Sass-helper port binding restriction.
