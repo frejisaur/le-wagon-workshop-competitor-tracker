@@ -1,0 +1,6 @@
+# This shared build configuration is linked to both Railway services. Runtime
+# and cron settings are service-specific and are intentionally documented in
+# docs/operations/deployment.md instead of being ambiguous here.
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
