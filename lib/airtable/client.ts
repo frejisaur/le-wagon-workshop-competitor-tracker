@@ -5,7 +5,7 @@ const MAX_RETRY_WAIT_MS = 30_000;
 const MAX_PAGES = 1_000;
 
 export class AirtableClientError extends Error {
-  constructor(readonly operation: 'list' | 'create' | 'update' | 'delete', readonly table: AirtableTable, readonly status?: number, detail?: string) {
+  constructor(readonly operation: 'list' | 'create' | 'update', readonly table: AirtableTable, readonly status?: number, detail?: string) {
     super(`Airtable ${operation} failed for ${table}${status ? ` (HTTP ${status})` : ''}${detail ? `: ${detail}` : ''}`);
     this.name = 'AirtableClientError';
   }
@@ -81,17 +81,6 @@ export class AirtableClient {
     return this.write('update', table, records);
   }
 
-  async delete(table: AirtableTable, recordIds: string[]): Promise<AirtableRecord[]> {
-    const deleted: AirtableRecord[] = [];
-    for (const batch of chunks(recordIds)) {
-      const query = new URLSearchParams();
-      batch.forEach((recordId) => query.append('records[]', recordId));
-      const response = await this.request<AirtableWriteResponse>('delete', table, `?${query.toString()}`, {method: 'DELETE'});
-      deleted.push(...response.records);
-    }
-    return deleted;
-  }
-
   private async write(operation: 'create' | 'update', table: AirtableTable, records: AirtableWriteRecord[]): Promise<AirtableRecord[]> {
     const written: AirtableRecord[] = [];
     for (const batch of chunks(records)) {
@@ -101,7 +90,7 @@ export class AirtableClient {
     return written;
   }
 
-  private async request<T>(operation: 'list' | 'create' | 'update' | 'delete', table: AirtableTable, suffix: string, init: RequestInit): Promise<T> {
+  private async request<T>(operation: 'list' | 'create' | 'update', table: AirtableTable, suffix: string, init: RequestInit): Promise<T> {
     const url = `${this.endpoint}/v0/${encodeURIComponent(this.options.baseId)}/${encodeURIComponent(table)}${suffix}`;
     for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
       const controller = new AbortController();

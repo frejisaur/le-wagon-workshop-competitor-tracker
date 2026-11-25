@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {buildEvidencePackage} from '@/lib/agents/evidence/build-package';
 import {fingerprintEvidence} from '@/lib/agents/evidence/fingerprint';
+import {companyIdOf} from '@/lib/airtable/company-row';
 import type {CompanyWrite, CompetitorStore, DashboardSnapshot, SystemWireInput, WriteResult} from '@/lib/airtable/types';
 import type {SemrushDomainOverview} from '@/lib/schemas/semrush';
 import {parseSemrushPayload} from '@/lib/schemas/semrush';
@@ -11,7 +12,7 @@ export type EnrichmentStatus = 'succeeded' | 'partial' | 'failed';
 export type EnrichmentError = {
   companyId?: string;
   canonicalDomain?: string;
-  stage: 'provider' | 'validation' | 'company' | 'keywords' | 'paid_ads' | 'fingerprint' | 'system' | 'cache';
+  stage: 'provider' | 'validation' | 'company' | 'system' | 'cache';
   code: string;
 };
 export type EnrichmentReport = {
@@ -77,14 +78,14 @@ function split<T>(items: T[], size: number): T[][] {
 function activeCompanies(snapshot: DashboardSnapshot): {companies: ActiveCompany[]; failures: EnrichmentError[]} {
   type RosterCandidate = ActiveCompany | {failure: EnrichmentError};
   const candidates: RosterCandidate[] = snapshot.companies.flatMap<RosterCandidate>((record) => {
-    const companyId = record.fields['Identity • Company ID'];
+    const companyId = companyIdOf(record);
     const sourceDomain = record.fields['Identity • Canonical Domain'];
     const canonicalDomain = typeof sourceDomain === 'string' ? normalizeDomain(sourceDomain) : null;
     // The fixture and V1 schema have no lifecycle column. Explicit false is the
     // only inactive value; absence stays active for backward compatibility.
     const active = record.fields['Workflow • Active'] !== false && record.fields['Lifecycle • Active'] !== false;
     if (!active) return [];
-    if (typeof companyId !== 'string' || !companyId) return [{failure: {stage: 'validation' as const, code: 'roster_company_id_missing'}}];
+    if (!companyId) return [{failure: {stage: 'validation' as const, code: 'roster_company_id_missing'}}];
     if (!canonicalDomain) return [{failure: {companyId, stage: 'validation' as const, code: 'roster_domain_invalid'}}];
     return [{companyId, canonicalDomain, fields: record.fields as Record<string, unknown>}];
   });
@@ -134,7 +135,7 @@ function preserveMozWhenOmitted(evidence: ReturnType<typeof transformSemrushComp
   if (typeof observedCount === 'number' && Number.isInteger(observedCount) && observedCount >= 0) calculated.mozTopPagesObservedCount = observedCount;
 }
 
-function companyWrite(company: ActiveCompany, record: SemrushDomainOverview, refreshedAt: string, rawRef?: string, trackedSetTotalTraffic?: number | null, completeCoverage = false): {write: CompanyWrite; keywords: ReturnType<typeof transformSemrushCompany>['keywords']; paidAds: ReturnType<typeof transformSemrushCompany>['paidAds']} {
+function companyWrite(company: ActiveCompany, record: SemrushDomainOverview, refreshedAt: string, rawRef?: string, trackedSetTotalTraffic?: number | null, completeCoverage = false): CompanyWrite {
   const evidence = transformSemrushCompany(record, {
     companyId: company.companyId,
     identity: {
@@ -149,7 +150,7 @@ function companyWrite(company: ActiveCompany, record: SemrushDomainOverview, ref
   });
   preserveMozWhenOmitted(evidence, record, company.fields);
   if (!completeCoverage) evidence.qualityIssues.push({code: 'tracked_set_coverage_incomplete', message: 'Tracked-set traffic share omitted because the complete active roster was not validated', sourcePath: 'refresh.coverage', summary: 'incomplete validated roster coverage'});
-  return {write: {
+  return {
     companyId: company.companyId,
     identity: evidence.company.identity,
     observed: evidence.company.observed,
@@ -164,11 +165,17 @@ function companyWrite(company: ActiveCompany, record: SemrushDomainOverview, ref
     apolloIndustry: stringField(company.fields, 'Observed • Apollo Industry'),
     apolloCompanyCountry: stringField(company.fields, 'Observed • Apollo Company Country'),
     qualityIssues: evidence.qualityIssues,
-    // Invalidate before dependent writes. A failed retry never leaves an old
-    // fingerprint claiming that changed evidence is current.
-    evidenceFingerprint: null,
+    // An omitted provider module is not an authoritative empty snapshot: the stored one is kept.
+    ...(record.organic ? {keywords: evidence.keywords} : {}),
+    ...(record.paid ? {paidAds: evidence.paidAds} : {}),
+    lastSuccessfulRefreshAt: refreshedAt,
     nextAgentEnrichmentDueAt: refreshedAt,
-  }, keywords: evidence.keywords, paidAds: evidence.paidAds};
+  };
+}
+
+/** The fingerprint of the row a refresh write produces, computed by the same builder agents and the API use. */
+function fingerprintRow(row: Parameters<typeof buildEvidencePackage>[0]): string {
+  return fingerprintEvidence(buildEvidencePackage(row));
 }
 
 function matchingFailure(result: WriteResult, identity: string): string | null {
@@ -268,10 +275,9 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
 
   try {
     const initial = await options.repository.getDashboardSnapshot();
-    const storedLastSuccessful = initial.system.find((record) => record.fields['Identity • System ID'] === SYSTEM_ID)?.fields['Workflow • Last Successful Run At'];
     // A readable snapshot makes an absent/malformed value a known explicit
     // null. Only a failed snapshot read leaves the prior value unknown.
-    previousLastSuccessful = typeof storedLastSuccessful === 'string' ? storedLastSuccessful : null;
+    previousLastSuccessful = initial.system?.systemId === SYSTEM_ID ? initial.system.lastSuccessfulRunAt ?? null : null;
     const roster = activeCompanies(initial);
     const companies = roster.companies;
     report.errors.push(...roster.failures);
@@ -312,65 +318,29 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
         }
         const refreshedAt = iso(now);
         let write: CompanyWrite;
-        let keywords: ReturnType<typeof transformSemrushCompany>['keywords'];
-        let paidAds: ReturnType<typeof transformSemrushCompany>['paidAds'];
         try {
-          ({write, keywords, paidAds} = companyWrite(company, indexed.record, refreshedAt, indexed.rawRef, trackedSetTotalTraffic, completeTrackedSetCoverage));
+          write = companyWrite(company, indexed.record, refreshedAt, indexed.rawRef, trackedSetTotalTraffic, completeTrackedSetCoverage);
           if (!indexed.record.organic) write.qualityIssues.push({code: 'malformed_organic_module', message: 'Organic module omitted after provider validation failure; existing keyword evidence retained', sourcePath: 'organic', summary: 'organic module omitted'});
           if (!indexed.record.paid) write.qualityIssues.push({code: 'malformed_paid_module', message: 'Paid module omitted after provider validation failure; existing paid-ad evidence retained', sourcePath: 'paid', summary: 'paid module omitted'});
         } catch {
           report.errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'validation', code: 'transform_failed'});
           continue;
         }
-        let companyResult: WriteResult;
+        // One PATCH per company: metrics, keyword and paid-ad snapshots, and the
+        // fingerprint of the resulting row land together or not at all, so a
+        // failed company keeps its previous snapshot intact.
+        let written: WriteResult;
         try {
-          companyResult = await options.repository.upsertCompanies([write]);
+          written = await options.repository.writeCompanyEvidence(write, fingerprintRow);
         } catch {
+          written = {succeeded: 0, failed: 1, results: [{identity: company.companyId, error: 'company_write_failed'}]};
+        }
+        if (matchingFailure(written, company.companyId)) {
           persistenceFailed = true;
           report.errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'company', code: 'company_write_failed'});
           continue;
         }
-        const companyFailure = matchingFailure(companyResult, company.companyId);
-        if (companyFailure) {
-          persistenceFailed = true;
-          report.errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'company', code: 'company_write_failed'});
-          continue;
-        }
-        let keywordResult: WriteResult;
-        let paidResult: WriteResult;
-        try {
-          keywordResult = indexed.record.organic ? await options.repository.replaceKeywords(company.companyId, keywords) : {succeeded: 0, failed: 0, results: []};
-        } catch {
-          keywordResult = {succeeded: 0, failed: 1, results: [{identity: company.companyId, error: 'keyword_write_failed'}]};
-        }
-        try {
-          // Replace the complete paid-ad snapshot only after it has crossed the
-          // provider validation and domain transform boundaries. The repository
-          // writes every incoming record before it deletes obsolete rows.
-          paidResult = indexed.record.paid ? await options.repository.replacePaidAds(company.companyId, paidAds) : {succeeded: 0, failed: 0, results: []};
-        } catch {
-          paidResult = {succeeded: 0, failed: 1, results: [{identity: company.companyId, error: 'paid_ad_write_failed'}]};
-        }
-        const keywordFailure = keywordResult.failed > 0;
-        const paidFailure = paidResult.failed > 0;
-        if (keywordFailure || paidFailure) {
-          persistenceFailed = true;
-          if (keywordFailure) report.errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'keywords', code: 'keyword_write_failed'});
-          if (paidFailure) report.errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'paid_ads', code: 'paid_ad_write_failed'});
-          continue;
-        }
-        try {
-          const snapshot = await options.repository.getDashboardSnapshot();
-          const storedCompany = snapshot.companies.find((candidate) => candidate.fields['Identity • Company ID'] === company.companyId);
-          if (!storedCompany) throw new Error('company_missing_after_write');
-          const pkg = buildEvidencePackage({company: storedCompany, keywords: snapshot.keywords.filter((keyword) => keyword.fields['Identity • Company ID'] === company.companyId), paidAds: snapshot.paidAds.filter((ad) => ad.fields['Identity • Company ID'] === company.companyId), publishedInsight: snapshot.publishedInsights.find((insight) => insight.fields['Identity • Company ID'] === company.companyId), review: snapshot.reviews.find((review) => review.fields['Identity • Company ID'] === company.companyId)});
-          const fingerprinted = await options.repository.upsertCompanies([{...write, evidenceFingerprint: fingerprintEvidence(pkg), lastSuccessfulRefreshAt: refreshedAt, nextAgentEnrichmentDueAt: refreshedAt}]);
-          if (fingerprinted.failed > 0) throw new Error('fingerprint_write_failed');
-          report.succeeded += 1;
-        } catch {
-          persistenceFailed = true;
-          report.errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'fingerprint', code: 'fingerprint_update_failed'});
-        }
+        report.succeeded += 1;
       }
     }
     report.failed = report.processed - report.succeeded;

@@ -3,7 +3,7 @@ import {DashboardCache, type CacheResult, type DashboardCacheOptions} from '@/li
 import {CompanyComparisonSchema, type CompanyComparison, type CompanyResponse, type LandscapeResponse} from '@/lib/domain/dashboard';
 import {shapeDashboardSnapshot} from './shape-landscape';
 
-const emptySnapshot: DashboardSnapshot = {companies: [], keywords: [], paidAds: [], publishedInsights: [], reviews: [], system: []};
+const emptySnapshot: DashboardSnapshot = {companies: [], system: null};
 
 /** Shared cache façade used by both server routes; loader injection keeps its singleton behavior testable. */
 export class DashboardService {

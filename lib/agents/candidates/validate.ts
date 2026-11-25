@@ -1,6 +1,6 @@
-import {InsightCandidateSchema, type CandidateReviewReason, type Confidence, type InsightCandidate} from '@/lib/schemas/insight-candidate';
+import {CandidateReviewReasonSchema, InsightCandidateSchema, type CandidateReviewReason, type Confidence, type InsightCandidate} from '@/lib/schemas/insight-candidate';
 import type {PreparedCompany} from '@/lib/agents/types';
-import {MAX_AIRTABLE_JSON_BYTES} from '@/lib/airtable/company-row';
+import {fitsJsonField} from '@/lib/airtable/company-row';
 
 export type CandidateValidation =
   | {ok: false; error: 'malformed_candidate' | 'unresolved_evidence_reference'; reviewReasons: string[]}
@@ -24,9 +24,9 @@ function containsInjection(value: unknown, budget = {nodes: 0, characters: 0}): 
   return false;
 }
 
+/** The stored battlecard and review candidate are subsets of this worst case: every review reason and the longest confidence label. */
 function fitsAirtableClaimFields(candidate: InsightCandidate): boolean {
-  return [candidate.observedThemes, candidate.inferredClaims, candidate.recommendations]
-    .every((claims) => new TextEncoder().encode(JSON.stringify(claims)).byteLength <= MAX_AIRTABLE_JSON_BYTES);
+  return fitsJsonField({...candidate, overallConfidence: 'medium', reviewReasons: CandidateReviewReasonSchema.options});
 }
 
 /** Validates agent inference against exactly one freshly prepared curated package. */

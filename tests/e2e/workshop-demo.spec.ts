@@ -43,9 +43,11 @@ test('rehearses the fixture-only workshop journey and independent workflow ident
 
     const lowInputPath = 'tests/fixtures/insights/low-preserves-published-state.json';
     const lowInputBytes = readFileSync(lowInputPath, 'utf8');
-    const lowInput = JSON.parse(lowInputBytes) as {insights: Array<{id: string; fields: Record<string, unknown>}>};
-    expect(lowInput.insights).toHaveLength(1);
-    expect(lowInput.insights[0].fields['Workflow • Evidence Fingerprint']).not.toBe('ce0045d4fc2e0a351988dc56459a65dcd3651e8d475858e3a475af6413b3e656');
+    type CompanyFields = Record<string, unknown>;
+    const lowInput = JSON.parse(lowInputBytes) as {companies: Array<{id: string; fields: CompanyFields}>};
+    const battlecardOf = (fields: CompanyFields) => Object.fromEntries(Object.entries(fields).filter(([name]) => name.includes('Battlecard')));
+    expect(lowInput.companies).toHaveLength(1);
+    expect(lowInput.companies[0].fields['Workflow • Battlecard Evidence Fingerprint']).not.toBe('cc0cdca0c4bc4f16d374984749ab91cac7ce4ec80f4d6496a34171741161588a');
     const lowPath = join(outputDir, 'low.json');
     const low = command('insights:submit', ['tests/fixtures/insights/candidate-low-conflicting.json', '--fixture-state', lowInputPath, '--fixture-output-state', lowPath]);
     expect(low).toMatchObject({status: 'queued', runId: 'fixture-run-low', overallConfidence: 'low', reasons: ['conflicting_sources']});
@@ -57,14 +59,18 @@ test('rehearses the fixture-only workshop journey and independent workflow ident
     expect(command('insights:publish-approved', ['--fixture-state', 'tests/fixtures/insights/approved-stale-state.json', '--fixture-output-state', stalePath]))
       .toEqual({published: 0, stale: 1, failed: 0, skipped: 0});
 
-    const snapshots = [highPath, highReplayPath, lowPath, approvedPath, stalePath].map((path) => JSON.parse(readFileSync(path, 'utf8')) as {insights: Array<{fields: Record<string, string>}>; reviews: Array<{fields: Record<string, string>}>});
-    expect(snapshots[0].insights.map((row) => row.fields['Identity • Company ID'])).toEqual(snapshots[1].insights.map((row) => row.fields['Identity • Company ID']));
-    expect(snapshots[2].reviews).toEqual([expect.objectContaining({fields: expect.objectContaining({'Review • Status': 'needs_review', 'Workflow • Run ID': 'fixture-run-low'})})]);
-    expect((snapshots[2] as unknown as {insights: unknown[]}).insights).toEqual(lowInput.insights);
-    expect(JSON.stringify((snapshots[2] as unknown as {insights: unknown[]}).insights[0])).toBe(JSON.stringify(lowInput.insights[0]));
+    const snapshots = [highPath, highReplayPath, lowPath, approvedPath, stalePath].map((path) => JSON.parse(readFileSync(path, 'utf8')) as {companies: Array<{fields: CompanyFields}>; system: unknown[]});
+    expect(snapshots.every((snapshot) => Object.keys(snapshot).sort().join() === 'companies,system')).toBe(true);
+    expect(snapshots[0].companies[0].fields['Workflow • Battlecard Run ID']).toBe('fixture-run-high');
+    expect(snapshots[1].companies).toEqual(snapshots[0].companies);
+    expect(snapshots[2].companies[0].fields).toMatchObject({'Review • Status': 'needs_review'});
+    expect(JSON.parse(String(snapshots[2].companies[0].fields['Review • Candidate JSON']))).toMatchObject({runId: 'fixture-run-low', reviewReasons: ['conflicting_sources']});
+    expect(JSON.stringify(battlecardOf(snapshots[2].companies[0].fields))).toBe(JSON.stringify(battlecardOf(lowInput.companies[0].fields)));
     expect(readFileSync(lowInputPath, 'utf8')).toBe(lowInputBytes);
-    expect(snapshots[3].reviews[0].fields['Review • Status']).toBe('published');
-    expect(snapshots[4].reviews[0].fields['Review • Status']).toBe('stale');
+    expect(snapshots[3].companies[0].fields['Review • Status']).toBe('published');
+    expect(snapshots[3].companies[0].fields['Workflow • Battlecard Run ID']).toBe('fixture-run-approved');
+    expect(snapshots[4].companies[0].fields['Review • Status']).toBe('stale');
+    expect(snapshots[4].companies[0].fields['Workflow • Battlecard ID']).toBe('insight-prior-alpha');
     expect(new Set(['fixture-run', String(high.runId), String(low.runId)]).size).toBe(3);
   } finally {
     rmSync(outputDir, {recursive: true});

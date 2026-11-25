@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {COMPANY_ROW_FIELDS, toCompanyFields} from '@/lib/airtable/company-row';
-import {toAirtableSystemFields} from '@/lib/airtable/mappers';
+import {toAirtableSystemFields} from '@/lib/airtable/system-row';
 import {AIRTABLE_SCHEMA, ensureAirtableSchema} from '@/lib/airtable/schema';
 import {runAirtableSchemaCli} from '@/jobs/setup-airtable-schema';
 

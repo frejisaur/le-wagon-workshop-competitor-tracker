@@ -8,7 +8,7 @@ import {transformSemrushCompany} from '@/lib/transforms/semrush-to-domain';
 export type ImportCompanyError = {
   canonicalDomain: string;
   companyId?: string;
-  stage: 'validation' | 'identity' | 'company' | 'keywords' | 'paid_ads' | 'enrichment';
+  stage: 'validation' | 'identity' | 'company' | 'enrichment';
   message: string;
 };
 
@@ -42,8 +42,6 @@ type PreparedCompany = {
   joined: JoinedRosterCompany;
   companyId: string;
   write: CompanyPersistenceWrite;
-  keywords: ReturnType<typeof transformSemrushCompany>['keywords'];
-  paidAds: ReturnType<typeof transformSemrushCompany>['paidAds'];
 };
 
 function nowIso(): string {
@@ -96,7 +94,7 @@ function resultError(result: RecordResult | undefined, fallback: string): string
 
 /**
  * Imports already-validated provider data. Identity lookup always precedes ID
- * assignment; persistence proceeds company, keyword, then paid-ad per company.
+ * assignment; each company, with its keyword and paid-ad snapshots, is one row write.
  */
 export async function runInitialImport(options: InitialImportOptions): Promise<ImportReport> {
   const dryRun = options.dryRun === true;
@@ -143,7 +141,7 @@ export async function runInitialImport(options: InitialImportOptions): Promise<I
     if (!companyId) continue;
     const semrush = selectedSemrushRecord(joined);
     if (!semrush) {
-      if (joined.semrush.records.length === 0) prepared.push({joined, companyId, write: toUnenrichedWrite(joined, companyId, observedAt), keywords: [], paidAds: []});
+      if (joined.semrush.records.length === 0) prepared.push({joined, companyId, write: toUnenrichedWrite(joined, companyId, observedAt)});
       else recordError(errors, joined, 'enrichment', 'multiple_current_semrush_observations_requires_selection', companyId);
       continue;
     }
@@ -166,11 +164,11 @@ export async function runInitialImport(options: InitialImportOptions): Promise<I
           observed: transformed.company.observed,
           calculated: transformed.company.calculated,
           qualityIssues: transformed.qualityIssues,
+          keywords: transformed.keywords,
+          paidAds: transformed.paidAds,
           evidenceFingerprint: null,
           nextAgentEnrichmentDueAt: observedAt,
         },
-        keywords: transformed.keywords,
-        paidAds: transformed.paidAds,
       });
     } catch {
       recordError(errors, joined, 'enrichment', 'semrush_transform_failed', companyId);
@@ -201,24 +199,6 @@ export async function runInitialImport(options: InitialImportOptions): Promise<I
       recordError(errors, company.joined, 'company', resultError(companyResult, 'company_write_not_confirmed'), company.companyId);
       failed += 1;
       continue;
-    }
-    if (!company.write.observed) {
-      succeeded += 1;
-      continue;
-    }
-    const keywordResult = await repository!.replaceKeywords(company.companyId, company.keywords);
-    if (keywordResult.failed > 0) {
-      recordError(errors, company.joined, 'keywords', resultError(keywordResult.results.find((result) => result.error), 'keyword_write_failed'), company.companyId);
-      failed += 1;
-      continue;
-    }
-    if (company.paidAds.length > 0) {
-      const paidAdResult = await repository!.upsertPaidAds(company.paidAds);
-      if (paidAdResult.failed > 0) {
-        recordError(errors, company.joined, 'paid_ads', resultError(paidAdResult.results.find((result) => result.error), 'paid_ad_write_failed'), company.companyId);
-        failed += 1;
-        continue;
-      }
     }
     succeeded += 1;
   }

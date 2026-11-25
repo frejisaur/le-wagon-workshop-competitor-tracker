@@ -1,30 +1,19 @@
 {
-  "companies": [{
-    "id": "rec-company-alpha",
-    "fields": {
-      "Identity • Company ID": "company-alpha",
-      "Identity • Canonical Domain": "alpha.example",
-      "Observed • Source": "semrush",
-      "Observed • Database": "us",
-      "Observed • At": "2026-08-01T00:00:00.000Z",
-      "Observed • Raw Ref": "dataset:sanitized-alpha",
-      "Observed • Organic Traffic": 200
+  "companies": [
+    {
+      "id": "rec-company-alpha",
+      "fields": {
+        "Identity • Company ID": "company-alpha",
+        "Identity • Canonical Domain": "alpha.example",
+        "Observed • Source": "semrush",
+        "Observed • Database": "us",
+        "Observed • At": "2026-08-01T00:00:00.000Z",
+        "Observed • Raw Ref": "dataset:sanitized-alpha",
+        "Observed • Organic Traffic": 200,
+        "Observed • Keywords JSON": "[{\"observed\":{\"classification\":\"observed\",\"source\":\"semrush\",\"observedAt\":\"2026-08-01T00:00:00.000Z\",\"database\":\"us\",\"keyword\":\"competitor research\",\"landingUrl\":\"https://alpha.example/research\",\"position\":null,\"previousPosition\":null,\"positionDifference\":null,\"volume\":null,\"cpcUsd\":null,\"keywordDifficulty\":null,\"competition\":null,\"traffic\":null,\"trafficSharePct\":null,\"trafficCostUsd\":null,\"intents\":[],\"rawSerpCodes\":[],\"results\":null},\"calculated\":{\"classification\":\"calculated\",\"inputs\":[\"companyId\"],\"calculatedAt\":\"2026-08-01T00:00:00.000Z\",\"companyId\":\"company-alpha\",\"keywordId\":\"keyword-alpha\",\"normalizedLandingUrl\":\"https://alpha.example/research\"}}]",
+        "Observed • Keywords At": "2026-08-01T00:00:00.000Z"
+      }
     }
-  }],
-  "keywords": [{
-    "id": "rec-keyword-alpha",
-    "fields": {
-      "Identity • Company ID": "company-alpha",
-      "Identity • Keyword ID": "keyword-alpha",
-      "Observed • Source": "semrush",
-      "Observed • Database": "us",
-      "Observed • At": "2026-08-01T00:00:00.000Z",
-      "Observed • Keyword": "competitor research",
-      "Observed • Landing URL": "https://alpha.example/research"
-    }
-  }],
-  "paidAds": [],
-  "insights": [],
-  "reviews": [],
+  ],
   "system": []
 }

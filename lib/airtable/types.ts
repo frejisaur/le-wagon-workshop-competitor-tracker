@@ -1,20 +1,13 @@
 import type {CompanyIdentityResolution} from '@/lib/domain/company';
 import type {CuratedCompanyCalculated, CuratedCompanyObserved, CuratedKeyword, CuratedPaidAd, DataQualityIssue} from '@/lib/domain/metrics';
 import type {CalculatedGroup, ObservedGroup} from '@/lib/domain/classification';
+import type {CompanyRow, PublishedBattlecard, ReviewCandidate, ReviewStatus} from './company-row';
 
-export const AIRTABLE_TABLES = {
-  companies: 'Companies',
-  keywords: 'Keywords',
-  paidAds: 'Paid Ads',
-  insights: 'GTM Insights',
-  reviews: 'Insight Reviews',
-  system: 'System',
-} as const;
+/** The serving base has exactly these two tables; their names are part of the schema contract. */
+export const AIRTABLE_TABLES = {companies: 'Companies', system: 'System'} as const;
 
-/** Table names are deployment configuration, not a hard-coded schema contract. */
-export type AirtableTable = string;
-export type AirtableTableMap = {[Key in keyof typeof AIRTABLE_TABLES]: AirtableTable};
-export type AirtableFieldValue = string | number | boolean | null | string[];
+export type AirtableTable = (typeof AIRTABLE_TABLES)[keyof typeof AIRTABLE_TABLES];
+export type AirtableFieldValue = string | number | boolean | null;
 export type AirtableFields = Record<string, AirtableFieldValue | undefined>;
 export type AirtableRecord = {id: string; fields: AirtableFields; createdTime?: string};
 export type AirtableWriteRecord = {id?: string; fields: AirtableFields};
@@ -58,48 +51,13 @@ export type UnenrichedCompanyWrite = Omit<CompanyWrite, 'observed' | 'calculated
 };
 export type CompanyPersistenceWrite = CompanyWrite | UnenrichedCompanyWrite;
 
-/** A claim remains traceable to its evidence and never crosses observed/inferred layers. */
-export type ClaimWire = {
-  claimId: string;
-  conclusion: string;
-  classification: 'observed' | 'inferred';
-  confidence: 'high' | 'medium' | 'low';
-  confidenceReason: string;
-  evidenceRefs: string[];
-};
-
-export type InsightWireInput = {
-  insightId: string;
-  companyId: string;
-  observedThemes: ClaimWire[];
-  inferredClaims: ClaimWire[];
-  recommendations: ClaimWire[];
-  overallConfidence?: 'high' | 'medium' | 'low';
-  agentHarness: string;
-  model: string;
-  skillVersion: string;
-  evidenceFingerprint: string;
-  workflowVersion: string;
-  runId: string;
-  generatedAt: string;
-};
-
-export type ReviewStatus = 'needs_review' | 'approved' | 'rejected' | 'stale' | 'published';
+/** Replaces the one current published battlecard on the company row. */
+export type InsightWireInput = PublishedBattlecard & {companyId: string};
+/** Replaces the pending candidate on the company row. Omitted reviewer fields keep their Airtable values. */
 export type ReviewWireInput = {
   companyId: string;
-  observedThemes: ClaimWire[];
-  inferredClaims: ClaimWire[];
-  recommendations: ClaimWire[];
-  overallConfidence?: 'high' | 'medium' | 'low';
-  reviewReasons: string[];
-  evidenceFingerprint: string;
-  agentHarness: string;
-  model: string;
-  skillVersion: string;
-  workflowVersion: string;
-  runId: string;
-  generatedAt: string;
   status: ReviewStatus;
+  candidate: ReviewCandidate;
   reviewerNotes?: string | null;
   reviewerIdentity?: string | null;
   reviewedAt?: string | null;
@@ -125,28 +83,26 @@ export type SystemWireInput = {
   agentErrorSummary?: string | null;
 };
 
+/** The parsed System row. Only the fields readers depend on are typed. */
+export type SystemRecord = {recordId: string; systemId?: string; status?: SystemWireInput['status']; lastSuccessfulRunAt?: string};
+
 export type RecordResult = {identity: string; recordId?: string; error?: string};
 export type WriteResult = {succeeded: number; failed: number; results: RecordResult[]};
 
-export type DashboardSnapshot = {
-  companies: AirtableRecord[];
-  keywords: AirtableRecord[];
-  paidAds: AirtableRecord[];
-  publishedInsights: AirtableRecord[];
-  reviews: AirtableRecord[];
-  system: AirtableRecord[];
-};
-export type DueInsightInput = {company: AirtableRecord; publishedInsight?: AirtableRecord; review?: AirtableRecord};
+export type DashboardSnapshot = {companies: CompanyRow[]; system: SystemRecord | null};
+/** Computes the evidence fingerprint of the row a write would produce. */
+export type EvidenceFingerprinter = (row: CompanyRow) => string;
 
 export interface CompetitorStore {
   resolveCompanyIdentity(identity: Pick<CompanyIdentityResolution, 'apolloAccountId' | 'canonicalDomain'>): Promise<{companyId: string; source: 'apollo_account_id' | 'canonical_domain'} | null>;
+  /** Roster import: resolves or creates each company row; keyword and paid-ad snapshots ride on the same write. */
   upsertCompanies(companies: CompanyPersistenceWrite[]): Promise<WriteResult>;
-  replaceKeywords(companyId: string, keywords: CuratedKeyword[]): Promise<WriteResult>;
-  /** Atomically-at-delete-boundary replaces one company's observed paid-ad snapshot. */
-  replacePaidAds(companyId: string, ads: CuratedPaidAd[]): Promise<WriteResult>;
-  upsertPaidAds(paidAds: CuratedPaidAd[]): Promise<WriteResult>;
+  /**
+   * Refresh: one PATCH to an existing company row carrying its metrics, keyword and paid-ad snapshots, merged
+   * paid-ad first/last-observed history, and the fingerprint of the resulting row. It succeeds or leaves the row unchanged.
+   */
+  writeCompanyEvidence(company: CompanyWrite, fingerprint: EvidenceFingerprinter): Promise<WriteResult>;
   getDashboardSnapshot(): Promise<DashboardSnapshot>;
-  getDueInsightInputs(): Promise<DueInsightInput[]>;
   upsertReview(review: ReviewWireInput): Promise<WriteResult>;
   upsertPublishedInsight(insight: InsightWireInput): Promise<WriteResult>;
   updateSystem(system: SystemWireInput): Promise<WriteResult>;

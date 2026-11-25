@@ -2,7 +2,8 @@ import {createHash} from 'node:crypto';
 import {prepareInsights, type PrepareInsightsOptions} from '@/lib/agents/manifests/prepare';
 import {validateInsightCandidate} from '@/lib/agents/candidates/validate';
 import {InsightCandidateSchema, type CandidateReviewReason, type Confidence, type InsightCandidate} from '@/lib/schemas/insight-candidate';
-import type {AirtableRecord, CompetitorStore, InsightWireInput, ReviewWireInput} from '@/lib/airtable/types';
+import {companyIdOf, type CompanyReview, type InsightProvenance} from '@/lib/airtable/company-row';
+import type {CompetitorStore, InsightWireInput, ReviewWireInput} from '@/lib/airtable/types';
 import type {PreparedCompany} from '@/lib/agents/types';
 
 export type SubmissionStatus = 'published' | 'queued' | 'stale' | 'rejected';
@@ -11,11 +12,6 @@ export type SubmitInsightOptions = {repository: CompetitorStore; now?: Date; pre
 
 const submissionLocks = new Map<string, Promise<void>>();
 const replayedResults = new WeakMap<CompetitorStore, Map<string, SubmissionResult>>();
-
-function field(record: AirtableRecord, name: string): string | undefined {
-  const value = record.fields[name];
-  return typeof value === 'string' && value ? value : undefined;
-}
 
 function parsedIdentity(input: unknown): {companyId: string; runId: string} {
   const object = input && typeof input === 'object' ? input as Record<string, unknown> : {};
@@ -27,23 +23,27 @@ function result(status: SubmissionStatus, candidate: Pick<InsightCandidate, 'com
   return {status, companyId: candidate.companyId, runId: 'provenance' in candidate ? candidate.provenance.runId : candidate.runId, reasons: [...reasons].sort(), ...extras};
 }
 
-function matchingRecord(records: AirtableRecord[], companyId: string, fingerprint: string, skillVersion: string, workflowVersion: string): AirtableRecord | undefined {
-  return records.find((record) => field(record, 'Identity • Company ID') === companyId && field(record, 'Workflow • Evidence Fingerprint') === fingerprint && field(record, 'Workflow • Skill Version') === skillVersion && field(record, 'Workflow • Version') === workflowVersion);
+function matchesRun(stored: InsightProvenance | undefined, fingerprint: string, skillVersion: string, workflowVersion: string): boolean {
+  return Boolean(stored && stored.evidenceFingerprint === fingerprint && stored.skillVersion === skillVersion && stored.workflowVersion === workflowVersion);
 }
 
 function stableInsightId(companyId: string, fingerprint: string, skillVersion: string, workflowVersion: string): string {
   return `insight_${createHash('sha256').update(`${companyId}\u0000${fingerprint}\u0000${skillVersion}\u0000${workflowVersion}`).digest('hex').slice(0, 32)}`;
 }
 
-function reviewWire(candidate: InsightCandidate, overallConfidence: Confidence, reviewReasons: CandidateReviewReason[], status: ReviewWireInput['status'], existing?: AirtableRecord): ReviewWireInput {
-  return {companyId: candidate.companyId, observedThemes: candidate.observedThemes, inferredClaims: candidate.inferredClaims, recommendations: candidate.recommendations, overallConfidence, reviewReasons, evidenceFingerprint: candidate.evidenceFingerprint,
-    agentHarness: candidate.provenance.agentHarness, model: candidate.provenance.model, skillVersion: candidate.provenance.skillVersion, workflowVersion: candidate.provenance.workflowVersion, runId: candidate.provenance.runId, generatedAt: candidate.provenance.generatedAt, status,
-    reviewerNotes: existing ? field(existing, 'Review • Notes') : undefined, reviewerIdentity: existing ? field(existing, 'Review • Identity') : undefined, reviewedAt: existing ? field(existing, 'Review • At') : undefined};
+function provenance(candidate: InsightCandidate): InsightProvenance {
+  const {agentHarness, model, skillVersion, workflowVersion, runId, generatedAt} = candidate.provenance;
+  return {evidenceFingerprint: candidate.evidenceFingerprint, agentHarness, model, skillVersion, workflowVersion, runId, generatedAt};
+}
+
+/** Reviewer fields are carried over from the stored review so a candidate replacement never erases human edits. */
+function reviewWire(candidate: InsightCandidate, overallConfidence: Confidence, reviewReasons: CandidateReviewReason[], status: ReviewWireInput['status'], existing?: CompanyReview): ReviewWireInput {
+  return {companyId: candidate.companyId, status, candidate: {observedThemes: candidate.observedThemes, inferredClaims: candidate.inferredClaims, recommendations: candidate.recommendations, overallConfidence, reviewReasons, ...provenance(candidate)},
+    reviewerNotes: existing?.reviewerNotes, reviewerIdentity: existing?.reviewerIdentity, reviewedAt: existing?.reviewedAt};
 }
 
 function insightWire(candidate: InsightCandidate, overallConfidence: Confidence): InsightWireInput {
-  return {insightId: stableInsightId(candidate.companyId, candidate.evidenceFingerprint, candidate.provenance.skillVersion, candidate.provenance.workflowVersion), companyId: candidate.companyId, observedThemes: candidate.observedThemes, inferredClaims: candidate.inferredClaims, recommendations: candidate.recommendations, overallConfidence,
-    agentHarness: candidate.provenance.agentHarness, model: candidate.provenance.model, skillVersion: candidate.provenance.skillVersion, evidenceFingerprint: candidate.evidenceFingerprint, workflowVersion: candidate.provenance.workflowVersion, runId: candidate.provenance.runId, generatedAt: candidate.provenance.generatedAt};
+  return {insightId: stableInsightId(candidate.companyId, candidate.evidenceFingerprint, candidate.provenance.skillVersion, candidate.provenance.workflowVersion), companyId: candidate.companyId, observedThemes: candidate.observedThemes, inferredClaims: candidate.inferredClaims, recommendations: candidate.recommendations, overallConfidence, ...provenance(candidate)};
 }
 
 async function serial<T>(companyId: string, task: () => Promise<T>): Promise<T> {
@@ -70,9 +70,10 @@ export async function submitInsightCandidate(input: unknown, options: SubmitInsi
       const validation = validateInsightCandidate(candidate, prepared);
       if (!validation.ok) return result('rejected', candidate, validation.reviewReasons);
       const snapshot = await options.repository.getDashboardSnapshot();
-      const companyReviews = snapshot.reviews.filter((record) => field(record, 'Identity • Company ID') === candidate.companyId);
-      if (companyReviews.length > 1) return result('rejected', candidate, ['duplicate_review_records'], {idempotent: false, overallConfidence: validation.overallConfidence});
-      const existingReview = companyReviews[0];
+      const rows = snapshot.companies.filter((row) => companyIdOf(row) === candidate.companyId);
+      if (rows.length !== 1) return result('rejected', candidate, ['ambiguous_company_identity'], {idempotent: false, overallConfidence: validation.overallConfidence});
+      const row = rows[0];
+      const existingReview = row.review;
       // Freshness is intentionally evaluated before replay detection.
       if (validation.stale) {
         const write = await options.repository.upsertReview(reviewWire(candidate, validation.overallConfidence, validation.reviewReasons, 'stale', existingReview));
@@ -82,9 +83,8 @@ export async function submitInsightCandidate(input: unknown, options: SubmitInsi
       const memory = replayedResults.get(options.repository);
       const cached = memory?.get(key);
       if (cached && !validation.reviewReasons.includes('reviewer_requested_regeneration')) return {...cached, idempotent: true, runId: candidate.provenance.runId};
-      const published = matchingRecord(snapshot.publishedInsights, candidate.companyId, prepared.evidenceFingerprint, candidate.provenance.skillVersion, candidate.provenance.workflowVersion);
-      if (published) return result('published', candidate, validation.reviewReasons, {idempotent: true, overallConfidence: validation.overallConfidence});
-      const sameReview = matchingRecord(companyReviews, candidate.companyId, prepared.evidenceFingerprint, candidate.provenance.skillVersion, candidate.provenance.workflowVersion);
+      if (matchesRun(row.battlecard, prepared.evidenceFingerprint, candidate.provenance.skillVersion, candidate.provenance.workflowVersion)) return result('published', candidate, validation.reviewReasons, {idempotent: true, overallConfidence: validation.overallConfidence});
+      const sameReview = matchesRun(existingReview?.candidate, prepared.evidenceFingerprint, candidate.provenance.skillVersion, candidate.provenance.workflowVersion);
       const regeneration = validation.reviewReasons.includes('reviewer_requested_regeneration');
       if (sameReview && !regeneration) return result('queued', candidate, validation.reviewReasons, {idempotent: true, overallConfidence: validation.overallConfidence});
       const autoPublish = validation.overallConfidence === 'high' && validation.reviewReasons.length === 0;

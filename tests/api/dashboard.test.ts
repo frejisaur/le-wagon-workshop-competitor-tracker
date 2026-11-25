@@ -1,10 +1,10 @@
 import {describe, expect, it, vi} from 'vitest';
-import type {DashboardSnapshot} from '@/lib/airtable/types';
+import {parseDashboardSnapshot} from '@/lib/airtable/snapshot';
+import type {AirtableRecord, DashboardSnapshot} from '@/lib/airtable/types';
 import {DashboardCache} from '@/lib/cache/dashboard-cache';
 import {shapeDashboardSnapshot} from '@/lib/api/shape-landscape';
 
-const snapshot: DashboardSnapshot = {
-  companies: [
+const alpha: AirtableRecord[] = [
     {id: 'rec-alpha', fields: {
       'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example',
       'Observed • Display Name': 'Alpha', 'Observed • Source': 'semrush', 'Observed • At': '2026-08-18T12:00:00.000Z', 'Observed • Database': 'ca',
@@ -15,9 +15,11 @@ const snapshot: DashboardSnapshot = {
       'Calculated • Non-brand Share': 0.6, 'Calculated • AI Benchmark Gap': 1,
       'Calculated • Tracked Set Traffic Share': 1, 'Calculated • Paid Activity Present': true,
     }},
-  ], keywords: [], paidAds: [], publishedInsights: [], reviews: [],
+];
+const snapshot: DashboardSnapshot = parseDashboardSnapshot({
+  companies: alpha,
   system: [{id: 'rec-system', fields: {'Identity • System ID': 'system', 'Workflow • Status': 'succeeded', 'Workflow • Last Successful Run At': '2026-08-18T12:00:00.000Z', 'Workflow • Processed Companies': 1, 'Workflow • Succeeded Companies': 1, 'Workflow • Failed Companies': 0}}],
-};
+});
 
 describe('dashboard response and cache', () => {
   it('projects deterministic ordered classified landscape data without Airtable records', () => {
@@ -62,20 +64,20 @@ describe('dashboard response and cache', () => {
   });
 
   it('keeps aggregate metrics null and reports coverage when an unenriched record is present', () => {
-    const response = shapeDashboardSnapshot({...snapshot, companies: [...snapshot.companies, {id: 'rec-unenriched', fields: {'Identity • Company ID': 'company-empty', 'Identity • Canonical Domain': 'empty.example'}}]}).landscape;
+    const response = shapeDashboardSnapshot(parseDashboardSnapshot({companies: [...alpha, {id: 'rec-unenriched', fields: {'Identity • Company ID': 'company-empty', 'Identity • Canonical Domain': 'empty.example'}}], system: []})).landscape;
     expect(response.kpis.combinedOrganicTraffic).toMatchObject({value: null, coverage: {available: 1, total: 2}});
     expect(response.companies.find((company) => company.companyId === 'company-empty')?.paidActivity.value).toBeNull();
   });
 
   it('does not substitute Semrush top country when Apollo domicile is missing', () => {
-    const response = shapeDashboardSnapshot({...snapshot, companies: [{id: 'rec-top-country-only', fields: {'Identity • Company ID': 'company-top-country-only', 'Identity • Canonical Domain': 'top-country-only.example', 'Observed • Top Country': 'United States'}}]}).landscape;
+    const response = shapeDashboardSnapshot(parseDashboardSnapshot({companies: [{id: 'rec-top-country-only', fields: {'Identity • Company ID': 'company-top-country-only', 'Identity • Canonical Domain': 'top-country-only.example', 'Observed • Top Country': 'United States'}}], system: []})).landscape;
     expect(response.companies[0]?.country).toBeUndefined();
     expect(response.filters.countries).toEqual([]);
     expect(JSON.stringify(response)).not.toContain('United States');
   });
 
   it('shapes an empty snapshot with zero coverage rather than an invalid aggregate', () => {
-    const response = shapeDashboardSnapshot({companies: [], keywords: [], paidAds: [], publishedInsights: [], reviews: [], system: []}).landscape;
+    const response = shapeDashboardSnapshot({companies: [], system: null}).landscape;
     expect(response).toMatchObject({status: 'empty', kpis: {combinedOrganicTraffic: {value: 0, coverage: {available: 0, total: 0}}}});
   });
 

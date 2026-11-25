@@ -20,6 +20,12 @@ function fixtureOptions(repository: FixtureCompetitorRepository) {
   };
 }
 
+/** Row and embedded snapshot counts, read back through the same codec the dashboard uses. */
+async function counts(repository: FixtureCompetitorRepository) {
+  const {companies} = await repository.getDashboardSnapshot();
+  return {companies: companies.length, keywords: companies.reduce((sum, row) => sum + row.keywords.length, 0), paidAds: companies.reduce((sum, row) => sum + row.paidAds.length, 0)};
+}
+
 function fixtureRepository(): FixtureCompetitorRepository {
   return FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'import/existing-identities.json'));
 }
@@ -39,7 +45,7 @@ describe('runInitialImport', () => {
     expect(first.succeeded).toBe(2);
     expect(second.succeeded).toBe(2);
     expect(repository.companyIds()).toEqual(['company-alpha', 'company-beta']);
-    expect(repository.counts()).toMatchObject({companies: 2, keywords: 3, paidAds: 1});
+    expect(await counts(repository)).toMatchObject({companies: 2, keywords: 3, paidAds: 1});
     expect(mintedDomains).toEqual(['alpha.example', 'beta.example']);
   });
 
@@ -55,9 +61,10 @@ describe('runInitialImport', () => {
     expect(gamma?.fields).toMatchObject({
       'Identity • Company ID': 'company-gamma',
       'Observed • Apollo Account ID': 'acct-gamma',
-      'Observed • Organic Traffic': undefined,
-      'Calculated • Tracked Set Traffic Share': undefined,
     });
+    expect(gamma?.fields).not.toHaveProperty('Observed • Organic Traffic');
+    expect(gamma?.fields).not.toHaveProperty('Calculated • Tracked Set Traffic Share');
+    expect(gamma?.keywords).toEqual([]);
   });
 
   it('rejects a conflicting same-batch Semrush domain without writing it as unenriched', async () => {
@@ -96,15 +103,12 @@ describe('runInitialImport', () => {
     });
   });
 
-  it('skips dependent writes for a company whose company upsert fails while preserving successes', async () => {
+  it('reports a company whose row write fails, including its snapshots, while preserving successes', async () => {
     const repository = fixtureRepository();
     const failingRepository: CompetitorStore = {
       resolveCompanyIdentity: repository.resolveCompanyIdentity.bind(repository),
-      replaceKeywords: repository.replaceKeywords.bind(repository),
-      replacePaidAds: repository.replacePaidAds.bind(repository),
-      upsertPaidAds: repository.upsertPaidAds.bind(repository),
+      writeCompanyEvidence: repository.writeCompanyEvidence.bind(repository),
       getDashboardSnapshot: repository.getDashboardSnapshot.bind(repository),
-      getDueInsightInputs: repository.getDueInsightInputs.bind(repository),
       upsertReview: repository.upsertReview.bind(repository),
       upsertPublishedInsight: repository.upsertPublishedInsight.bind(repository),
       updateSystem: repository.updateSystem.bind(repository),
@@ -124,7 +128,7 @@ describe('runInitialImport', () => {
 
     expect(result).toMatchObject({succeeded: 1, failed: 1});
     expect(result.errors).toContainEqual(expect.objectContaining({companyId: 'company-beta', stage: 'company', message: 'company_write_failed'}));
-    expect(repository.counts()).toMatchObject({companies: 1, keywords: 3, paidAds: 0});
+    expect(await counts(repository)).toMatchObject({companies: 1, keywords: 3, paidAds: 0});
   });
 
   it('resolves persisted Apollo identities before minting an ID for only new companies', async () => {
@@ -152,7 +156,7 @@ describe('runInitialImport', () => {
 
     expect(result).toMatchObject({accepted: 2, rejected: 1, succeeded: 0, failed: 0});
     expect(factoryCalls).toBe(0);
-    expect(repository.counts()).toMatchObject({companies: 0, keywords: 0, paidAds: 0});
+    expect(await counts(repository)).toMatchObject({companies: 0, keywords: 0, paidAds: 0});
   });
 
   it('does not discard distinct Semrush database observations into one company metric group', async () => {

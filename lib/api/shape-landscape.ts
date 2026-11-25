@@ -1,14 +1,15 @@
-import type {AirtableRecord, DashboardSnapshot} from '@/lib/airtable/types';
+import {companyIdOf, type CompanyRow} from '@/lib/airtable/company-row';
+import type {DashboardSnapshot} from '@/lib/airtable/types';
 import {LandscapeResponseSchema, type CompanyResponse, type DashboardStatus, type LandscapeResponse} from '@/lib/domain/dashboard';
 import {freshnessFor, shapeCompany} from './shape-company';
 
-function fieldNumber(record: AirtableRecord, field: string): number | null { const value = record.fields[field]; return typeof value === 'number' && Number.isFinite(value) ? value : null; }
-function fieldText(record: AirtableRecord, field: string): string | undefined { const value = record.fields[field]; return typeof value === 'string' && value.length ? value : undefined; }
+function fieldNumber(record: CompanyRow, field: string): number | null { const value = record.fields[field]; return typeof value === 'number' && Number.isFinite(value) ? value : null; }
+function fieldText(record: CompanyRow, field: string): string | undefined { const value = record.fields[field]; return typeof value === 'string' && value.length ? value : undefined; }
 function aggregate(values: Array<number | null>): {value: number | null; coverage: {available: number; total: number}} {
   const available = values.filter((value): value is number => value !== null);
   return {value: available.length === values.length ? available.reduce((total, value) => total + value, 0) : null, coverage: {available: available.length, total: values.length}};
 }
-function storedStatus(snapshot: DashboardSnapshot): DashboardStatus { const value = snapshot.system.find((record) => record.fields['Identity • System ID'] === 'system')?.fields['Workflow • Status']; return value === 'running' || value === 'succeeded' || value === 'partial' || value === 'failed' ? value : snapshot.companies.length ? 'succeeded' : 'empty'; }
+function storedStatus(snapshot: DashboardSnapshot): DashboardStatus { return snapshot.system?.status ?? (snapshot.companies.length ? 'succeeded' : 'empty'); }
 function recovery(status: DashboardStatus): string | undefined { return status === 'empty' ? 'No companies have been imported.' : status === 'failed' ? 'Refresh failed. Last successful data remains available.' : status === 'partial' ? 'Some companies failed. Available company data remains visible.' : status === 'stale' ? 'Data is stale but remains available.' : undefined; }
 
 export type ShapedDashboard = {landscape: LandscapeResponse; companies: Map<string, CompanyResponse>};
@@ -18,18 +19,18 @@ export function shapeDashboardSnapshot(snapshot: DashboardSnapshot, state?: {sta
   const status = state?.status ?? storedStatus(snapshot);
   const freshness = freshnessFor(snapshot, state?.cachedAt ?? null, status === 'stale' || status === 'failed');
   const companies = [...snapshot.companies].flatMap((record) => {
-    const companyId = fieldText(record, 'Identity • Company ID'); const domain = fieldText(record, 'Identity • Canonical Domain');
+    const companyId = companyIdOf(record); const domain = fieldText(record, 'Identity • Canonical Domain');
     return companyId && domain ? [{record, companyId, domain}] : [];
   }).sort((left, right) => left.domain.localeCompare(right.domain) || left.companyId.localeCompare(right.companyId));
   const byId = new Map<string, CompanyResponse>();
-  for (const item of companies) byId.set(item.companyId, shapeCompany(snapshot, item.record, freshness, status, recovery(status)));
+  for (const item of companies) byId.set(item.companyId, shapeCompany(item.record, freshness, status, recovery(status)));
   const summaries = companies.map(({record, companyId, domain}) => ({
     companyId, domain, ...(fieldText(record, 'Observed • Display Name') ? {displayName: fieldText(record, 'Observed • Display Name')} : {}),
     ...(fieldText(record, 'Observed • Apollo Company Country') ? {country: fieldText(record, 'Observed • Apollo Company Country')} : {}),
     ...(fieldText(record, 'Observed • Segment') ? {segment: fieldText(record, 'Observed • Segment')} : {}),
     authorityScore: {classification: 'observed' as const, value: fieldNumber(record, 'Observed • Authority Score'), ...(fieldText(record, 'Observed • Source') ? {source: fieldText(record, 'Observed • Source')} : {})},
     organicTraffic: {classification: 'observed' as const, value: fieldNumber(record, 'Observed • Organic Traffic'), ...(fieldText(record, 'Observed • Source') ? {source: fieldText(record, 'Observed • Source')} : {})},
-    organicTraffic30DayMovement: {classification: 'calculated' as const, value: fieldNumber(record, 'Calculated • Organic Traffic 30d Movement')}, nonBrandShare: {classification: 'calculated' as const, value: fieldNumber(record, 'Calculated • Non-brand Share')}, organicKeywords: {classification: 'observed' as const, value: fieldNumber(record, 'Observed • Organic Keywords')}, paidActivity: {classification: 'calculated' as const, value: record.fields['Calculated • Paid Activity Present'] === true ? true : record.fields['Calculated • Paid Activity Present'] === false ? false : null}, aiBenchmarkGap: {classification: 'calculated' as const, value: fieldNumber(record, 'Calculated • AI Benchmark Gap')}, referringDomains: {classification: 'observed' as const, value: fieldNumber(record, 'Observed • Referring Domains')}, freshness,
+    organicTraffic30DayMovement: {classification: 'calculated' as const, value: fieldNumber(record, 'Calculated • Organic Traffic 30d Movement')}, nonBrandShare: {classification: 'calculated' as const, value: fieldNumber(record, 'Calculated • Non-brand Share')}, organicKeywords: {classification: 'observed' as const, value: fieldNumber(record, 'Observed • Organic Keywords')}, paidActivity: {classification: 'calculated' as const, value: typeof record.fields['Calculated • Paid Activity Present'] === 'boolean' ? record.fields['Calculated • Paid Activity Present'] : null}, aiBenchmarkGap: {classification: 'calculated' as const, value: fieldNumber(record, 'Calculated • AI Benchmark Gap')}, referringDomains: {classification: 'observed' as const, value: fieldNumber(record, 'Observed • Referring Domains')}, freshness,
   }));
   const landscape = LandscapeResponseSchema.parse({status, freshness, ...(recovery(status) ? {recoveryMessage: recovery(status)} : {}),
     kpis: {companiesTracked: {classification: 'calculated', value: summaries.length}, combinedOrganicTraffic: {classification: 'calculated', ...aggregate(summaries.map((company) => company.organicTraffic.value as number | null))}, organicKeywordFootprint: {classification: 'calculated', ...aggregate(summaries.map((company) => company.organicKeywords.value as number | null))}, growingCompanies: {classification: 'calculated', ...aggregate(summaries.map((company) => typeof company.organicTraffic30DayMovement.value === 'number' ? company.organicTraffic30DayMovement.value > 0 ? 1 : 0 : null))}, paidActiveCompanies: {classification: 'calculated', ...aggregate(summaries.map((company) => company.paidActivity.value === true ? 1 : company.paidActivity.value === false ? 0 : null))}},

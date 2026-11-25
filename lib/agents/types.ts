@@ -1,4 +1,3 @@
-import type {AirtableRecord} from '@/lib/airtable/types';
 import {z} from 'zod';
 
 export const AGENT_SKILL_VERSION = '1.0.0';
@@ -128,12 +127,4 @@ export type SelectDueInput = {
   review?: ReviewMetadata;
   skillVersion: string;
   now?: Date;
-};
-
-export type BuildEvidencePackageInput = {
-  company: AirtableRecord;
-  keywords: AirtableRecord[];
-  paidAds: AirtableRecord[];
-  publishedInsight?: AirtableRecord;
-  review?: AirtableRecord;
 };

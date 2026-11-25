@@ -1,26 +1,25 @@
 import {describe, expect, it, vi} from 'vitest';
 import {submitInsightCandidate} from '@/lib/agents/publication/submit';
-import type {CompetitorStore, DashboardSnapshot} from '@/lib/airtable/types';
+import {COMPANY_ROW_FIELDS, toBattlecardFields} from '@/lib/airtable/company-row';
+import {parseDashboardSnapshot} from '@/lib/airtable/snapshot';
+import type {AirtableFields, CompetitorStore, DashboardSnapshot} from '@/lib/airtable/types';
 
 const NOW = new Date('2026-08-18T12:00:00.000Z');
 const FINGERPRINT = 'a'.repeat(64);
 
-function snapshot(overrides: Partial<DashboardSnapshot> = {}): DashboardSnapshot {
-  return {
-    companies: [{id: 'rec-company', fields: {
-      'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example',
-      // This intentionally differs from the preparation fingerprint. It must not control lifecycle decisions.
-      'Workflow • Evidence Fingerprint': 'legacy-company-field-is-not-authoritative',
-      'Observed • Source': 'semrush', 'Observed • At': '2026-08-01T00:00:00.000Z',
-      'Observed • Organic Traffic': 200,
-    }}],
-    keywords: [{id: 'rec-keyword', fields: {
-      'Identity • Company ID': 'company-alpha', 'Identity • Keyword ID': 'keyword-alpha',
-      'Observed • Source': 'semrush', 'Observed • At': '2026-08-01T00:00:00.000Z',
-      'Observed • Keyword': 'competitor research', 'Observed • Landing URL': 'https://alpha.example/research',
-    }}],
-    paidAds: [], publishedInsights: [], reviews: [], system: [], ...overrides,
-  };
+function snapshot(extra: AirtableFields = {}): DashboardSnapshot {
+  return parseDashboardSnapshot({system: [], companies: [{id: 'rec-company', fields: {
+    'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example',
+    // This intentionally differs from the preparation fingerprint. It must not control lifecycle decisions.
+    'Workflow • Evidence Fingerprint': 'legacy-company-field-is-not-authoritative',
+    'Observed • Source': 'semrush', 'Observed • At': '2026-08-01T00:00:00.000Z',
+    'Observed • Organic Traffic': 200,
+    [COMPANY_ROW_FIELDS.keywords]: JSON.stringify([{
+      observed: {classification: 'observed', source: 'semrush', observedAt: '2026-08-01T00:00:00.000Z', database: 'us', keyword: 'competitor research', landingUrl: 'https://alpha.example/research', position: null, previousPosition: null, positionDifference: null, volume: null, cpcUsd: null, keywordDifficulty: null, competition: null, traffic: null, trafficSharePct: null, trafficCostUsd: null, intents: [], rawSerpCodes: [], results: null},
+      calculated: {classification: 'calculated', inputs: ['companyId'], calculatedAt: '2026-08-01T00:00:00.000Z', companyId: 'company-alpha', keywordId: 'keyword-alpha', normalizedLandingUrl: 'https://alpha.example/research'},
+    }]),
+    ...extra,
+  }}]});
 }
 
 function candidate(overrides: Record<string, unknown> = {}) {
@@ -77,11 +76,9 @@ describe('submitInsightCandidate', () => {
   });
 
   it('replays a prior matching outcome without duplicate Airtable writes even if run ID changes', async () => {
-    const existing = {id: 'rec-insight', fields: {
-      'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': FINGERPRINT,
-      'Workflow • Skill Version': '1.0.0', 'Workflow • Version': '1.0.0',
-    }};
-    const store = storeFor(snapshot({publishedInsights: [existing]}));
+    const existing = toBattlecardFields({insightId: 'insight-existing', observedThemes: candidate().observedThemes as never, inferredClaims: [], recommendations: [], overallConfidence: 'high',
+      evidenceFingerprint: FINGERPRINT, agentHarness: 'codex', model: 'test-model', skillVersion: '1.0.0', workflowVersion: '1.0.0', runId: 'agent-run-1', generatedAt: '2026-08-18T12:00:00.000Z'});
+    const store = storeFor(snapshot(existing));
     const result = await submitInsightCandidate(candidate({provenance: {...candidate().provenance, runId: 'retry-run'}}), {repository: store, now: NOW, prepare: currentPrepared()});
 
     expect(result).toMatchObject({status: 'published', idempotent: true});

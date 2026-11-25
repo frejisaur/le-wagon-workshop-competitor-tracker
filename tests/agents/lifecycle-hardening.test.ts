@@ -6,6 +6,7 @@ import {submitInsightCandidate} from '@/lib/agents/publication/submit';
 import {runSubmitInsightCli} from '@/jobs/submit-insight';
 import {runPublishApprovedInsightsCli} from '@/jobs/publish-approved-insights';
 import {validateInsightCandidate} from '@/lib/agents/candidates/validate';
+import type {CompanyReview, CompanyRow} from '@/lib/airtable/company-row';
 import type {CompetitorStore, DashboardSnapshot} from '@/lib/airtable/types';
 
 const FINGERPRINT = 'e'.repeat(64);
@@ -20,8 +21,12 @@ function prepared(overrides: Record<string, unknown> = {}) {
   return async () => ({companies: [{companyId: 'company-alpha', canonicalDomain: 'alpha.example', evidenceFingerprint: FINGERPRINT, dueReasons: [], evidence: [{ref: 'company:company-alpha:metric:organic_traffic', classification: 'observed', source: 'semrush', value: 200}], ...overrides}]} as never);
 }
 
-function store(reviews: DashboardSnapshot['reviews'] = []) {
-  const snapshot: DashboardSnapshot = {companies: [], keywords: [], paidAds: [], publishedInsights: [], reviews, system: []};
+function row(review?: CompanyReview, recordId = 'rec-alpha'): CompanyRow {
+  return {recordId, fields: {'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example'}, keywords: [], paidAds: [], storageIssues: [], ...(review ? {review} : {})};
+}
+
+function store(companies: CompanyRow[] = [row()]) {
+  const snapshot: DashboardSnapshot = {companies, system: null};
   return {getDashboardSnapshot: vi.fn(async () => structuredClone(snapshot)), upsertReview: vi.fn(async () => ({succeeded: 1, failed: 0, results: []})), upsertPublishedInsight: vi.fn(async () => ({succeeded: 1, failed: 0, results: []}))} as unknown as CompetitorStore;
 }
 
@@ -34,16 +39,15 @@ describe('Task 8 hardening', () => {
   });
 
   it('marks an old queued replay stale before idempotency after current evidence drifts', async () => {
-    const review = {id: 'review', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': FINGERPRINT, 'Workflow • Skill Version': '1.0.0', 'Workflow • Version': '1.0.0', 'Review • Status': 'needs_review'}};
-    const repository = store([review]);
+    const review: CompanyReview = {status: 'needs_review', reviewerNotes: 'Keep this note.', candidate: {observedThemes: [], inferredClaims: [], recommendations: [], reviewReasons: [], evidenceFingerprint: FINGERPRINT, agentHarness: 'test', model: 'test', skillVersion: '1.0.0', workflowVersion: '1.0.0', runId: 'run-0', generatedAt: '2026-08-18T00:00:00.000Z'}};
+    const repository = store([row(review)]);
     const result = await submitInsightCandidate(candidate(), {repository, prepare: prepared({evidenceFingerprint: 'f'.repeat(64)})});
     expect(result.status).toBe('stale');
-    expect(repository.upsertReview).toHaveBeenCalledWith(expect.objectContaining({status: 'stale'}));
+    expect(repository.upsertReview).toHaveBeenCalledWith(expect.objectContaining({status: 'stale', reviewerNotes: 'Keep this note.'}));
   });
 
-  it('rejects duplicate review rows and serializes concurrent same-company submissions', async () => {
-    const duplicate = {id: 'review-a', fields: {'Identity • Company ID': 'company-alpha'}};
-    const repository = store([duplicate, {...duplicate, id: 'review-b'}]);
+  it('rejects duplicate company rows and serializes concurrent same-company submissions', async () => {
+    const repository = store([row(undefined, 'rec-a'), row(undefined, 'rec-b')]);
     expect((await submitInsightCandidate(candidate(), {repository, prepare: prepared()})).status).toBe('rejected');
 
     const serial = store();
@@ -64,8 +68,9 @@ describe('Task 8 hardening', () => {
   });
 
   it('replaces a reviewer-requested candidate while preserving reviewer metadata', async () => {
-    const review = {id: 'review', fields: {'Identity • Company ID': 'company-alpha', 'Workflow • Evidence Fingerprint': FINGERPRINT, 'Workflow • Skill Version': '1.0.0', 'Workflow • Version': '1.0.0', 'Review • Status': 'rejected', 'Review • Notes': 'Human context', 'Review • Identity': 'reviewer@example.test', 'Review • At': '2026-08-18T00:00:00.000Z'}};
-    const repository = store([review]);
+    const review: CompanyReview = {status: 'rejected', reviewerNotes: 'Human context', reviewerIdentity: 'reviewer@example.test', reviewedAt: '2026-08-18T00:00:00.000Z',
+      candidate: {observedThemes: [], inferredClaims: [], recommendations: [], reviewReasons: [], evidenceFingerprint: FINGERPRINT, agentHarness: 'test', model: 'test', skillVersion: '1.0.0', workflowVersion: '1.0.0', runId: 'run-0', generatedAt: '2026-08-18T00:00:00.000Z'}};
+    const repository = store([row(review)]);
     const result = await submitInsightCandidate(candidate({provenance: {...candidate().provenance, runId: 'run-regenerated'}}), {repository, prepare: prepared({review: {reviewReasons: ['reviewer_requested_regeneration']}})});
     expect(result).toMatchObject({status: 'queued', runId: 'run-regenerated', idempotent: false});
     expect(repository.upsertReview).toHaveBeenCalledWith(expect.objectContaining({reviewerNotes: 'Human context', reviewerIdentity: 'reviewer@example.test'}));
@@ -94,7 +99,9 @@ describe('Task 8 hardening', () => {
       const retry = await runSubmitInsightCli([candidatePath, '--fixture-state', firstState, '--fixture-output-state', secondState]);
       expect(JSON.parse(first.stdout)).toMatchObject({status: 'published', idempotent: false});
       expect(JSON.parse(retry.stdout)).toMatchObject({status: 'published', idempotent: true});
-      expect(JSON.parse(readFileSync(secondState, 'utf8')).insights).toHaveLength(1);
+      const persisted = JSON.parse(readFileSync(secondState, 'utf8'));
+      expect(persisted.companies).toHaveLength(1);
+      expect(persisted.companies[0].fields['Workflow • Battlecard Run ID']).toBe('fixture-run-high');
 
       const approved = JSON.parse(readFileSync(`${process.cwd()}/tests/fixtures/insights/approved-current-state.json`, 'utf8'));
       const approvedState = join(directory, 'approved.json');
@@ -133,9 +140,9 @@ describe('Task 8 hardening', () => {
       const result = await runPublishApprovedInsightsCli(['--fixture-state', source, '--fixture-output-state', output]);
       const persisted = JSON.parse(readFileSync(output, 'utf8'));
       expect(JSON.parse(result.stdout)).toEqual({published: 0, stale: 1, failed: 0, skipped: 0});
-      expect(persisted.insights).toHaveLength(1);
-      expect(persisted.insights[0].id).toBe('rec-last-published');
-      expect(persisted.reviews[0].fields['Review • Status']).toBe('stale');
+      expect(Object.keys(persisted).sort()).toEqual(['companies', 'system']);
+      expect(persisted.companies[0].fields['Workflow • Battlecard ID']).toBe('insight-prior-alpha');
+      expect(persisted.companies[0].fields['Review • Status']).toBe('stale');
       expect(readFileSync(source, 'utf8')).toBe(before);
     } finally { rmSync(directory, {recursive: true, force: true}); }
   });
@@ -166,9 +173,9 @@ describe('Task 8 hardening', () => {
       // A stale review is no longer approved, so the second pass is a stable no-op.
       expect(JSON.parse(second.stdout)).toEqual({published: 0, stale: 0, failed: 0, skipped: 0});
       expect(readFileSync(firstOutput, 'utf8')).toBe(firstBytes);
-      expect(persisted.insights).toHaveLength(1);
-      expect(persisted.insights[0].id).toBe('rec-last-published');
-      expect(persisted.reviews[0].fields['Review • Status']).toBe('stale');
+      expect(Object.keys(persisted).sort()).toEqual(['companies', 'system']);
+      expect(persisted.companies[0].fields['Workflow • Battlecard ID']).toBe('insight-prior-alpha');
+      expect(persisted.companies[0].fields['Review • Status']).toBe('stale');
     } finally { rmSync(directory, {recursive: true, force: true}); }
   });
 });

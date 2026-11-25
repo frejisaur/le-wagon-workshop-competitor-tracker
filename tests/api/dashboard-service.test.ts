@@ -1,13 +1,14 @@
 import {describe, expect, it, vi} from 'vitest';
+import {parseDashboardSnapshot} from '@/lib/airtable/snapshot';
 import type {DashboardSnapshot} from '@/lib/airtable/types';
 import {DashboardService} from '@/lib/api/dashboard-service-core';
 import {CompanyComparisonSchema} from '@/lib/domain/dashboard';
 
-const snapshot: DashboardSnapshot = {companies: [{id: 'rec-alpha', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example'}}], keywords: [], paidAds: [], publishedInsights: [], reviews: [], system: []};
+const snapshot: DashboardSnapshot = parseDashboardSnapshot({companies: [{id: 'rec-alpha', fields: {'Identity • Company ID': 'company-alpha', 'Identity • Canonical Domain': 'alpha.example'}}], system: []});
 
 describe('DashboardService singleton contract', () => {
   it('returns a route-ready empty response with zero KPI coverage', async () => {
-    const service = new DashboardService(async () => ({companies: [], keywords: [], paidAds: [], publishedInsights: [], reviews: [], system: []}));
+    const service = new DashboardService(async () => ({companies: [], system: null}));
     await expect(service.landscape()).resolves.toMatchObject({status: 'empty', kpis: {combinedOrganicTraffic: {coverage: {available: 0, total: 0}}}});
   });
 
@@ -34,7 +35,7 @@ describe('DashboardService singleton contract', () => {
 
   it('returns a deterministic bounded CompanyComparison projection from one cached snapshot load', async () => {
     const companies = Array.from({length: 53}, (_, index) => ({id: `rec-${index}`, fields: {'Identity • Company ID': `company-${String(index).padStart(2, '0')}`, 'Identity • Canonical Domain': `company-${String(index).padStart(2, '0')}.example`, 'Calculated • Compact Organic Trend JSON': JSON.stringify([{date: '2026-08-01', organicTraffic: index}])}}));
-    const load = vi.fn(async (): Promise<DashboardSnapshot> => ({companies, keywords: [], paidAds: [], publishedInsights: [], reviews: [], system: []}));
+    const load = vi.fn(async (): Promise<DashboardSnapshot> => parseDashboardSnapshot({companies, system: []}));
     const service = new DashboardService(load);
 
     const workspace = await service.companyWorkspace('company-52');

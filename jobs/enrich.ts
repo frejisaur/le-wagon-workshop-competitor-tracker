@@ -66,10 +66,7 @@ export async function runEnrichCli(arguments_: string[]): Promise<EnrichCliResul
     } else {
       const env = getRefreshEnv();
       const actorId = resolveLiveActorId(args.actorId, env);
-      const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT}), {
-        companies: env.AIRTABLE_COMPANIES_TABLE, keywords: env.AIRTABLE_KEYWORDS_TABLE, paidAds: env.AIRTABLE_PAID_ADS_TABLE,
-        insights: env.AIRTABLE_GTM_INSIGHTS_TABLE, reviews: env.AIRTABLE_INSIGHT_REVIEWS_TABLE, system: env.AIRTABLE_SYSTEM_TABLE,
-      });
+      const repository = new AirtableCompetitorRepository(new AirtableClient({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT}));
       const apify = new ApifyClient({token: env.APIFY_TOKEN});
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(new Error('refresh_internal_timeout')), INTERNAL_REFRESH_TIMEOUT_MS);

@@ -1,8 +1,30 @@
 {
-  "companies": [{"id": "rec-company-alpha", "fields": {"Identity • Company ID": "company-alpha", "Identity • Canonical Domain": "alpha.example", "Observed • Source": "semrush", "Observed • Database": "us", "Observed • At": "2026-08-01T00:00:00.000Z", "Observed • Raw Ref": "dataset:sanitized-alpha", "Observed • Organic Traffic": 200}}],
-  "keywords": [{"id": "rec-keyword-alpha", "fields": {"Identity • Company ID": "company-alpha", "Identity • Keyword ID": "keyword-alpha", "Observed • Source": "semrush", "Observed • Database": "us", "Observed • At": "2026-08-01T00:00:00.000Z", "Observed • Keyword": "competitor research", "Observed • Landing URL": "https://alpha.example/research"}}],
-  "paidAds": [],
-  "insights": [{"id": "rec-last-published", "fields": {"Identity • Company ID": "company-alpha", "Workflow • Evidence Fingerprint": "old-published-fingerprint"}}],
-  "reviews": [{"id": "rec-review-alpha", "fields": {"Identity • Company ID": "company-alpha", "Review • Status": "approved", "Observed • Themes JSON": "[{\"claimId\":\"organic-traffic\",\"conclusion\":\"Organic traffic is 200 in the prepared evidence.\",\"classification\":\"observed\",\"confidence\":\"high\",\"confidenceReason\":\"The current curated provider metric directly reports the value.\",\"evidenceRefs\":[\"company:company-alpha:metric:organic_traffic\"]}]", "Inferred • Claims JSON": "[]", "Inferred • Recommendations JSON": "[]", "Inferred • Summary": "A measured organic demand signal is present.", "Inferred • Review Reasons JSON": "[]", "Workflow • Evidence Fingerprint": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "Workflow • Agent Harness": "fixture", "Workflow • Model": "sanitized-model", "Workflow • Skill Version": "1.0.0", "Workflow • Version": "1.0.0", "Workflow • Run ID": "fixture-run-stale", "Workflow • Generated At": "2026-08-18T12:00:00.000Z"}}],
+  "companies": [
+    {
+      "id": "rec-company-alpha",
+      "fields": {
+        "Identity • Company ID": "company-alpha",
+        "Identity • Canonical Domain": "alpha.example",
+        "Observed • Source": "semrush",
+        "Observed • Database": "us",
+        "Observed • At": "2026-08-01T00:00:00.000Z",
+        "Observed • Raw Ref": "dataset:sanitized-alpha",
+        "Observed • Organic Traffic": 200,
+        "Observed • Keywords JSON": "[{\"observed\":{\"classification\":\"observed\",\"source\":\"semrush\",\"observedAt\":\"2026-08-01T00:00:00.000Z\",\"database\":\"us\",\"keyword\":\"competitor research\",\"landingUrl\":\"https://alpha.example/research\",\"position\":null,\"previousPosition\":null,\"positionDifference\":null,\"volume\":null,\"cpcUsd\":null,\"keywordDifficulty\":null,\"competition\":null,\"traffic\":null,\"trafficSharePct\":null,\"trafficCostUsd\":null,\"intents\":[],\"rawSerpCodes\":[],\"results\":null},\"calculated\":{\"classification\":\"calculated\",\"inputs\":[\"companyId\"],\"calculatedAt\":\"2026-08-01T00:00:00.000Z\",\"companyId\":\"company-alpha\",\"keywordId\":\"keyword-alpha\",\"normalizedLandingUrl\":\"https://alpha.example/research\"}}]",
+        "Observed • Keywords At": "2026-08-01T00:00:00.000Z",
+        "Inferred • Battlecard JSON": "{\"observedThemes\":[{\"claimId\":\"prior-organic-traffic\",\"conclusion\":\"A prior run observed organic traffic of 200.\",\"classification\":\"observed\",\"confidence\":\"high\",\"confidenceReason\":\"The current curated provider metric directly reports the value.\",\"evidenceRefs\":[\"company:company-alpha:metric:organic_traffic\"]}],\"inferredClaims\":[],\"recommendations\":[],\"overallConfidence\":\"high\"}",
+        "Workflow • Battlecard ID": "insight-prior-alpha",
+        "Workflow • Battlecard Harness": "fixture",
+        "Workflow • Battlecard Model": "sanitized-model",
+        "Workflow • Battlecard Skill Version": "1.0.0",
+        "Workflow • Battlecard Evidence Fingerprint": "old-published-fingerprint",
+        "Workflow • Battlecard Version": "1.0.0",
+        "Workflow • Battlecard Run ID": "fixture-run-prior",
+        "Workflow • Battlecard Generated At": "2026-07-18T12:00:00.000Z",
+        "Review • Candidate JSON": "{\"observedThemes\":[{\"claimId\":\"organic-traffic\",\"conclusion\":\"Organic traffic is 200 in the prepared evidence.\",\"classification\":\"observed\",\"confidence\":\"high\",\"confidenceReason\":\"The current curated provider metric directly reports the value.\",\"evidenceRefs\":[\"company:company-alpha:metric:organic_traffic\"]}],\"inferredClaims\":[],\"recommendations\":[],\"overallConfidence\":\"high\",\"reviewReasons\":[],\"evidenceFingerprint\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"agentHarness\":\"fixture\",\"model\":\"sanitized-model\",\"skillVersion\":\"1.0.0\",\"workflowVersion\":\"1.0.0\",\"runId\":\"fixture-run-stale\",\"generatedAt\":\"2026-08-18T12:00:00.000Z\"}",
+        "Review • Status": "approved"
+      }
+    }
+  ],
   "system": []
 }

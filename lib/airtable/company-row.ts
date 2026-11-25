@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import type {CuratedKeyword, CuratedPaidAd, DataQualityIssue} from '@/lib/domain/metrics';
 import {CandidateClaimSchema, CandidateReviewReasonSchema, ConfidenceSchema, type CandidateClaim, type CandidateReviewReason, type Confidence} from '@/lib/schemas/insight-candidate';
-import type {AirtableFields, AirtableRecord, CompanyPersistenceWrite} from './types';
+import type {AirtableFields, AirtableRecord, CompanyPersistenceWrite, CompanyWrite, EvidenceFingerprinter} from './types';
 
 /** Airtable rejects long text over 100,000 characters; a UTF-8 byte budget below it is a safe upper bound. */
 export const MAX_AIRTABLE_JSON_BYTES = 90_000;
@@ -106,7 +106,8 @@ const uniqueClaimIds = (claims: BattlecardClaims) => {
 };
 export const BattlecardClaimsSchema = z.object(BattlecardClaimsShape).strict().refine(uniqueClaimIds, 'claim IDs must be unique');
 const nonEmpty = z.string().min(1);
-const InsightProvenanceShape = {evidenceFingerprint: nonEmpty, agentHarness: nonEmpty, model: nonEmpty, skillVersion: nonEmpty, workflowVersion: nonEmpty, runId: nonEmpty, generatedAt: z.string().datetime({offset: true})};
+// Bounds match the agent candidate contract, so human edits in Airtable cannot widen what the API serves.
+const InsightProvenanceShape = {evidenceFingerprint: nonEmpty.max(200), agentHarness: nonEmpty.max(200), model: nonEmpty.max(200), skillVersion: nonEmpty.max(100), workflowVersion: nonEmpty.max(100), runId: nonEmpty.max(200), generatedAt: z.string().datetime({offset: true})};
 const PublishedBattlecardSchema = z.object({...BattlecardClaimsShape, ...InsightProvenanceShape, insightId: nonEmpty}).strict().refine(uniqueClaimIds, 'claim IDs must be unique');
 export const ReviewCandidateSchema = z.object({...BattlecardClaimsShape, ...InsightProvenanceShape, reviewReasons: z.array(CandidateReviewReasonSchema).max(JSON_CAPS.reviewReasons)}).strict().refine(uniqueClaimIds, 'claim IDs must be unique');
 const ReviewStatusSchema = z.enum(['needs_review', 'approved', 'rejected', 'stale', 'published']);
@@ -406,4 +407,16 @@ export function parseCompanyRecord(record: AirtableRecord): CompanyRow {
 /** The stable company ID of a parsed row, when it has one. */
 export function companyIdOf(row: CompanyRow): string | undefined {
   return text(row.fields, 'Identity • Company ID');
+}
+
+/** Airtable PATCH leaves omitted fields untouched; explicit null clears. */
+export function presentFields(fields: AirtableFields): AirtableFields {
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
+}
+
+/** Stages one refresh PATCH: evidence merged against the stored row, plus the fingerprint of the row it produces. */
+export function stageCompanyEvidence(existing: AirtableRecord, company: CompanyWrite, fingerprint: EvidenceFingerprinter): AirtableFields {
+  const fields = toCompanyFields(company, parseCompanyRecord(existing));
+  const next = parseCompanyRecord({id: existing.id, fields: {...existing.fields, ...presentFields(fields)}});
+  return {...fields, 'Workflow • Evidence Fingerprint': fingerprint(next)};
 }

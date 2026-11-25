@@ -1,5 +1,7 @@
-import type {AirtableFieldValue, AirtableFields, AirtableRecord} from '@/lib/airtable/types';
-import {EvidencePackageSchema, type BuildEvidencePackageInput, type EvidencePackage, type EvidenceReference, type EvidenceValue, type PublishedInsightMetadata, type ReviewMetadata} from '@/lib/agents/types';
+import type {CompanyRow, StoredPaidAd} from '@/lib/airtable/company-row';
+import type {AirtableFieldValue, AirtableFields} from '@/lib/airtable/types';
+import type {CuratedKeyword, DataQualityIssue} from '@/lib/domain/metrics';
+import {EvidencePackageSchema, type EvidencePackage, type EvidenceReference, type EvidenceValue, type PublishedInsightMetadata, type ReviewMetadata} from '@/lib/agents/types';
 
 // This is deliberately an allow-list, not a prefix match: future Airtable
 // columns (especially an accidental raw-payload column) cannot reach agents.
@@ -11,8 +13,9 @@ const COMPANY_OBSERVED_FIELDS = new Set([
 const COMPANY_CALCULATED_FIELDS = new Set([
   'Inputs JSON', 'Organic Traffic 30d Movement', 'Organic Traffic 12m Movement', 'Non-brand Share', 'AI Benchmark Gap', 'Tracked Set Traffic Share', 'Organic Competitors JSON', 'Paid Competitors JSON', 'AI Countries JSON', 'AI Countries Observed Count', 'Moz Domain Authority', 'Moz Spam Score', 'Moz Top Pages JSON', 'Moz Top Pages Observed Count', 'Top Keyword Sample Count', 'Compact Organic Trend JSON', 'Landing Page Portfolio JSON', 'Paid Activity Present',
 ]);
-const KEYWORD_FIELDS = ['Keyword', 'Landing URL', 'Position', 'Previous Position', 'Position Difference', 'Volume', 'CPC USD', 'Keyword Difficulty', 'Competition', 'Traffic', 'Traffic Share Pct', 'Traffic Cost USD', 'Intents JSON', 'SERP Codes JSON', 'Results'];
-const PAID_AD_FIELDS = ['Keyword', 'Title', 'Description', 'Visible URL', 'Landing URL', 'Position', 'Previous Position', 'Volume', 'CPC USD', 'Keyword Difficulty', 'Competition', 'Traffic', 'Traffic Share Pct', 'Traffic Cost USD', 'First Observed At', 'Last Observed At'];
+// Allow-listed observed keys of stored keyword and paid-ad objects, mapped to their evidence keys.
+const KEYWORD_FIELDS = {keyword: 'keyword', landingUrl: 'landing_url', position: 'position', previousPosition: 'previous_position', positionDifference: 'position_difference', volume: 'volume', cpcUsd: 'cpc_usd', keywordDifficulty: 'keyword_difficulty', competition: 'competition', traffic: 'traffic', trafficSharePct: 'traffic_share_pct', trafficCostUsd: 'traffic_cost_usd', intents: 'intents', rawSerpCodes: 'serp_codes', results: 'results'} as const satisfies Partial<Record<keyof CuratedKeyword['observed'], string>>;
+const PAID_AD_FIELDS = {keyword: 'keyword', title: 'title', description: 'description', visibleUrl: 'visible_url', landingUrl: 'landing_url', position: 'position', previousPosition: 'previous_position', volume: 'volume', cpcUsd: 'cpc_usd', keywordDifficulty: 'keyword_difficulty', competition: 'competition', traffic: 'traffic', trafficSharePct: 'traffic_share_pct', trafficCostUsd: 'traffic_cost_usd', firstObservedAt: 'first_observed_at', lastObservedAt: 'last_observed_at'} as const satisfies Partial<Record<keyof StoredPaidAd['observed'], string>>;
 const MAX_QUALITY_EVIDENCE = 25;
 const QUALITY_PATHS = {
   suspicious_moz_top_page: /^moz\.top_pages\[\d+\]\.url$/,
@@ -23,6 +26,7 @@ const QUALITY_PATHS = {
   malformed_organic_module: /^organic$/,
   malformed_paid_module: /^paid$/,
   tracked_set_coverage_incomplete: /^refresh\.coverage$/,
+  unreadable_stored_json: /^storage\.(?:keywords|paid_ads)$/,
 } as const;
 type QualityCode = keyof typeof QUALITY_PATHS;
 
@@ -31,15 +35,8 @@ function stringField(fields: AirtableFields, name: string): string | undefined {
   return typeof value === 'string' && value ? value : undefined;
 }
 
-function scalarOrStrings(value: AirtableFieldValue | undefined): EvidenceValue | undefined {
-  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
-  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return [...value];
-  return undefined;
-}
-
 function curatedValue(value: AirtableFieldValue | undefined): EvidenceValue | undefined {
-  if (typeof value !== 'string' || !value.trim().startsWith('[') && !value.trim().startsWith('{')) return scalarOrStrings(value);
+  if (typeof value !== 'string' || !value.trim().startsWith('[') && !value.trim().startsWith('{')) return jsonValue(value);
   try {
     const parsed: unknown = JSON.parse(value);
     return jsonValue(parsed);
@@ -86,115 +83,101 @@ function calculatedProvenance(fields: AirtableFields) {
   return {source: 'deterministic_calculation', ...(calculatedAt ? {calculatedAt} : {})};
 }
 
-function rowEvidence(ref: string, fields: AirtableFields, allowedFields: string[]): EvidenceReference | undefined {
+/** Evidence for one stored keyword or paid ad: allow-listed observed values only, with nulls left out. */
+function itemEvidence(ref: string, observed: CuratedKeyword['observed'] | StoredPaidAd['observed'], allowed: Record<string, string>): EvidenceReference | undefined {
   const value: {[key: string]: EvidenceValue} = {};
-  for (const field of allowedFields) {
-    const item = curatedValue(fields[`Observed • ${field}`]);
-    if (item !== undefined) value[fieldSlug(field)] = item;
+  for (const [field, key] of Object.entries(allowed)) {
+    const curated = jsonValue((observed as Record<string, unknown>)[field]);
+    if (curated !== undefined && curated !== null) value[key] = curated;
   }
   if (Object.keys(value).length === 0) return undefined;
-  return {ref, classification: 'observed', ...observedProvenance(fields), value};
+  const {source, database, observedAt, rawRef} = observed;
+  return {ref, classification: 'observed', source, ...(database ? {database} : {}), ...(observedAt ? {observedAt} : {}), ...(rawRef ? {rawDatasetRef: rawRef} : {}), value};
 }
 
-function reviewReasons(record: AirtableRecord | undefined): string[] {
-  const raw = record?.fields['Inferred • Review Reasons JSON'];
-  if (typeof raw !== 'string') return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.every((item) => typeof item === 'string') ? [...parsed].sort() : [];
-  } catch {
-    return [];
-  }
+function publishedMetadata(row: CompanyRow): PublishedInsightMetadata | undefined {
+  if (!row.battlecard) return undefined;
+  const {evidenceFingerprint, skillVersion, workflowVersion} = row.battlecard;
+  return {evidenceFingerprint, skillVersion, workflowVersion};
 }
 
-function publishedMetadata(record: AirtableRecord | undefined): PublishedInsightMetadata | undefined {
-  if (!record) return undefined;
+function reviewMetadata(row: CompanyRow): ReviewMetadata | undefined {
+  const review = row.review;
+  if (!review) return undefined;
+  const candidate = review.candidate;
   return {
-    evidenceFingerprint: stringField(record.fields, 'Workflow • Evidence Fingerprint'),
-    skillVersion: stringField(record.fields, 'Workflow • Skill Version'),
-    workflowVersion: stringField(record.fields, 'Workflow • Version'),
+    ...(review.status ? {status: review.status} : {}),
+    ...(candidate ? {evidenceFingerprint: candidate.evidenceFingerprint, skillVersion: candidate.skillVersion, workflowVersion: candidate.workflowVersion} : {}),
+    reviewReasons: [...(candidate?.reviewReasons ?? [])].sort(),
+    ...(review.reviewerNotes ? {untrustedReviewerNotes: review.reviewerNotes} : {}),
   };
 }
 
-function reviewMetadata(record: AirtableRecord | undefined): ReviewMetadata | undefined {
-  if (!record) return undefined;
-  return {
-    status: stringField(record.fields, 'Review • Status'),
-    evidenceFingerprint: stringField(record.fields, 'Workflow • Evidence Fingerprint'),
-    skillVersion: stringField(record.fields, 'Workflow • Skill Version'),
-    workflowVersion: stringField(record.fields, 'Workflow • Version'),
-    reviewReasons: reviewReasons(record),
-    untrustedReviewerNotes: stringField(record.fields, 'Review • Notes'),
-  };
-}
-
-function qualityEvidence(companyId: string, fields: AirtableFields): EvidenceReference[] {
+function storedIssues(fields: AirtableFields): unknown[] {
   const raw = fields['Quality • Issues JSON'];
   if (typeof raw !== 'string') return [];
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    const seen = new Set<string>();
-    return parsed
-      .flatMap((issue) => {
-        if (!issue || typeof issue !== 'object') return [];
-        const code = (issue as Record<string, unknown>).code;
-        const sourcePath = (issue as Record<string, unknown>).sourcePath;
-        if (typeof code !== 'string' || typeof sourcePath !== 'string' || !Object.hasOwn(QUALITY_PATHS, code)) return [];
-        const qualityCode = code as QualityCode;
-        if (!QUALITY_PATHS[qualityCode].test(sourcePath)) return [];
-        const identity = `${qualityCode}\u0000${sourcePath}`;
-        if (seen.has(identity)) return [];
-        seen.add(identity);
-        return [{code: qualityCode, sourcePath}];
-      })
-      .sort((left, right) => left.code.localeCompare(right.code) || left.sourcePath.localeCompare(right.sourcePath))
-      .slice(0, MAX_QUALITY_EVIDENCE)
-      .map((issue, index) => {
-        const observedAt = stringField(fields, 'Observed • At');
-        return {ref: `quality:company:${companyId}:${issue.code}:${index}`, classification: 'observed' as const, source: 'data_quality', ...(observedAt ? {observedAt} : {}), value: issue};
-      });
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
 }
 
-/** Builds an allow-listed evidence package from already-curated store records. */
-export function buildEvidencePackage(input: BuildEvidencePackageInput): EvidencePackage {
-  const companyId = stringField(input.company.fields, 'Identity • Company ID');
+function qualityEvidence(companyId: string, fields: AirtableFields, storageIssues: DataQualityIssue[]): EvidenceReference[] {
+  const seen = new Set<string>();
+  const observedAt = stringField(fields, 'Observed • At');
+  return [...storedIssues(fields), ...storageIssues]
+    .flatMap((issue) => {
+      if (!issue || typeof issue !== 'object') return [];
+      const code = (issue as Record<string, unknown>).code;
+      const sourcePath = (issue as Record<string, unknown>).sourcePath;
+      if (typeof code !== 'string' || typeof sourcePath !== 'string' || !Object.hasOwn(QUALITY_PATHS, code)) return [];
+      const qualityCode = code as QualityCode;
+      if (!QUALITY_PATHS[qualityCode].test(sourcePath)) return [];
+      const identity = `${qualityCode}\u0000${sourcePath}`;
+      if (seen.has(identity)) return [];
+      seen.add(identity);
+      return [{code: qualityCode, sourcePath}];
+    })
+    .sort((left, right) => left.code.localeCompare(right.code) || left.sourcePath.localeCompare(right.sourcePath))
+    .slice(0, MAX_QUALITY_EVIDENCE)
+    .map((issue, index) => ({ref: `quality:company:${companyId}:${issue.code}:${index}`, classification: 'observed' as const, source: 'data_quality', ...(observedAt ? {observedAt} : {}), value: issue}));
+}
+
+/** Builds an allow-listed evidence package from one curated company row. */
+export function buildEvidencePackage(row: CompanyRow): EvidencePackage {
+  const fields = row.fields;
+  const companyId = stringField(fields, 'Identity • Company ID');
   if (!companyId) throw new TypeError('company record requires a stable company ID');
   const evidence: EvidenceReference[] = [];
-  const canonicalDomain = stringField(input.company.fields, 'Identity • Canonical Domain');
+  const canonicalDomain = stringField(fields, 'Identity • Canonical Domain');
   if (canonicalDomain) evidence.push({ref: `company:${companyId}:identity:canonical_domain`, classification: 'observed', source: 'airtable_curated', value: canonicalDomain});
 
-  for (const [field, value] of Object.entries(input.company.fields).sort(([left], [right]) => left.localeCompare(right))) {
+  for (const [field, value] of Object.entries(fields).sort(([left], [right]) => left.localeCompare(right))) {
     if (field.startsWith('Observed • ')) {
       const label = field.slice('Observed • '.length);
       if (!COMPANY_OBSERVED_FIELDS.has(label)) continue;
       const curated = curatedValue(value);
-      if (curated !== undefined) evidence.push({ref: `company:${companyId}:metric:${fieldSlug(label)}`, classification: 'observed', ...observedProvenance(input.company.fields), value: curated});
+      if (curated !== undefined) evidence.push({ref: `company:${companyId}:metric:${fieldSlug(label)}`, classification: 'observed', ...observedProvenance(fields), value: curated});
     }
     if (field.startsWith('Calculated • ')) {
       const label = field.slice('Calculated • '.length);
       if (!COMPANY_CALCULATED_FIELDS.has(label)) continue;
       const curated = curatedValue(value);
-      if (curated !== undefined) evidence.push({ref: `company:${companyId}:calculation:${fieldSlug(label)}`, classification: 'calculated', ...calculatedProvenance(input.company.fields), value: curated});
+      if (curated !== undefined) evidence.push({ref: `company:${companyId}:calculation:${fieldSlug(label)}`, classification: 'calculated', ...calculatedProvenance(fields), value: curated});
     }
   }
 
-  for (const keyword of [...input.keywords].sort((left, right) => String(left.fields['Identity • Keyword ID']).localeCompare(String(right.fields['Identity • Keyword ID'])))) {
-    const keywordId = stringField(keyword.fields, 'Identity • Keyword ID');
-    if (!keywordId) continue;
-    const row = rowEvidence(`keyword:${keywordId}`, keyword.fields, KEYWORD_FIELDS);
-    if (row) evidence.push(row);
+  for (const keyword of row.keywords) {
+    const item = itemEvidence(`keyword:${keyword.calculated.keywordId}`, keyword.observed, KEYWORD_FIELDS);
+    if (item) evidence.push(item);
   }
-  for (const ad of [...input.paidAds].sort((left, right) => String(left.fields['Identity • Paid Ad ID']).localeCompare(String(right.fields['Identity • Paid Ad ID'])))) {
-    const paidAdId = stringField(ad.fields, 'Identity • Paid Ad ID');
-    if (!paidAdId) continue;
-    const row = rowEvidence(`paid-ad:${paidAdId}`, ad.fields, PAID_AD_FIELDS);
-    if (row) evidence.push(row);
+  for (const ad of row.paidAds) {
+    const item = itemEvidence(`paid-ad:${ad.calculated.paidAdId}`, ad.observed, PAID_AD_FIELDS);
+    if (item) evidence.push(item);
   }
 
-  evidence.push(...qualityEvidence(companyId, input.company.fields));
-  return EvidencePackageSchema.parse({companyId, canonicalDomain, evidence: evidence.sort((left, right) => left.ref.localeCompare(right.ref)), published: publishedMetadata(input.publishedInsight), review: reviewMetadata(input.review)});
+  evidence.push(...qualityEvidence(companyId, fields, row.storageIssues));
+  return EvidencePackageSchema.parse({companyId, canonicalDomain, evidence: evidence.sort((left, right) => left.ref.localeCompare(right.ref)), published: publishedMetadata(row), review: reviewMetadata(row)});
 }
