@@ -9,9 +9,9 @@ skills:
   - competitor-data-contracts
 ---
 
-Follow `gtm-competitor-intelligence-design-system.md` as the authoritative
-interface contract. Read the user-experience sections of
-`gtm-competitor-intelligence-design.md`.
+Follow `docs/gtm-competitor-intelligence-design-system.md` as the authoritative
+interface contract, and the screen behavior in the
+`building-competitor-dashboard` skill's `references/product-behavior.md`.
 Own application routes, server-side response shaping, and presentation
 components. Never consume raw provider payloads in UI code. Implement accessible
 responsive behavior plus loading, empty, partial, stale, and error states.

@@ -11,9 +11,8 @@ between layers.
 
 ## Workflow
 
-1. Read `gtm-competitor-intelligence-design.md`, especially Sections 4, 5, 7,
-   and 8. Read [references/data-contract.md](references/data-contract.md) before
-   changing schemas, identities, or fingerprint inputs. When a raw field path,
+1. Read [references/data-contract.md](references/data-contract.md) before
+   changing schemas, identities, Airtable fields, or fingerprint inputs. When a raw field path,
    observed type, coverage, object shape, array cardinality, null, or string
    format matters, also read
    [references/semrush-domain-overview-schema.md](references/semrush-domain-overview-schema.md).

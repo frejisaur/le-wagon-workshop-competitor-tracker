@@ -4,7 +4,7 @@ Date: 2026-08-18
 
 Status: Approved visual direction
 
-Companion specification: [`gtm-competitor-intelligence-design.md`](../gtm-competitor-intelligence-design.md)
+Companion screen behavior: [`product-behavior.md`](../.agents/skills/building-competitor-dashboard/references/product-behavior.md)
 
 ## 1. Design intent
 

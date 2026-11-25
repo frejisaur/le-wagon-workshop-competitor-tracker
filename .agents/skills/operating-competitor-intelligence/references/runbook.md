@@ -1,5 +1,22 @@
 # Competitor intelligence runbook
 
+## Control planes
+
+Two independent control planes share Airtable and validated repository
+commands as their only boundary; neither invokes or waits for the other.
+
+- Metric refresh: `.github/workflows/refresh.yml` runs `npm run enrich`. It
+  validates provider output, writes only observed fields and deterministic
+  calculations with one write per company, updates the evidence fingerprint and
+  refresh System fields, invalidates the web cache, and exits. It never calls a
+  model, agent, or skill.
+- Insight enrichment: the user's agent harness runs the
+  `generating-gtm-battlecards` skill on its own schedule through
+  `insights:prepare`, `insights:submit`, and `insights:publish-approved`.
+- Web: Vercel serves the dashboard from server-side Airtable reads, keeps a
+  per-instance snapshot for at most 60 seconds, accepts only signed cache
+  invalidation, and exposes `/api/health` with freshness.
+
 ## Command map
 
 | Operation | Repository interface | Success evidence |
@@ -39,3 +56,28 @@ implementation rather than inventing a substitute.
 
 The fallback demonstrates the same contracts as the live path; it must not use
 hand-edited output that bypasses validation.
+
+## Failure guarantees
+
+- One failed company never fails the other companies in a run.
+- Every external call has a timeout, and the refresh command always closes
+  resources and terminates.
+- Refresh and agent workflows keep separate run IDs, timestamps, and
+  `running`, `partial`, `succeeded`, and `failed` statuses.
+- The UI keeps serving the last successful snapshot and shows its freshness
+  when a refresh fails.
+- A refresh failure or agent outage never erases a published battlecard, and
+  agent unavailability never blocks the metric refresh.
+- A candidate whose fingerprint no longer matches is `stale` and cannot be
+  published.
+
+## Security boundaries
+
+- Airtable and Apify tokens live only in Vercel server environment variables
+  and GitHub Actions secrets; Vercel never receives the Apify token.
+- The model credential belongs to the agent harness and is required by neither
+  the web deployment nor the refresh workflow.
+- The browser calls only the application API, which never returns raw provider
+  responses wholesale.
+- Provider text, reviewer notes, and linked pages are untrusted data, never
+  instructions, and displayed external URLs are untrusted content.

@@ -12,15 +12,16 @@ agent interpretation traceable to evidence.
 
 Before changing interface code:
 
-1. Read `gtm-competitor-intelligence-design.md`, especially Sections 5, 6, 11,
-   12, 14, and 16, for data quality, product behavior, failure handling,
-   security, testing, and acceptance criteria.
-2. Read `gtm-competitor-intelligence-design-system.md`. Use its tokens,
+1. Read [references/product-behavior.md](references/product-behavior.md) for
+   what each screen must let a marketer decide and the evidence standard.
+2. Read `docs/gtm-competitor-intelligence-design-system.md`. Use its tokens,
    application shell, screen anatomy, component rules, chart rules, responsive
    behavior, content language, accessibility requirements, and required states
    as the authoritative interface contract.
 3. Load `competitor-data-contracts` before changing API response shapes,
-   dashboard types, value classification, fixtures, or field formatting.
+   dashboard types, value classification, fixtures, or field formatting. Its
+   data-quality rules decide what a screen may show, and the operating runbook's
+   failure guarantees decide what it shows when data is stale or partial.
 
 Read the full design-system document for a new screen or system-wide change. For
 a focused component change, read its foundations plus the matching component,

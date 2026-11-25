@@ -3,10 +3,24 @@
 ## Goal
 
 Build a reliable prototype that can be demonstrated in 90 minutes and safely
-extended afterward. Treat `gtm-competitor-intelligence-design.md` as the product
-specification. For dashboard and presentation work, treat
-`docs/gtm-competitor-intelligence-design-system.md` as the authoritative interface
-specification.
+extended afterward. It replaces part of an all-in-one competitive-intelligence
+subscription with a visible pipeline: an Apollo roster, Semrush data through
+Apify, Airtable as the editable serving layer, evidence-backed battlecards from
+a repository skill, and a dashboard on Vercel.
+
+Each topic has one source of truth. The repository skills below and their
+references hold the data, battlecard, and operating rules. For dashboard and
+presentation work, treat `docs/gtm-competitor-intelligence-design-system.md` as
+the authoritative interface specification.
+
+## Scope
+
+Version 1 has no authentication or multi-tenant workspaces, no Postgres, Redis,
+queue, persistent volume, separate API service, or object store, no client-side
+Airtable calls, no real-time refresh, no full-page crawling, and no composite
+competitor score whose weighting cannot be explained. Page-level evidence, SEO
+audits, page-content retrieval, and content briefs are Version 1.2 extension
+points.
 
 ## Working rules
 

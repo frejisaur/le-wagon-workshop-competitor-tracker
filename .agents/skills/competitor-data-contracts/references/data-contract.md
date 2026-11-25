@@ -28,6 +28,23 @@ observed sample contract rather than a guarantee of future provider behavior.
 9. Label provider figures as estimates with source, database, and timestamp.
 10. Keep observed, calculated, and inferred fields visibly separate.
 
+The supplied payload motivates these rules: 52 Domain Overview records with 32
+top-level fields and 297 scalar paths; 1-7 top-keyword rows per company
+(average 6.9); six organic competitor rows per company including the self-row;
+follow plus nofollow differs from total backlinks for 31 companies; 5,713 of
+6,136 AI-country rows have zero mentions; paid traffic for only five companies
+and 16 ad rows in total; and Moz `top_pages` arrays that appear to contain
+linking-domain records. Malformed nested modules are omitted from their UI
+module while valid top-level company data stays available.
+
+## Calculated fields
+
+Calculations are pure functions of stored observed values: 30-day and 12-month
+organic traffic movement, non-brand share, AI benchmark gap, tracked-set traffic
+share (only when the whole tracked set has validated coverage), a compact
+24-month trend, the landing-page portfolio grouped by normalized URL, normalized
+Moz values, and the paid-activity flag.
+
 ## Initial Apollo-to-Apify join
 
 The Apollo CSV is the roster and the Apify JSON is enrichment. Join Apollo
@@ -119,6 +136,19 @@ Rules:
 - Only the latest published battlecard and the latest candidate are kept.
   Battlecard history would need its own table.
 
+System holds the refresh run ID and workflow version, status, start, finish, last successful run,
+processed, succeeded, and failed counts, error summary, cache version, and the
+agent run's time, skill version, processed count, review count, and error
+summary. Refresh and agent fields are written by their own workflow only.
+
 With two rows per tracked company plus System, the base stays far below the
 Airtable Free-plan record limit. API calls, not records, are the budget to
 watch: batch reads and writes, and keep one write per refreshed company.
+
+## Raw-data retention
+
+The full Domain Overview response stays in the named Apify dataset; Airtable
+stores only the raw-record reference (`Observed • Raw Ref`). That dataset is
+the source for long historical series not copied into Airtable, debugging
+transforms, rebuilding Airtable after schema changes, and auditing battlecard
+claims.
