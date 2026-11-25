@@ -1,6 +1,7 @@
 import {readFileSync} from 'node:fs';
 import type {CuratedKeyword, CuratedPaidAd} from '@/lib/domain/metrics';
-import {toAirtableCompanyFields, toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields, toAirtableSystemFields} from './mappers';
+import {toCompanyFields} from './company-row';
+import {toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields, toAirtableSystemFields} from './mappers';
 import {type AirtableRecord, type CompanyPersistenceWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
 
 export type FixtureSnapshot = Partial<Record<'companies' | 'keywords' | 'paidAds' | 'insights' | 'reviews' | 'system', AirtableRecord[]>>;
@@ -53,7 +54,7 @@ export class FixtureCompetitorRepository implements CompetitorStore {
         continue;
       }
       const id = existing?.id ?? recordId('companies', company.companyId);
-      this.table('companies').set(id, {id, fields: clone(toAirtableCompanyFields(company))});
+      this.table('companies').set(id, {id, fields: clone(toCompanyFields(company))});
       results.push({identity: company.companyId, recordId: id});
     }
     return {succeeded: results.filter((item) => !item.error).length, failed: results.filter((item) => item.error).length, results};

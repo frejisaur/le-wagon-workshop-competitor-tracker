@@ -43,12 +43,18 @@ export type CompanyWrite = {
   nextInsightDueAt?: string;
   /** Explicit due timestamp for agent enrichment after observed evidence changes. */
   nextAgentEnrichmentDueAt?: string | null;
+  /** Complete keyword snapshot. Omitted when the organic module was not validated, which keeps the stored snapshot. */
+  keywords?: CuratedKeyword[];
+  /** Complete paid-ad snapshot. Omitted when the paid module was not validated, which keeps the stored snapshot. */
+  paidAds?: CuratedPaidAd[];
 };
 
 /** An accepted Apollo roster entry that has no validated Semrush observation. */
-export type UnenrichedCompanyWrite = Omit<CompanyWrite, 'observed' | 'calculated'> & {
+export type UnenrichedCompanyWrite = Omit<CompanyWrite, 'observed' | 'calculated' | 'keywords' | 'paidAds'> & {
   observed?: never;
   calculated?: never;
+  keywords?: never;
+  paidAds?: never;
 };
 export type CompanyPersistenceWrite = CompanyWrite | UnenrichedCompanyWrite;
 

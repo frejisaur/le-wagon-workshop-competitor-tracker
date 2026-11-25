@@ -1,6 +1,7 @@
 import type {CuratedKeyword, CuratedPaidAd} from '@/lib/domain/metrics';
 import {AirtableClient, AirtableClientError} from './client';
-import {toAirtableCompanyFields, toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields, toAirtableSystemFields} from './mappers';
+import {toCompanyFields} from './company-row';
+import {toAirtableInsightFields, toAirtableKeywordFields, toAirtablePaidAdFields, toAirtableReviewFields, toAirtableSystemFields} from './mappers';
 import {AIRTABLE_TABLES, type AirtableFields, type AirtableRecord, type AirtableTable, type AirtableTableMap, type CompanyPersistenceWrite, type CompetitorStore, type DashboardSnapshot, type DueInsightInput, type InsightWireInput, type RecordResult, type ReviewWireInput, type SystemWireInput, type WriteResult} from './types';
 
 const BATCH_SIZE = 10;
@@ -68,7 +69,7 @@ export class AirtableCompetitorRepository implements CompetitorStore {
           result.results.push({identity: company.companyId, error: 'identity_conflict'});
           continue;
         }
-        writes.push({identity: company.companyId, fields: toAirtableCompanyFields(company), recordId: existing?.id});
+        writes.push({identity: company.companyId, fields: toCompanyFields(company), recordId: existing?.id});
       } catch (error) {
         result.failed += 1;
         result.results.push({identity: company.companyId, error: errorMessage(error)});

@@ -3,7 +3,7 @@ import {resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {parseSemrushPayload} from '@/lib/schemas/semrush';
 import {transformSemrushCompany, type TransformSemrushContext} from '@/lib/transforms/semrush-to-domain';
-import {toAirtableCompanyFields} from '@/lib/airtable/mappers';
+import {toCompanyFields} from '@/lib/airtable/company-row';
 
 const fixtureDirectory = resolve(process.cwd(), 'tests/fixtures/providers');
 const semrushFixture = parseSemrushPayload(JSON.parse(readFileSync(resolve(fixtureDirectory, 'semrush-sample.json'), 'utf8'))).records;
@@ -211,7 +211,7 @@ describe('transformSemrushCompany', () => {
     record.paid!.competitors = [{...record.paid!.competitors[0]!, domain: 'paid-rival.example', ad_traffic: 71, paid_keywords: 17, organic_keywords: 999, common_keywords: 5}];
 
     const evidence = transformSemrushCompany(record, context);
-    const fields = toAirtableCompanyFields({...evidence.company, companyId: context.companyId, qualityIssues: evidence.qualityIssues});
+    const fields = toCompanyFields({...evidence.company, companyId: context.companyId, qualityIssues: evidence.qualityIssues});
     const paidCompetitor = JSON.parse(fields['Observed • Paid Competitors JSON'] as string)[0];
 
     expect(evidence.company.observed.paidCompetitors[0]).toMatchObject({paidTraffic: 71, paidKeywords: 17, organicKeywords: 999});

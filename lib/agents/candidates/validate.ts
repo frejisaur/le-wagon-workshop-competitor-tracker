@@ -1,6 +1,6 @@
 import {InsightCandidateSchema, type CandidateReviewReason, type Confidence, type InsightCandidate} from '@/lib/schemas/insight-candidate';
 import type {PreparedCompany} from '@/lib/agents/types';
-import {MAX_AIRTABLE_JSON_BYTES} from '@/lib/airtable/mappers';
+import {MAX_AIRTABLE_JSON_BYTES} from '@/lib/airtable/company-row';
 
 export type CandidateValidation =
   | {ok: false; error: 'malformed_candidate' | 'unresolved_evidence_reference'; reviewReasons: string[]}
