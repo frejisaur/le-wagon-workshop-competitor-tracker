@@ -1,6 +1,5 @@
 import {readFileSync, realpathSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
-import {estimateRecordBudget} from '@/lib/airtable/record-budget';
 
 const read = (path: string) => readFileSync(path, 'utf8');
 
@@ -24,8 +23,4 @@ describe('release contracts', () => {
     }
   });
 
-  it('keeps the supplied release estimate below the strict free-plan limit', () => {
-    expect(estimateRecordBudget({companies: 52, keywords: 358, paidAds: 16, insights: 52, reviews: 52, system: 1}))
-      .toEqual({total: 531, withinFreeLimit: true});
-  });
 });

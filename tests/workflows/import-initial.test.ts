@@ -96,26 +96,6 @@ describe('runInitialImport', () => {
     });
   });
 
-  it('preflights the strict record budget before performing any writes', async () => {
-    const repository = fixtureRepository();
-    const result = await runInitialImport({...fixtureOptions(repository), recordBudgetCounts: {companies: 995, keywords: 0, paidAds: 0, insights: 0, reviews: 0, system: 0}});
-
-    expect(result).toMatchObject({recordBudget: {total: 1_001, withinFreeLimit: false, failure: 'record_budget_exceeded'}, succeeded: 0, failed: 0});
-    expect((await repository.getDashboardSnapshot()).companies).toEqual([]);
-  });
-
-  it('conservatively includes two keyword-delete batches for eleven current records', async () => {
-    const noObsolete = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'import/existing-alpha-no-keywords.json'));
-    const withObsolete = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'import/eleven-obsolete-keywords.json'));
-
-    const baseline = await runInitialImport(fixtureOptions(noObsolete));
-    const estimated = await runInitialImport({...fixtureOptions(withObsolete), dryRun: false});
-
-    expect(baseline.recordBudget.estimatedWriteCalls).toBe(4);
-    expect(estimated.recordBudget.estimatedWriteCalls).toBe(6);
-    expect(estimated.recordBudget.estimatedWriteCalls - baseline.recordBudget.estimatedWriteCalls).toBe(2);
-  });
-
   it('skips dependent writes for a company whose company upsert fails while preserving successes', async () => {
     const repository = fixtureRepository();
     const failingRepository: CompetitorStore = {

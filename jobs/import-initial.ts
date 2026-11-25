@@ -114,10 +114,9 @@ export async function runInitialImportCli(arguments_: string[], dependencies: Cl
           return new AirtableCompetitorRepository(new AirtableClient({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT}));
         })();
     const report = await (dependencies.runInitialImport ?? runInitialImport)({apolloRows, semrushRecords, repository, dryRun: parsedArguments.dryRun});
-    // Partial imports are successful recoverable reports. A budget rejection or
-    // a run that could not persist any accepted company is unrecovered.
-    const unrecovered = !report.recordBudget.withinFreeLimit
-      || (report.accepted === 0 && report.rejected > 0)
+    // Partial imports are successful recoverable reports. A run that could not
+    // persist any accepted company is unrecovered.
+    const unrecovered = (report.accepted === 0 && report.rejected > 0)
       || (!parsedArguments.dryRun && report.accepted > 0 && report.succeeded === 0);
     return {exitCode: unrecovered ? 1 : 0, stdout: JSON.stringify(report)};
   } catch {

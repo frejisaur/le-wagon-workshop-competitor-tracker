@@ -1,21 +1,32 @@
 import {describe, expect, it} from 'vitest';
+import {COMPANY_ROW_FIELDS, toCompanyFields} from '@/lib/airtable/company-row';
+import {toAirtableSystemFields} from '@/lib/airtable/mappers';
 import {AIRTABLE_SCHEMA, ensureAirtableSchema} from '@/lib/airtable/schema';
 import {runAirtableSchemaCli} from '@/jobs/setup-airtable-schema';
 
 describe('Airtable schema bootstrap', () => {
-  it('defines the six serving tables with company links and typed evidence fields', () => {
-    expect(AIRTABLE_SCHEMA.map((table) => table.name)).toEqual([
-      'Companies', 'Keywords', 'Paid Ads', 'GTM Insights', 'Insight Reviews', 'System',
-    ]);
+  it('defines two serving tables with typed evidence fields and no link fields', () => {
+    expect(AIRTABLE_SCHEMA.map((table) => table.name)).toEqual(['Companies', 'System']);
 
-    const companies = AIRTABLE_SCHEMA[0];
+    const [companies, system] = AIRTABLE_SCHEMA;
     expect(companies.fields[0]).toEqual({name: 'Identity • Company ID', type: 'singleLineText'});
     expect(companies.fields).toContainEqual({name: 'Observed • Organic Traffic', type: 'number', options: {precision: 0}});
     expect(companies.fields).toContainEqual({name: 'Calculated • Paid Activity Present', type: 'checkbox', options: {color: 'greenBright', icon: 'check'}});
-
-    for (const table of AIRTABLE_SCHEMA.slice(1, 5)) {
-      expect(table.fields).toContainEqual({name: 'Identity • Company Link', type: 'multipleRecordLinks', linkedTable: 'Companies'});
+    for (const name of ['Observed • Keywords JSON', 'Observed • Paid Ads JSON', 'Inferred • Battlecard JSON', 'Review • Candidate JSON', 'Review • Notes']) {
+      expect(companies.fields).toContainEqual({name, type: 'multilineText'});
     }
+    expect(AIRTABLE_SCHEMA.flatMap((table) => table.fields).map((field) => field.type)).not.toContain('multipleRecordLinks');
+    for (const table of AIRTABLE_SCHEMA) expect(new Set(table.fields.map((field) => field.name)).size).toBe(table.fields.length);
+    expect(system.fields[0]).toEqual({name: 'Identity • System ID', type: 'singleLineText'});
+  });
+
+  it('declares every field the Companies and System codecs write', () => {
+    const declared = (index: number) => new Set(AIRTABLE_SCHEMA[index].fields.map((field) => field.name));
+    const companyFields = declared(0);
+    for (const name of Object.values(COMPANY_ROW_FIELDS)) expect(companyFields.has(name), name).toBe(true);
+    for (const name of Object.keys(toCompanyFields({companyId: 'company-alpha', identity: {canonicalDomain: 'alpha.example', apolloAccountId: '', apolloRecordId: ''}, qualityIssues: []}))) expect(companyFields.has(name), name).toBe(true);
+    const systemFields = declared(1);
+    for (const name of Object.keys(toAirtableSystemFields({systemId: 'system', status: 'succeeded', processedCompanies: 0, succeededCompanies: 0, failedCompanies: 0, lastSuccessfulRunAt: null}))) expect(systemFields.has(name), name).toBe(true);
   });
 
   it('creates only missing tables and fields without deleting or renaming existing schema', async () => {
@@ -45,7 +56,7 @@ describe('Airtable schema bootstrap', () => {
 
     const result = await ensureAirtableSchema({baseId: 'app-test', apiToken: 'secret', fetch});
 
-    expect(result.createdTables).toEqual(['Keywords', 'Paid Ads', 'GTM Insights', 'Insight Reviews', 'System']);
+    expect(result.createdTables).toEqual(['System']);
     expect(result.createdFields.Companies).toBeGreaterThan(1);
     expect(requests.some((request) => request.method === 'DELETE')).toBe(false);
     expect(requests.some((request) => request.method === 'PATCH')).toBe(false);
