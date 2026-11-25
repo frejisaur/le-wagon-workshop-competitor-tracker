@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market map first</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Tokens: copied verbatim from styles/tokens.css (design-system section 3). */
+:root {
+  color-scheme: light;
+  --color-canvas: #f3f6f7;
+  --color-surface: #fcfdfd;
+  --color-surface-raised: #ffffff;
+  --color-surface-subtle: #e9eef0;
+  --color-ink: #172126;
+  --color-text-secondary: #5d6b72;
+  --color-text-quiet: #77868d;
+  --color-rule: #d5dee1;
+  --color-rule-strong: #aab8be;
+  --color-accent: #245eb5;
+  --color-accent-subtle: #e8f0fb;
+  --color-positive: #2e7254;
+  --color-warning: #8a621b;
+  --color-negative: #a54640;
+  --color-neutral: #66767d;
+  --font-interface: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-data: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --type-page-size: 24px; --type-page-line: 30px;
+  --type-section-size: 16px; --type-section-line: 22px;
+  --type-panel-size: 13px; --type-panel-line: 18px;
+  --type-body-size: 14px; --type-body-line: 21px;
+  --type-compact-size: 12px; --type-compact-line: 18px;
+  --type-label-size: 11px; --type-label-line: 16px;
+  --type-data-large-size: 24px; --type-data-large-line: 28px;
+  --type-data-size: 12px; --type-data-line: 18px;
+  --type-metadata-size: 11px; --type-metadata-line: 16px;
+  --weight-regular: 400; --weight-medium: 500; --weight-semibold: 600;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px;
+  --radius-control: 4px; --radius-panel: 6px; --radius-tag: 999px;
+  --layer-sticky: 20; --layer-popover: 40;
+  --header-height: 48px; --sidebar-width: 192px;
+  --content-max-width: 1600px; --content-gutter: 24px; --content-gutter-wide: 32px;
+  --touch-target-min: 44px; --rule-width: 1px; --selection-edge-width: 2px;
+  --landscape-map-min-height: 320px; --landscape-table-max-height: 560px;
+  --motion-fast: 120ms; --motion-ease: ease;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; min-width: 320px; background: var(--color-canvas); color: var(--color-ink); font-family: var(--font-interface); font-size: var(--type-body-size); line-height: var(--type-body-line); -webkit-font-smoothing: antialiased; }
+h1, h2, h3, p, ol, ul, dl, dd { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+a { color: var(--color-accent); text-underline-offset: 2px; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.na { color: var(--color-text-secondary); font-family: var(--font-interface); font-size: var(--type-compact-size); }
+.skip { position: absolute; left: var(--space-4); top: -100px; z-index: 99; padding: var(--space-2) var(--space-3); background: var(--color-surface-raised); }
+.skip:focus { top: var(--space-2); }
+
+/* Mockup annotation band: deliberately outside the product shell. */
+.direction { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); padding: 10px var(--space-5); background: var(--color-ink); color: #dfe6e9; font-size: var(--type-compact-size); line-height: var(--type-compact-line); }
+.direction__id { font-family: var(--font-data); font-weight: 500; color: #fff; }
+.direction__concept { font-weight: 600; color: #fff; }
+.direction__k { color: #a9b7bd; margin-right: var(--space-1); }
+.direction__src { margin-left: auto; color: #a9b7bd; font-size: var(--type-metadata-size); }
+
+/* Application shell (design-system section 4). */
+.hdr { position: sticky; top: 0; z-index: var(--layer-sticky); display: flex; align-items: center; gap: var(--space-4); height: var(--header-height); padding: 0 var(--space-5) 0 var(--space-4); background: var(--color-surface-raised); border-bottom: var(--rule-width) solid var(--color-rule); }
+.hdr__mark { flex: none; width: calc(var(--sidebar-width) - var(--space-4)); color: var(--color-ink); font-size: var(--type-panel-size); font-weight: 600; text-decoration: none; }
+.hdr__crumb { min-width: 0; overflow: hidden; color: var(--color-text-secondary); font-size: var(--type-compact-size); white-space: nowrap; text-overflow: ellipsis; }
+.hdr__crumb a { color: var(--color-text-secondary); }
+.hdr__status { display: flex; align-items: center; gap: var(--space-3); margin-left: auto; }
+.hdr__time { color: var(--color-text-secondary); font-size: var(--type-metadata-size); }
+.status { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 var(--space-2); border: var(--rule-width) solid currentColor; border-radius: var(--radius-tag); font-size: var(--type-label-size); font-weight: 500; line-height: 1; white-space: nowrap; }
+.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.status--ok { color: var(--color-positive); }
+.status--warn { color: var(--color-warning); }
+.status--neutral { color: var(--color-text-secondary); }
+.body { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); min-height: calc(100vh - var(--header-height)); }
+.side { border-right: var(--rule-width) solid var(--color-rule); background: var(--color-surface); }
+.nav { position: sticky; top: var(--header-height); padding: var(--space-3) 0; }
+.nav__link { display: flex; align-items: center; min-height: 36px; padding: 0 var(--space-4); border-left: var(--selection-edge-width) solid transparent; color: var(--color-text-secondary); font-size: var(--type-panel-size); text-decoration: none; }
+.nav__link:hover { color: var(--color-ink); background: var(--color-canvas); }
+.nav__link[aria-current="page"] { border-left-color: var(--color-accent); background: var(--color-accent-subtle); color: var(--color-accent); font-weight: 500; }
+.content { width: 100%; max-width: var(--content-max-width); padding: var(--space-5) var(--content-gutter) var(--space-7); outline: none; }
+@media (min-width: 1440px) { .content { padding-left: var(--content-gutter-wide); padding-right: var(--content-gutter-wide); } }
+
+/* Page heading */
+.pagehead { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-3) var(--space-5); }
+.pagehead h1 { font-size: var(--type-page-size); line-height: var(--type-page-line); font-weight: 500; letter-spacing: -0.01em; }
+.pagehead p { margin-top: 2px; color: var(--color-text-secondary); font-size: var(--type-compact-size); line-height: var(--type-compact-line); }
+
+/* Classification tags: shape + text, never color alone. */
+.cls { display: inline-flex; align-items: center; gap: 5px; color: var(--color-text-secondary); font-family: var(--font-interface); font-size: var(--type-metadata-size); font-weight: 400; line-height: var(--type-metadata-line); letter-spacing: 0; text-transform: none; white-space: nowrap; vertical-align: middle; }
+.cls::before { content: ""; flex: none; width: 7px; height: 7px; }
+.cls--obs::before { background: var(--color-text-secondary); }
+.cls--calc::before { border: 1.5px solid var(--color-text-secondary); }
+.cls--inf { color: var(--color-accent); }
+.cls--inf::before { width: 6px; height: 6px; margin: 0 1px; background: var(--color-accent); transform: rotate(45deg); }
+.cls-legend > span { white-space: nowrap; }
+.cls-legend .cls { color: var(--color-ink); font-weight: 500; }
+.cls-legend .cls--inf { color: var(--color-accent); }
+.cls-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); color: var(--color-text-secondary); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+
+/* Filters (design-system 6.5) */
+.filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); }
+.field { display: grid; gap: var(--space-1); min-width: 0; }
+.field label { color: var(--color-text-secondary); font-size: var(--type-label-size); font-weight: 500; line-height: var(--type-label-line); }
+.field select, .field input { width: 100%; min-width: 168px; height: 40px; padding: 0 36px 0 var(--space-3); border: var(--rule-width) solid var(--color-rule); border-radius: var(--radius-control); background: var(--color-surface-raised); font-size: var(--type-compact-size); appearance: none; }
+.field input { padding-right: var(--space-3); min-width: 0; }
+.field select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235d6b72' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+.field select:hover, .field input:hover { border-color: var(--color-rule-strong); }
+.more { position: relative; }
+.more > summary { display: inline-flex; align-items: center; gap: var(--space-2); height: 40px; padding: 0 var(--space-3); border-radius: var(--radius-control); color: var(--color-accent); font-size: var(--type-compact-size); font-weight: 500; cursor: pointer; list-style: none; }
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary::after { content: ""; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+.more[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+.more > summary:hover { background: var(--color-accent-subtle); }
+.more__panel { position: absolute; z-index: var(--layer-popover); top: calc(100% + var(--space-1)); left: 0; display: grid; grid-template-columns: repeat(2, minmax(140px, 1fr)); gap: var(--space-3); width: 360px; padding: var(--space-4); border: var(--rule-width) solid var(--color-rule); border-radius: var(--radius-panel); background: var(--color-surface-raised); box-shadow: 0 8px 24px rgba(23, 33, 38, 0.12); }
+.more__panel .field:nth-last-child(2), .more__panel .btn { grid-column: 1 / -1; }
+.btn { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 var(--space-4); border: var(--rule-width) solid transparent; border-radius: var(--radius-control); font-size: var(--type-compact-size); font-weight: 500; cursor: pointer; }
+.btn--secondary { background: var(--color-surface-raised); border-color: var(--color-ink); color: var(--color-ink); }
+
+/* Modules: rule-topped surfaces, no shadows (design-system 3.4). */
+.module { min-width: 0; border-top: var(--rule-width) solid var(--color-rule-strong); background: var(--color-surface); padding: var(--space-4); }
+.module__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+.module__head h2 { font-size: var(--type-section-size); line-height: var(--type-section-line); font-weight: 600; }
+.module__head p { color: var(--color-text-secondary); font-size: var(--type-compact-size); line-height: var(--type-compact-line); }
+.module__aside { color: var(--color-text-secondary); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+
+/* KPI ledger (design-system 6.1): one continuous region, internal rules. */
+.kpi { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: var(--rule-width) solid var(--color-rule); border-bottom: var(--rule-width) solid var(--color-rule); background: var(--color-surface); }
+.kpi__item { display: flex; flex-direction: column; min-width: 0; padding: var(--space-4); }
+.kpi__item + .kpi__item { border-left: var(--rule-width) solid var(--color-rule); }
+.kpi__label { color: var(--color-text-secondary); font-size: var(--type-label-size); font-weight: 500; line-height: var(--type-label-line); }
+.kpi__value { margin-top: var(--space-1); font-size: var(--type-data-large-size); font-weight: 500; line-height: var(--type-data-large-line); }
+.kpi__meta { display: flex; flex-wrap: wrap; gap: 2px var(--space-3); margin-top: var(--space-2); }
+.kpi__cov { color: var(--color-text-secondary); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+
+/* Leaderboard (design-system 6.4) */
+.table-wrap { max-height: var(--landscape-table-max-height); margin-top: var(--space-3); overflow: auto; border-top: var(--rule-width) solid var(--color-rule); }
+.table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--type-compact-size); line-height: var(--type-compact-line); }
+.table thead th { position: sticky; top: 0; z-index: 1; padding: var(--space-2) var(--space-3); border-bottom: var(--rule-width) solid var(--color-rule-strong); background: var(--color-surface); color: var(--color-ink); font-size: var(--type-label-size); font-weight: 600; line-height: var(--type-label-line); text-align: left; vertical-align: bottom; white-space: nowrap; }
+.table th.t-num, .table td.t-num { text-align: right; }
+.th-meta { display: block; margin-top: 2px; color: var(--color-text-secondary); font-weight: 400; }
+.table thead th.t-num .th-meta { display: flex; justify-content: flex-end; }
+.sort { display: inline-flex; align-items: center; gap: var(--space-1); padding: 0; border: 0; background: none; font-weight: 600; cursor: pointer; }
+.sort:hover { color: var(--color-accent); }
+.sort--active { color: var(--color-accent); }
+.sort__icon { font-family: var(--font-data); }
+.table tbody th, .table tbody td { height: 48px; padding: var(--space-2) var(--space-3); border-bottom: var(--rule-width) solid var(--color-rule); text-align: left; font-weight: 400; white-space: nowrap; }
+.table tbody tr:hover > * { background: var(--color-canvas); }
+.table tbody tr.is-selected > * { background: var(--color-accent-subtle); }
+.table tbody tr.is-selected > :first-child { box-shadow: inset var(--selection-edge-width) 0 0 var(--color-accent); }
+.t-company a { color: var(--color-ink); font-weight: 600; text-decoration: none; }
+.t-company a:hover { color: var(--color-accent); text-decoration: underline; }
+.domain { display: block; color: var(--color-text-secondary); font-family: var(--font-data); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+.mv { white-space: nowrap; }
+.mv span[aria-hidden] { font-size: 9px; vertical-align: 1px; }
+.mv--up { color: var(--color-positive); }
+.mv--down { color: var(--color-negative); }
+.mv--flat { color: var(--color-neutral); font-family: var(--font-interface); }
+.fresh { color: var(--color-text-secondary); font-size: var(--type-metadata-size); border-bottom: 1px dotted var(--color-rule-strong); cursor: help; }
+.fresh[data-stale="true"] { color: var(--color-warning); }
+
+/* Mobile company rows (design-system 9.2) */
+.mobile-list { margin-top: var(--space-3); border-top: var(--rule-width) solid var(--color-rule); }
+.mrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-3); padding: var(--space-3) 0; border-bottom: var(--rule-width) solid var(--color-rule); }
+.mrow.is-selected { margin: 0 calc(var(--space-3) * -1); padding-left: var(--space-3); padding-right: var(--space-3); background: var(--color-accent-subtle); box-shadow: inset var(--selection-edge-width) 0 0 var(--color-accent); }
+.mrow__id a { color: var(--color-ink); font-weight: 600; text-decoration: none; }
+.mrow__fresh { text-align: right; }
+.mrow__pairs { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-4); }
+.mrow__pairs dt { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-2); color: var(--color-text-secondary); font-size: var(--type-label-size); line-height: var(--type-label-line); }
+.mrow__pairs dt .cls { font-size: 10px; }
+.mrow__pairs dd { margin-top: 2px; font-size: var(--type-compact-size); line-height: var(--type-compact-line); }
+.mrow__more { grid-column: 1 / -1; }
+.mrow__more > summary { display: inline-flex; align-items: center; min-height: var(--touch-target-min); color: var(--color-accent); font-size: var(--type-compact-size); font-weight: 500; cursor: pointer; }
+.mrow__more .mrow__pairs { padding-bottom: var(--space-2); }
+
+.mobile-key { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1) var(--space-4); margin-top: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); background: var(--color-surface-subtle); }
+.mobile-key > div { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+.mobile-key dt { color: var(--color-ink); font-size: var(--type-label-size); line-height: var(--type-label-line); }
+.mobile-key + .mobile-list { margin-top: var(--space-2); }
+.mrow__more summary + .mrow__pairs dt .cls { font-size: 10px; }
+
+/* Market map (design-system 6.2) */
+.map { --map-h: 360px; }
+.map__legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); margin-top: var(--space-3); color: var(--color-text-secondary); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+.map__legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.map__legend .cls { margin-left: 2px; }
+.lg { display: inline-block; flex: none; border-radius: 50%; }
+.lg--size { width: 12px; height: 12px; border: 1.5px solid var(--color-text-secondary); background: var(--color-surface-raised); }
+.lg--ai { width: 12px; height: 12px; background: var(--color-accent); }
+.lg--sel { width: 14px; height: 14px; border: 1.5px solid var(--color-text-secondary); box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 3.5px var(--color-ink); transform: scale(0.8); }
+.map__frame { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; margin-top: var(--space-4); }
+.map__axis { color: var(--color-text-secondary); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+.map__axis--y { grid-row: 1; grid-column: 1; writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; margin-right: 40px; }
+.map__axis--y .cls { writing-mode: horizontal-tb; transform: rotate(90deg); margin: 6px 0; }
+.map__axis--x { grid-row: 2; grid-column: 2; padding-top: 26px; text-align: center; }
+.map__plot { position: relative; grid-row: 1; grid-column: 2; height: var(--map-h); min-height: 240px; border-left: var(--rule-width) solid var(--color-rule-strong); border-bottom: var(--rule-width) solid var(--color-rule-strong); background: var(--color-surface-raised); }
+.gl { position: absolute; pointer-events: none; }
+.gl--x { top: 0; bottom: 0; width: 0; border-left: var(--rule-width) dashed var(--color-rule); }
+.gl--y { left: 0; right: 0; height: 0; border-top: var(--rule-width) dashed var(--color-rule); }
+.gl > span { position: absolute; color: var(--color-text-secondary); font-family: var(--font-data); font-size: var(--type-metadata-size); line-height: 1; white-space: nowrap; }
+.gl--x > span { bottom: -18px; transform: translateX(-50%); }
+.gl--y > span { right: calc(100% + 8px); transform: translateY(-50%); }
+.pt { position: absolute; display: grid; place-items: center; width: max(var(--s), 28px); height: max(var(--s), 28px); padding: 0; border: 0; border-radius: 50%; background: none; transform: translate(-50%, -50%); cursor: pointer; }
+.pt__dot { width: var(--s); height: var(--s); border: 1.5px solid var(--color-text-secondary); border-radius: 50%; background: rgba(255, 255, 255, 0.85); transition: transform var(--motion-fast) var(--motion-ease); }
+.pt[data-ai="true"] .pt__dot { border-color: var(--color-accent); background: rgba(36, 94, 181, 0.78); }
+.pt[data-selected="true"] .pt__dot { box-shadow: 0 0 0 2px var(--color-surface-raised), 0 0 0 4px var(--color-ink); }
+.pt:hover .pt__dot { transform: scale(1.08); }
+.pt__label { position: absolute; top: 50%; color: var(--color-ink); font-size: var(--type-metadata-size); font-weight: 500; line-height: 1; white-space: nowrap; transform: translateY(-50%); pointer-events: none; }
+.pt__label--right { left: calc(50% + var(--s) / 2 + 6px); }
+.pt__label--left { right: calc(50% + var(--s) / 2 + 6px); }
+.pt[data-selected="true"] .pt__label { font-weight: 600; }
+.map__note { margin-top: var(--space-3); color: var(--color-text-secondary); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+
+/* Attention signals (design-system 6.3) */
+.signals { margin-top: var(--space-3); }
+.sig { border-top: var(--rule-width) solid var(--color-rule); }
+.sig > a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-1) var(--space-3); min-height: 56px; padding: var(--space-3) 0; color: var(--color-ink); text-decoration: none; }
+.sig > a:hover .sig__co { color: var(--color-accent); }
+.sig__rank { align-self: start; padding-top: 1px; color: var(--color-text-secondary); font-size: var(--type-metadata-size); }
+.sig__body { display: grid; min-width: 0; }
+.sig__co { font-size: var(--type-panel-size); font-weight: 600; line-height: var(--type-panel-line); }
+.sig__reason { color: var(--color-text-secondary); font-size: var(--type-compact-size); line-height: var(--type-compact-line); }
+.sig__val { display: grid; justify-items: end; gap: 2px; }
+.sig__val data { font-size: var(--type-data-size); font-weight: 500; line-height: var(--type-data-line); }
+.sig__meta { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--color-text-secondary); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+.sig__ctx { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-3); margin-top: var(--space-1); color: var(--color-text-secondary); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+.sig__action { grid-column: 2 / -1; color: var(--color-accent); font-size: var(--type-compact-size); font-weight: 500; }
+
+.desktop-only { display: block; }
+.mobile-only { display: none; }
+
+@media (max-width: 1279px) {
+  .table .wide { display: none; }
+}
+@media (max-width: 767px) {
+  .direction { padding: 8px var(--space-4); }
+  .direction__src { margin-left: 0; }
+  .hdr { gap: var(--space-3); padding: 0 var(--space-4); }
+  .hdr__mark { width: auto; }
+  .hdr__crumb, .hdr__time { display: none; }
+  .body { display: block; }
+  .side { display: none; }
+  .content { padding: var(--space-4) var(--space-4) var(--space-6); }
+  .pagehead h1 { font-size: 20px; line-height: 26px; }
+  .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .field select { min-width: 0; }
+  .filters .field:first-child { grid-column: 1 / -1; }
+  .more > summary { min-height: var(--touch-target-min); height: auto; }
+  .more__panel { position: static; width: auto; margin-top: var(--space-2); grid-template-columns: 1fr 1fr; box-shadow: none; }
+  .filters .more { grid-column: 1 / -1; }
+  .kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi__item { padding: var(--space-3); }
+  .kpi__item + .kpi__item { border-left: 0; }
+  .kpi__item:nth-child(even) { border-left: var(--rule-width) solid var(--color-rule); }
+  .kpi__item:nth-child(n + 3) { border-top: var(--rule-width) solid var(--color-rule); }
+  .kpi__item:first-child { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
+  .kpi__item:first-child .kpi__value { order: -1; margin-top: 0; }
+  .kpi__item:first-child .kpi__meta { margin-top: 0; margin-left: auto; }
+  .kpi__item:first-child + .kpi__item { border-top: var(--rule-width) solid var(--color-rule); }
+  .kpi__item:nth-child(even) { border-left: 0; }
+  .kpi__item:nth-child(odd):not(:first-child) { border-left: var(--rule-width) solid var(--color-rule); }
+  .kpi__value { font-size: 20px; line-height: 24px; }
+  .module { padding: var(--space-3); }
+  .desktop-only { display: none; }
+  .mobile-only { display: block; }
+  .mobile-key.mobile-only { display: grid; }
+  .map { --map-h: 260px; }
+  .map__axis--y { margin-right: 36px; }
+  .signals.snap { display: grid; grid-auto-flow: column; grid-auto-columns: 88%; gap: var(--space-3); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: thin; }
+  .signals.snap .sig { scroll-snap-align: start; border: var(--rule-width) solid var(--color-rule); border-radius: var(--radius-panel); padding: 0 var(--space-3); background: var(--color-surface-raised); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+
+.b-top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin-top: var(--space-5); }
+.b-strip .kpi__item { padding: var(--space-3) var(--space-4); }
+.b-strip .kpi__value { margin-top: 2px; font-size: var(--type-section-size); line-height: var(--type-section-line); }
+.b-strip .kpi__meta { margin-top: 2px; }
+.b-strip { margin-top: var(--space-4); }
+.b-hero { margin-top: var(--space-5); border-top: 2px solid var(--color-ink); padding: var(--space-4) var(--space-5) var(--space-5); }
+.b-hero__grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-6); }
+.b-hero .map { --map-h: 460px; }
+.b-hero .module__head h2 { font-size: 20px; line-height: 26px; font-weight: 500; }
+.b-inspect { align-self: start; margin-top: var(--space-3); border-left: var(--rule-width) solid var(--color-rule); padding-left: var(--space-5); }
+.b-inspect__k { color: var(--color-text-secondary); font-size: var(--type-label-size); font-weight: 500; }
+.b-inspect h3 { margin-top: var(--space-2); font-size: 20px; line-height: 26px; font-weight: 600; }
+.b-inspect .domain { margin-top: 2px; }
+.b-inspect__where { margin-top: var(--space-1); color: var(--color-text-secondary); font-size: var(--type-compact-size); }
+.b-inspect dl { margin-top: var(--space-4); border-top: var(--rule-width) solid var(--color-rule); }
+.b-inspect dl > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 2px var(--space-3); padding: var(--space-2) 0; border-bottom: var(--rule-width) solid var(--color-rule); }
+.b-inspect dt { font-size: var(--type-compact-size); }
+.b-inspect dt .cls { display: flex; margin-top: 2px; }
+.b-inspect dd { font-family: var(--font-data); font-size: var(--type-section-size); font-variant-numeric: tabular-nums; text-align: right; }
+.b-inspect__sub { margin-top: var(--space-4); font-size: var(--type-panel-size); font-weight: 600; }
+.b-inspect__sigs { margin-top: var(--space-2); display: grid; gap: var(--space-2); }
+.b-inspect__sigs li { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--type-compact-size); }
+.b-inspect__src { margin-top: var(--space-4); color: var(--color-text-secondary); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+.b-inspect .btn { width: 100%; margin-top: var(--space-4); background: var(--color-accent); color: #fff; text-decoration: none; }
+.b-inspect .btn:hover { background: #1d4f99; }
+.b-inspect__hint { margin-top: var(--space-2); color: var(--color-text-secondary); font-size: var(--type-metadata-size); line-height: var(--type-metadata-line); }
+.b-signals { margin-top: var(--space-5); }
+.b-signals .signals { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: var(--rule-width) solid var(--color-rule); }
+.b-signals .sig { border-top: 0; }
+.b-signals .sig + .sig { border-left: var(--rule-width) solid var(--color-rule); }
+.b-signals .sig > a { grid-template-columns: auto minmax(0, 1fr); align-items: start; padding: var(--space-3) var(--space-4); }
+.b-signals .sig__val { grid-column: 2; justify-items: start; }
+.b-lb { margin-top: var(--space-5); }
+@media (max-width: 1279px) {
+  .b-hero__grid { grid-template-columns: 1fr; gap: var(--space-4); }
+  .b-inspect { border-left: 0; padding-left: 0; }
+  .b-signals .signals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+  .b-top { margin-top: var(--space-4); }
+  .b-hero { padding: var(--space-3); }
+  .b-hero .map { --map-h: 300px; }
+  .b-hero .module__head h2 { font-size: var(--type-section-size); line-height: var(--type-section-line); }
+  .b-signals .signals { display: grid; grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 100%; border-top: 0; }
+  .b-signals .sig + .sig { border-left: var(--rule-width) solid var(--color-rule); }
+  .b-strip .kpi__item { padding: var(--space-3); }
+}
+
+</style>
+</head>
+<body>
+<div class="direction" role="note" aria-label="Mockup annotation">
+  <span class="direction__id">B</span>
+  <span class="direction__concept">Market map first</span>
+  <span class="direction__decision"><span class="direction__k">Optimizes for</span> Where does each competitor sit, and who is moving toward our position?</span>
+  <span class="direction__src">Static mockup, fixture-shaped data</span>
+</div>
+<a class="skip" href="#main">Skip to main content</a>
+<header class="hdr">
+  <a class="hdr__mark" href="#">Competitor intelligence</a>
+  <span class="hdr__crumb">Competitive landscape</span>
+  <span class="hdr__status"><span class="status status--ok" title="Last successful refresh: 2026-08-18 12:00 UTC">Data current</span><span class="hdr__time num">2026-08-18 12:00 UTC</span></span>
+</header>
+<div class="body">
+  <aside class="side"><nav aria-label="Primary"><ul class="nav"><li><a href="#" class="nav__link" aria-current="page">All companies</a></li><li><a href="#" class="nav__link">Saved views</a></li><li><a href="#" class="nav__link">Insight reviews</a></li><li><a href="#" class="nav__link">Evidence sources</a></li><li><a href="#" class="nav__link">Refresh status</a></li></ul></nav></aside>
+  <main id="main" class="content" tabindex="-1">
+
+<header class="pagehead"><div><h1>Competitive landscape</h1><p aria-live="polite">8 companies across the selected market</p></div><p class="cls-legend" aria-label="Value classification legend"><span><span class="cls cls--obs">Observed</span> provider value</span><span><span class="cls cls--calc">Calculated</span> deterministic calculation</span><span><span class="cls cls--inf">Inferred</span> agent interpretation</span></p></header>
+<div class="b-top">
+<section class="filters " aria-label="Landscape filters">
+  <div class="field"><label for="f-country">Country</label><select id="f-country"><option>All countries</option><option>Canada</option><option>United States</option><option>Not available</option></select></div>
+  <div class="field"><label for="f-paid">Paid activity</label><select id="f-paid"><option>All activity</option><option>Active</option><option>Inactive</option><option>Not available</option></select></div>
+  <div class="field"><label for="f-ai">AI performance</label><select id="f-ai"><option>All performance</option><option>Outperforming</option><option>Not outperforming</option><option>Not available</option></select></div>
+  <details class="more"><summary>More filters</summary>
+    <div class="more__panel">
+      <div class="field"><label for="f-tmin">Traffic minimum</label><input id="f-tmin" inputmode="numeric"></div>
+      <div class="field"><label for="f-tmax">Traffic maximum</label><input id="f-tmax" inputmode="numeric"></div>
+      <div class="field"><label for="f-amin">Authority minimum</label><input id="f-amin" inputmode="numeric"></div>
+      <div class="field"><label for="f-amax">Authority maximum</label><input id="f-amax" inputmode="numeric"></div>
+      <div class="field"><label for="f-seg">Apollo segment</label><select id="f-seg"><option>All segments</option><option>Enterprise</option><option>Mid-market</option><option>Not available</option></select></div>
+      <button type="button" class="btn btn--secondary">Apply numeric filters</button>
+    </div>
+  </details>
+</section></div>
+<div class="b-strip"><ul class="kpi " aria-label="Key metrics"><li class="kpi__item"><span class="kpi__label">Companies tracked</span><strong class="kpi__value num">8</strong><span class="kpi__meta"><span class="cls cls--calc">Calculated</span></span></li><li class="kpi__item"><span class="kpi__label">Combined organic traffic</span><strong class="kpi__value num">88,000</strong><span class="kpi__meta"><span class="cls cls--calc">Calculated</span><span class="kpi__cov">7 of 8 reporting</span></span></li><li class="kpi__item"><span class="kpi__label">Organic keyword footprint</span><strong class="kpi__value num">6,640</strong><span class="kpi__meta"><span class="cls cls--calc">Calculated</span><span class="kpi__cov">7 of 8 reporting</span></span></li><li class="kpi__item"><span class="kpi__label">Growing companies</span><strong class="kpi__value num">4</strong><span class="kpi__meta"><span class="cls cls--calc">Calculated</span><span class="kpi__cov">7 of 8 reporting</span></span></li><li class="kpi__item"><span class="kpi__label">Paid active</span><strong class="kpi__value num">4</strong><span class="kpi__meta"><span class="cls cls--calc">Calculated</span><span class="kpi__cov">7 of 8 reporting</span></span></li></ul></div>
+<section class="module b-hero" aria-labelledby="map-h">
+  <div class="module__head"><div><h2 id="map-h">Where each competitor sits</h2><p>Authority score by estimated organic traffic. Upper right holds the strongest organic positions.</p></div></div>
+  <div class="b-hero__grid">
+    
+<div class="map " style="--map-h:460px">
+  <div class="map__legend" aria-label="Market map legend">
+    <span><i class="lg lg--size" aria-hidden="true"></i>Point size: tracked-set traffic share <span class="cls cls--calc">Calculated</span></span>
+    <span><i class="lg lg--ai" aria-hidden="true"></i>Blue fill: AI benchmark outperformance <span class="cls cls--calc">Calculated</span></span>
+    <span><i class="lg lg--sel" aria-hidden="true"></i>Outer ring: selected company</span>
+    <span>Axes: Semrush CA <span class="cls cls--obs">Observed</span></span>
+  </div>
+  <div class="map__frame" role="group" aria-label="Market map: authority score on the horizontal axis and organic traffic on the logarithmic vertical axis">
+    <p class="map__axis map__axis--y">Est. organic traffic, log scale</p>
+    <div class="map__plot"><span class="gl gl--x" style="left:7.0%" aria-hidden="true"><span>24</span></span><span class="gl gl--y" style="top:93.0%" aria-hidden="true"><span>1.7K</span></span><span class="gl gl--x" style="left:28.5%" aria-hidden="true"><span>36</span></span><span class="gl gl--y" style="top:71.5%" aria-hidden="true"><span>3.6K</span></span><span class="gl gl--x" style="left:50.0%" aria-hidden="true"><span>48</span></span><span class="gl gl--y" style="top:50.0%" aria-hidden="true"><span>7.7K</span></span><span class="gl gl--x" style="left:71.5%" aria-hidden="true"><span>59</span></span><span class="gl gl--y" style="top:28.5%" aria-hidden="true"><span>16K</span></span><span class="gl gl--x" style="left:93.0%" aria-hidden="true"><span>71</span></span><span class="gl gl--y" style="top:7.0%" aria-hidden="true"><span>35K</span></span><button type="button" class="pt" data-ai="true" data-selected="false" style="left:93.0%;top:7.0%;--s:32.0px" aria-pressed="false" aria-label="Foxtrot, authority 71, traffic 34,800, tracked share 39.5%, AI benchmark gap +3%"><span class="pt__dot" aria-hidden="true"></span><span class="pt__label pt__label--left" aria-hidden="true">Foxtrot</span></button><button type="button" class="pt" data-ai="false" data-selected="false" style="left:69.21%;top:20.85%;--s:27.7px" aria-pressed="false" aria-label="Delta, authority 58, traffic 21,400, tracked share 24.3%, AI benchmark gap −4%"><span class="pt__dot" aria-hidden="true"></span><span class="pt__label pt__label--right" aria-hidden="true">Delta</span></button><button type="button" class="pt" data-ai="true" data-selected="true" style="left:39.94%;top:37.33%;--s:23.7px" aria-pressed="true" aria-label="Alpha, authority 42, traffic 12,000, tracked share 13.6%, AI benchmark gap +20%"><span class="pt__dot" aria-hidden="true"></span><span class="pt__label pt__label--right" aria-hidden="true">Alpha</span></button><button type="button" class="pt" data-ai="false" data-selected="false" style="left:82.02%;top:48.88%;--s:21.6px" aria-pressed="false" aria-label="Bravo, authority 65, traffic 8,000, tracked share 9.1%, AI benchmark gap −10%"><span class="pt__dot" aria-hidden="true"></span><span class="pt__label pt__label--left" aria-hidden="true">Bravo</span></button><button type="button" class="pt" data-ai="false" data-selected="false" style="left:49.09%;top:56.14%;--s:20.4px" aria-pressed="false" aria-label="Hotel, authority 47, traffic 6,200, tracked share 7%, AI benchmark gap −15%"><span class="pt__dot" aria-hidden="true"></span><span class="pt__label pt__label--right" aria-hidden="true">Hotel</span></button><button type="button" class="pt" data-ai="true" data-selected="false" style="left:19.81%;top:69.35%;--s:18.7px" aria-pressed="false" aria-label="Echo, authority 31, traffic 3,900, tracked share 4.4%, AI benchmark gap +12%"><span class="pt__dot" aria-hidden="true"></span><span class="pt__label pt__label--right" aria-hidden="true">Echo</span></button><button type="button" class="pt" data-ai="false" data-selected="false" style="left:7.0%;top:93.0%;--s:16.4px" aria-pressed="false" aria-label="Golf, authority 24, traffic 1,700, tracked share 1.9%, AI benchmark gap not available"><span class="pt__dot" aria-hidden="true"></span><span class="pt__label pt__label--right" aria-hidden="true">Golf</span></button></div>
+    <p class="map__axis map__axis--x">Authority score</p>
+  </div>
+  <p class="map__note">1 company has unavailable axis values and is excluded from the logarithmic map. <a href="#">View chart data (7 companies)</a></p>
+</div>
+    
+<aside class="b-inspect" aria-labelledby="insp-h">
+  <p class="b-inspect__k">Selected company</p>
+  <h3 id="insp-h">Alpha</h3>
+  <span class="domain">alpha.example</span>
+  <p class="b-inspect__where">Canada, Enterprise</p>
+  <dl>
+    <div><dt>Authority score <span class="cls cls--obs">Observed</span></dt><dd>42</dd></div>
+    <div><dt>Est. organic traffic <span class="cls cls--obs">Observed</span></dt><dd>12,000</dd></div>
+    <div><dt>Tracked-set traffic share <span class="cls cls--calc">Calculated</span></dt><dd>13.6%</dd></div>
+    <div><dt>AI benchmark gap <span class="cls cls--calc">Calculated</span></dt><dd>+20%</dd></div>
+  </dl>
+  <p class="b-inspect__sub">Signals for Alpha</p>
+  <ul class="b-inspect__sigs"><li><span>Outperforming the AI benchmark</span><span class="num">+20%</span></li><li><span>Organic traffic growing</span><span class="num">+15%</span></li></ul>
+  <p class="b-inspect__src">Source: Semrush, database CA. Last successful refresh: <span class="num">2026-08-18 12:00 UTC</span></p>
+  <a class="btn" href="company-detail.html">Open Alpha</a>
+  <p class="b-inspect__hint">Arrow keys move between companies in leaderboard order.</p>
+</aside>
+  </div>
+</section>
+<section class="module b-signals" aria-labelledby="sig-h">
+  <div class="module__head"><div><h2 id="sig-h">Attention signals</h2><p>Ranked investigation prompts</p></div></div>
+  <ol class="signals snap">
+    <li class="sig"><a href="company-detail.html">
+      <span class="sig__rank num" aria-hidden="true">01</span>
+      <span class="sig__body"><strong class="sig__co">Alpha</strong><span class="sig__reason">Outperforming the AI benchmark</span></span>
+      <span class="sig__val"><data class="num" value="0.2">+20%</data><span class="sig__meta">Current <span class="cls cls--calc">Calculated</span></span></span>
+      
+    </a></li>
+    <li class="sig"><a href="company-detail.html">
+      <span class="sig__rank num" aria-hidden="true">02</span>
+      <span class="sig__body"><strong class="sig__co">Echo</strong><span class="sig__reason">Outperforming the AI benchmark</span></span>
+      <span class="sig__val"><data class="num" value="0.12">+12%</data><span class="sig__meta">Current <span class="cls cls--calc">Calculated</span></span></span>
+      
+    </a></li>
+    <li class="sig"><a href="company-detail.html">
+      <span class="sig__rank num" aria-hidden="true">03</span>
+      <span class="sig__body"><strong class="sig__co">Foxtrot</strong><span class="sig__reason">Outperforming the AI benchmark</span></span>
+      <span class="sig__val"><data class="num" value="0.03">+3%</data><span class="sig__meta">Current <span class="cls cls--calc">Calculated</span></span></span>
+      
+    </a></li>
+    <li class="sig"><a href="company-detail.html">
+      <span class="sig__rank num" aria-hidden="true">04</span>
+      <span class="sig__body"><strong class="sig__co">Echo</strong><span class="sig__reason">Organic traffic growing</span></span>
+      <span class="sig__val"><data class="num" value="0.225">+22.5%</data><span class="sig__meta">30 days <span class="cls cls--calc">Calculated</span></span></span>
+      
+    </a></li>
+    <li class="sig"><a href="company-detail.html">
+      <span class="sig__rank num" aria-hidden="true">05</span>
+      <span class="sig__body"><strong class="sig__co">Alpha</strong><span class="sig__reason">Organic traffic growing</span></span>
+      <span class="sig__val"><data class="num" value="0.15">+15%</data><span class="sig__meta">30 days <span class="cls cls--calc">Calculated</span></span></span>
+      
+    </a></li></ol>
+</section>
+<div class="b-lb">
+<section class="module leaderboard" aria-labelledby="lb-h">
+  <div class="module__head"><div><h2 id="lb-h">Company leaderboard</h2><p>Rows and map points share one selection</p></div></div>
+  <div class="table-wrap desktop-only"><table class="table">
+    <thead><tr><th scope="col" class="t-company-h">Company<span class="th-meta">8 companies</span></th><th scope="col" class="t-num " aria-sort="none"><button type="button" class="sort">Authority</button><span class="th-meta"><span class="cls cls--obs">Observed</span></span></th><th scope="col" class="t-num " aria-sort="descending"><button type="button" class="sort sort--active">Est. organic traffic<span aria-hidden="true" class="sort__icon">&#8595;</span></button><span class="th-meta"><span class="cls cls--obs">Observed</span></span></th><th scope="col" class="t-num " aria-sort="none"><button type="button" class="sort">30-day change</button><span class="th-meta"><span class="cls cls--calc">Calculated</span></span></th><th scope="col" class="t-num wide" aria-sort="none"><button type="button" class="sort">Non-brand share</button><span class="th-meta"><span class="cls cls--calc">Calculated</span></span></th><th scope="col" class="wide" aria-sort="none"><button type="button" class="sort">Paid activity</button><span class="th-meta"><span class="cls cls--calc">Calculated</span></span></th><th scope="col" class="t-num " aria-sort="none"><button type="button" class="sort">AI benchmark gap</button><span class="th-meta"><span class="cls cls--calc">Calculated</span></span></th><th scope="col">Freshness<span class="th-meta">Last refresh</span></th></tr></thead>
+    <tbody><tr><th scope="row" class="t-company"><a href="company-detail.html">Foxtrot</a><span class="domain">foxtrot.example</span></th><td class="t-num "><span class="num">71</span></td><td class="t-num "><span class="num">34,800</span></td><td class="t-num "><span class="mv mv--down num"><span aria-hidden="true">&#9660;</span> 6.4%<span class="vh"> decrease</span></span></td><td class="t-num wide"><span class="num">44%</span></td><td class="wide">Active</td><td class="t-num "><span class="num">+3%</span></td><td><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></td></tr><tr><th scope="row" class="t-company"><a href="company-detail.html">Delta</a><span class="domain">delta.example</span></th><td class="t-num "><span class="num">58</span></td><td class="t-num "><span class="num">21,400</span></td><td class="t-num "><span class="mv mv--up num"><span aria-hidden="true">&#9650;</span> 8.2%<span class="vh"> increase</span></span></td><td class="t-num wide"><span class="num">62%</span></td><td class="wide">Active</td><td class="t-num "><span class="num">−4%</span></td><td><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></td></tr><tr aria-selected="true" class="is-selected"><th scope="row" class="t-company"><a href="company-detail.html">Alpha</a><span class="domain">alpha.example</span></th><td class="t-num "><span class="num">42</span></td><td class="t-num "><span class="num">12,000</span></td><td class="t-num "><span class="mv mv--up num"><span aria-hidden="true">&#9650;</span> 15%<span class="vh"> increase</span></span></td><td class="t-num wide"><span class="num">70%</span></td><td class="wide">Active</td><td class="t-num "><span class="num">+20%</span></td><td><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></td></tr><tr><th scope="row" class="t-company"><a href="company-detail.html">Bravo</a><span class="domain">bravo.example</span></th><td class="t-num "><span class="num">65</span></td><td class="t-num "><span class="num">8,000</span></td><td class="t-num "><span class="mv mv--down num"><span aria-hidden="true">&#9660;</span> 3%<span class="vh"> decrease</span></span></td><td class="t-num wide"><span class="num">30%</span></td><td class="wide">Inactive</td><td class="t-num "><span class="num">−10%</span></td><td><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></td></tr><tr><th scope="row" class="t-company"><a href="company-detail.html">Hotel</a><span class="domain">hotel.example</span></th><td class="t-num "><span class="num">47</span></td><td class="t-num "><span class="num">6,200</span></td><td class="t-num "><span class="mv mv--up num"><span aria-hidden="true">&#9650;</span> 4.1%<span class="vh"> increase</span></span></td><td class="t-num wide"><span class="num">38%</span></td><td class="wide">Active</td><td class="t-num "><span class="num">−15%</span></td><td><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></td></tr><tr><th scope="row" class="t-company"><a href="company-detail.html">Echo</a><span class="domain">echo.example</span></th><td class="t-num "><span class="num">31</span></td><td class="t-num "><span class="num">3,900</span></td><td class="t-num "><span class="mv mv--up num"><span aria-hidden="true">&#9650;</span> 22.5%<span class="vh"> increase</span></span></td><td class="t-num wide"><span class="num">81%</span></td><td class="wide">Inactive</td><td class="t-num "><span class="num">+12%</span></td><td><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></td></tr><tr><th scope="row" class="t-company"><a href="company-detail.html">Golf</a><span class="domain">golf.example</span></th><td class="t-num "><span class="num">24</span></td><td class="t-num "><span class="num">1,700</span></td><td class="t-num "><span class="mv mv--flat num">No change</span></td><td class="t-num wide"><span class="num">55%</span></td><td class="wide">Inactive</td><td class="t-num "><span class="na">Not available</span></td><td><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></td></tr><tr><th scope="row" class="t-company"><a href="company-detail.html">Charlie</a><span class="domain">charlie.example</span></th><td class="t-num "><span class="na">Not available</span></td><td class="t-num "><span class="na">Not available</span></td><td class="t-num "><span class="na">Not available</span></td><td class="t-num wide"><span class="na">Not available</span></td><td class="wide"><span class="na">Not available</span></td><td class="t-num "><span class="na">Not available</span></td><td><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></td></tr></tbody>
+  </table></div>
+  <dl class="mobile-key mobile-only" aria-label="Value classifications"><div><dt>Organic traffic</dt><dd><span class="cls cls--obs">Observed</span></dd></div><div><dt>30-day change</dt><dd><span class="cls cls--calc">Calculated</span></dd></div><div><dt>Authority</dt><dd><span class="cls cls--obs">Observed</span></dd></div><div><dt>AI benchmark gap</dt><dd><span class="cls cls--calc">Calculated</span></dd></div></dl><ul class="mobile-list mobile-only" aria-label="Companies">
+    <li class="mrow">
+      <div class="mrow__id"><a href="company-detail.html">Foxtrot</a><span class="domain">foxtrot.example</span></div>
+      <div class="mrow__fresh"><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></div>
+      <dl class="mrow__pairs">
+        <div><dt>Organic traffic</dt><dd><span class="num">34,800</span></dd></div>
+        <div><dt>30-day change</dt><dd><span class="mv mv--down num"><span aria-hidden="true">&#9660;</span> 6.4%<span class="vh"> decrease</span></span></dd></div>
+        <div><dt>Authority</dt><dd><span class="num">71</span></dd></div>
+        <div><dt>AI benchmark gap</dt><dd><span class="num">+3%</span></dd></div>
+      </dl>
+      <details class="mrow__more"><summary>More values</summary><dl class="mrow__pairs"><div><dt>Non-brand share <span class="cls cls--calc">Calculated</span></dt><dd><span class="num">44%</span></dd></div><div><dt>Keywords <span class="cls cls--obs">Observed</span></dt><dd><span class="num">2,310</span></dd></div><div><dt>Paid activity <span class="cls cls--calc">Calculated</span></dt><dd>Active</dd></div><div><dt>Referring domains <span class="cls cls--obs">Observed</span></dt><dd><span class="num">2,050</span></dd></div></dl></details>
+    </li>
+    <li class="mrow">
+      <div class="mrow__id"><a href="company-detail.html">Delta</a><span class="domain">delta.example</span></div>
+      <div class="mrow__fresh"><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></div>
+      <dl class="mrow__pairs">
+        <div><dt>Organic traffic</dt><dd><span class="num">21,400</span></dd></div>
+        <div><dt>30-day change</dt><dd><span class="mv mv--up num"><span aria-hidden="true">&#9650;</span> 8.2%<span class="vh"> increase</span></span></dd></div>
+        <div><dt>Authority</dt><dd><span class="num">58</span></dd></div>
+        <div><dt>AI benchmark gap</dt><dd><span class="num">−4%</span></dd></div>
+      </dl>
+      <details class="mrow__more"><summary>More values</summary><dl class="mrow__pairs"><div><dt>Non-brand share <span class="cls cls--calc">Calculated</span></dt><dd><span class="num">62%</span></dd></div><div><dt>Keywords <span class="cls cls--obs">Observed</span></dt><dd><span class="num">1,640</span></dd></div><div><dt>Paid activity <span class="cls cls--calc">Calculated</span></dt><dd>Active</dd></div><div><dt>Referring domains <span class="cls cls--obs">Observed</span></dt><dd><span class="num">1,120</span></dd></div></dl></details>
+    </li>
+    <li class="mrow is-selected">
+      <div class="mrow__id"><a href="company-detail.html">Alpha</a><span class="domain">alpha.example</span></div>
+      <div class="mrow__fresh"><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></div>
+      <dl class="mrow__pairs">
+        <div><dt>Organic traffic</dt><dd><span class="num">12,000</span></dd></div>
+        <div><dt>30-day change</dt><dd><span class="mv mv--up num"><span aria-hidden="true">&#9650;</span> 15%<span class="vh"> increase</span></span></dd></div>
+        <div><dt>Authority</dt><dd><span class="num">42</span></dd></div>
+        <div><dt>AI benchmark gap</dt><dd><span class="num">+20%</span></dd></div>
+      </dl>
+      <details class="mrow__more"><summary>More values</summary><dl class="mrow__pairs"><div><dt>Non-brand share <span class="cls cls--calc">Calculated</span></dt><dd><span class="num">70%</span></dd></div><div><dt>Keywords <span class="cls cls--obs">Observed</span></dt><dd><span class="num">900</span></dd></div><div><dt>Paid activity <span class="cls cls--calc">Calculated</span></dt><dd>Active</dd></div><div><dt>Referring domains <span class="cls cls--obs">Observed</span></dt><dd><span class="num">450</span></dd></div></dl></details>
+    </li>
+    <li class="mrow">
+      <div class="mrow__id"><a href="company-detail.html">Bravo</a><span class="domain">bravo.example</span></div>
+      <div class="mrow__fresh"><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></div>
+      <dl class="mrow__pairs">
+        <div><dt>Organic traffic</dt><dd><span class="num">8,000</span></dd></div>
+        <div><dt>30-day change</dt><dd><span class="mv mv--down num"><span aria-hidden="true">&#9660;</span> 3%<span class="vh"> decrease</span></span></dd></div>
+        <div><dt>Authority</dt><dd><span class="num">65</span></dd></div>
+        <div><dt>AI benchmark gap</dt><dd><span class="num">−10%</span></dd></div>
+      </dl>
+      <details class="mrow__more"><summary>More values</summary><dl class="mrow__pairs"><div><dt>Non-brand share <span class="cls cls--calc">Calculated</span></dt><dd><span class="num">30%</span></dd></div><div><dt>Keywords <span class="cls cls--obs">Observed</span></dt><dd><span class="num">500</span></dd></div><div><dt>Paid activity <span class="cls cls--calc">Calculated</span></dt><dd>Inactive</dd></div><div><dt>Referring domains <span class="cls cls--obs">Observed</span></dt><dd><span class="num">750</span></dd></div></dl></details>
+    </li>
+    <li class="mrow">
+      <div class="mrow__id"><a href="company-detail.html">Hotel</a><span class="domain">hotel.example</span></div>
+      <div class="mrow__fresh"><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></div>
+      <dl class="mrow__pairs">
+        <div><dt>Organic traffic</dt><dd><span class="num">6,200</span></dd></div>
+        <div><dt>30-day change</dt><dd><span class="mv mv--up num"><span aria-hidden="true">&#9650;</span> 4.1%<span class="vh"> increase</span></span></dd></div>
+        <div><dt>Authority</dt><dd><span class="num">47</span></dd></div>
+        <div><dt>AI benchmark gap</dt><dd><span class="num">−15%</span></dd></div>
+      </dl>
+      <details class="mrow__more"><summary>More values</summary><dl class="mrow__pairs"><div><dt>Non-brand share <span class="cls cls--calc">Calculated</span></dt><dd><span class="num">38%</span></dd></div><div><dt>Keywords <span class="cls cls--obs">Observed</span></dt><dd><span class="num">720</span></dd></div><div><dt>Paid activity <span class="cls cls--calc">Calculated</span></dt><dd>Active</dd></div><div><dt>Referring domains <span class="cls cls--obs">Observed</span></dt><dd><span class="num">520</span></dd></div></dl></details>
+    </li>
+    <li class="mrow">
+      <div class="mrow__id"><a href="company-detail.html">Echo</a><span class="domain">echo.example</span></div>
+      <div class="mrow__fresh"><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></div>
+      <dl class="mrow__pairs">
+        <div><dt>Organic traffic</dt><dd><span class="num">3,900</span></dd></div>
+        <div><dt>30-day change</dt><dd><span class="mv mv--up num"><span aria-hidden="true">&#9650;</span> 22.5%<span class="vh"> increase</span></span></dd></div>
+        <div><dt>Authority</dt><dd><span class="num">31</span></dd></div>
+        <div><dt>AI benchmark gap</dt><dd><span class="num">+12%</span></dd></div>
+      </dl>
+      <details class="mrow__more"><summary>More values</summary><dl class="mrow__pairs"><div><dt>Non-brand share <span class="cls cls--calc">Calculated</span></dt><dd><span class="num">81%</span></dd></div><div><dt>Keywords <span class="cls cls--obs">Observed</span></dt><dd><span class="num">410</span></dd></div><div><dt>Paid activity <span class="cls cls--calc">Calculated</span></dt><dd>Inactive</dd></div><div><dt>Referring domains <span class="cls cls--obs">Observed</span></dt><dd><span class="num">190</span></dd></div></dl></details>
+    </li>
+    <li class="mrow">
+      <div class="mrow__id"><a href="company-detail.html">Golf</a><span class="domain">golf.example</span></div>
+      <div class="mrow__fresh"><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></div>
+      <dl class="mrow__pairs">
+        <div><dt>Organic traffic</dt><dd><span class="num">1,700</span></dd></div>
+        <div><dt>30-day change</dt><dd><span class="mv mv--flat num">No change</span></dd></div>
+        <div><dt>Authority</dt><dd><span class="num">24</span></dd></div>
+        <div><dt>AI benchmark gap</dt><dd><span class="na">Not available</span></dd></div>
+      </dl>
+      <details class="mrow__more"><summary>More values</summary><dl class="mrow__pairs"><div><dt>Non-brand share <span class="cls cls--calc">Calculated</span></dt><dd><span class="num">55%</span></dd></div><div><dt>Keywords <span class="cls cls--obs">Observed</span></dt><dd><span class="num">160</span></dd></div><div><dt>Paid activity <span class="cls cls--calc">Calculated</span></dt><dd>Inactive</dd></div><div><dt>Referring domains <span class="cls cls--obs">Observed</span></dt><dd><span class="num">95</span></dd></div></dl></details>
+    </li>
+    <li class="mrow">
+      <div class="mrow__id"><a href="company-detail.html">Charlie</a><span class="domain">charlie.example</span></div>
+      <div class="mrow__fresh"><span class="fresh" title="Last successful refresh: 2026-08-18 12:00 UTC" tabindex="0">Data current</span></div>
+      <dl class="mrow__pairs">
+        <div><dt>Organic traffic</dt><dd><span class="na">Not available</span></dd></div>
+        <div><dt>30-day change</dt><dd><span class="na">Not available</span></dd></div>
+        <div><dt>Authority</dt><dd><span class="na">Not available</span></dd></div>
+        <div><dt>AI benchmark gap</dt><dd><span class="na">Not available</span></dd></div>
+      </dl>
+      <details class="mrow__more"><summary>More values</summary><dl class="mrow__pairs"><div><dt>Non-brand share <span class="cls cls--calc">Calculated</span></dt><dd><span class="na">Not available</span></dd></div><div><dt>Keywords <span class="cls cls--obs">Observed</span></dt><dd><span class="na">Not available</span></dd></div><div><dt>Paid activity <span class="cls cls--calc">Calculated</span></dt><dd><span class="na">Not available</span></dd></div><div><dt>Referring domains <span class="cls cls--obs">Observed</span></dt><dd><span class="na">Not available</span></dd></div></dl></details>
+    </li></ul>
+</section></div>
+
+  </main>
+</div>
+</body>
+</html>
