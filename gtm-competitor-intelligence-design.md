@@ -38,7 +38,7 @@ By the end of the session, attendees should have:
 - Generate one evidence-backed GTM battlecard per company.
 - Deploy the web application to Vercel and run the deterministic scraper-enrichment command from a GitHub Actions refresh workflow.
 - Refresh all scraper-derived company, keyword, and paid-ad fields weekly through the GitHub Actions refresh.
-- Generate or refresh semantic GTM insights on an independent schedule configured in the user's agent harness, such as Claude Code or Codex.
+- Generate or refresh semantic GTM insights on an independent schedule configured in the user's agent harness, such as Claude Code.
 - Route low-confidence agent output to an Airtable review queue without replacing the last published insight.
 - Show freshness and job status in the application.
 
@@ -357,7 +357,7 @@ Command: `npm run enrich` in `.github/workflows/refresh.yml`.
 
 ### 9.3 Agent-harness enrichment
 
-The user may schedule semantic enrichment in Claude Code, Codex, or another harness capable of invoking repository skills and commands. The repository does not depend on a harness-specific scheduler API.
+The user may schedule semantic enrichment in Claude Code or another harness capable of invoking repository skills and commands. The repository does not depend on a harness-specific scheduler API.
 
 The initial versioned runtime skill is
 `.agents/skills/generating-gtm-battlecards/SKILL.md`. It defines:
@@ -501,11 +501,6 @@ CLAUDE.md
     operating-competitor-intelligence/
       SKILL.md
       references/
-.codex/
-  agents/
-    pipeline-builder.toml
-    dashboard-builder.toml
-    evidence-reviewer.toml
 .claude/
   agents/
     pipeline-builder.md
@@ -549,7 +544,7 @@ Each unit has one responsibility and communicates through validated domain types
 
 ### 13.1 Agent and skill architecture
 
-The main Claude Code or Codex session orchestrates focused build-time agents;
+The main Claude Code session orchestrates focused build-time agents;
 the application has no autonomous multi-agent runtime. `AGENTS.md` and
 `CLAUDE.md` hold short project-wide rules. Canonical skills live in
 `.agents/skills/`, with `.claude/skills/` symlinks avoiding duplicated content.
@@ -587,7 +582,7 @@ neither production secrets nor unattended deployment authority.
 - Contract-test the skill against representative high-confidence, low-confidence, conflicting-evidence, and malformed-output cases.
 - Validate every skill's metadata, trigger description, required references, and command names.
 - Contract-test each skill with representative invocation and non-invocation prompts.
-- Validate Codex and Claude Code agent definitions and verify that matching role names preserve the same responsibility boundaries.
+- Validate the Claude Code agent definitions and their responsibility boundaries.
 - Test that the evidence reviewer remains read-only and reports file-backed findings without modifying the workspace.
 - Test automatic publication gates and every Insight Review status transition.
 - Test that approval promotes a current candidate, preserves the previous published insight until promotion, and rejects a stale candidate.
@@ -631,7 +626,7 @@ Version 1 is complete when:
 11. An approved current candidate can be promoted with `npm run insights:publish-approved`; a stale candidate cannot be published.
 12. Replaying refresh or agent work is idempotent, and partial failures preserve successful updates and the last successful dashboard cache.
 13. The deployed prototype can be demonstrated from a fresh browser session.
-14. Claude Code and Codex can discover the repository guidance, invoke the three canonical skills, and use equivalent focused agent roles without changing application code.
+14. Claude Code can discover the repository guidance, invoke the canonical skills, and use the focused agent roles without changing application code.
 15. The workshop can demonstrate the fixture fallback, one skill-driven workflow, and one read-only evidence review without depending on live external-service timing.
 
 ## 17. External references
@@ -642,8 +637,5 @@ Version 1 is complete when:
 - Apify storage retention: <https://docs.apify.com/storage>
 - GitHub Actions scheduled workflows: <https://docs.github.com/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule>
 - Vercel Next.js deployments: <https://vercel.com/docs/frameworks/nextjs>
-- Codex project instructions: <https://developers.openai.com/codex/guides/agents-md>
-- Codex skills: <https://developers.openai.com/codex/skills>
-- Codex custom agents: <https://developers.openai.com/codex/multi-agent>
 - Claude Code skills: <https://code.claude.com/docs/en/skills>
 - Claude Code subagents: <https://code.claude.com/docs/en/sub-agents>

@@ -11,12 +11,11 @@ describe('release contracts', () => {
     const docs = [
       read('.agents/skills/operating-competitor-intelligence/SKILL.md'),
       read('.agents/skills/operating-competitor-intelligence/references/runbook.md'),
-      read('docs/operations/deployment.md'), read('docs/operations/workshop-runbook.md'), read('README.md'),
+      read('docs/operations/deployment.md'), read('README.md'),
     ].join('\n');
     for (const skill of ['competitor-data-contracts', 'building-competitor-dashboard', 'generating-gtm-battlecards', 'operating-competitor-intelligence']) {
       expect(discovery).toContain(skill);
       expect(read(`.agents/skills/${skill}/SKILL.md`)).toContain('---');
-      expect(read(`.agents/skills/${skill}/agents/openai.yaml`)).toMatch(/display_name:/);
       expect(realpathSync(`.claude/skills/${skill}`)).toBe(realpathSync(`.agents/skills/${skill}`));
     }
     for (const name of ['enrich', 'insights:prepare', 'insights:submit', 'insights:publish-approved']) {

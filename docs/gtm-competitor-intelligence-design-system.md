@@ -480,4 +480,4 @@ The local visual-companion session established these decisions:
 - Selected company-detail hierarchy: Battlecard as a workspace tab.
 - Rejected alternative: Evidence as a permanently open right rail.
 
-The generated browser mockups are exploratory references under `.superpowers/brainstorm/`. This document is the authoritative implementation source.
+This document is the authoritative implementation source. The workshop mockups in `workshop/design/` follow it.

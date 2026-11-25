@@ -1,33 +1,31 @@
 # Competitor Intelligence
 
-A fixture-first competitor research prototype with evidence-backed battlecards and explicit publication gates. Node.js 22 is required.
+A competitor-intelligence dashboard for a marketing team, built live with Claude Code in the [90-minute workshop](workshop/README.md). Every claim links back to evidence, and the data refreshes on a schedule. Node.js 22 is required.
 
 ## Local start
 
 ```sh
 npm ci
+npm test
 npm run dev
 ```
 
-Use only sanitized fixtures for development. See [workshop rehearsal](docs/operations/workshop-runbook.md) for `npm run enrich`, `npm run insights:prepare`, `npm run insights:submit`, and `npm run insights:publish-approved`; see [Vercel + GitHub Actions deployment](docs/operations/deployment.md) for the operator-only release procedure.
+Development runs against sanitized fixtures; no credentials are needed. Never commit `.env` files or expose server variables to browser code.
 
-Run the release checks with `npm test`, `npm run build`, `npm run test:e2e`, and the schema drift command documented in the operations guide. Never commit `.env` files or expose server variables to browser code.
+## Commands
 
-## Deploy your own tracker
+| Command | What it does |
+|-|-|
+| `npm run airtable:schema` | Creates the missing Airtable tables and fields (approval required) |
+| `npm run import:initial -- --apollo <csv> --semrush <json> [--dry-run]` | Joins an Apollo CSV with an Apify Semrush export and imports it |
+| `npm run enrich` | Refreshes Semrush metrics through Apify (`--provider-fixture` and `--fixture-state` run it offline) |
+| `npm run insights:prepare` | Builds the evidence package for battlecard generation |
+| `npm run insights:submit` | Validates an agent-written battlecard and publishes or queues it for review |
+| `npm run insights:publish-approved` | Publishes reviewed battlecards |
+| `npm run refresh:dispatch` | Triggers the refresh workflow and waits for its result (used by a Claude routine) |
 
-Paste this prompt into a coding agent with repository access, an authenticated Vercel CLI (`vercel login`), and an authenticated GitHub CLI (`gh auth login`). The Vercel MCP in `.mcp.json` is optional for inspecting deployments and logs:
+Release checks: `npm test`, `npx tsc --noEmit`, `npm run build`, `npm run test:e2e`, `node scripts/verify-semrush-schema-reference.mjs`.
 
-```text
-Follow docs/operations/onboarding.md to deploy my own competitor tracker. Ask
-me for one input at a time, never print or repeat secret values, and stop at
-every approval gate. If I do not have an Apify Semrush export, request my list
-of website domains, keep that list in a user-only OS temporary file, validate it
-against the Apollo roster, bootstrap with --apollo-only and --domains, prepare
-the runbook's local signed cache callback, and then run the repository's Apify
-enrichment job. Use the Vercel CLI for the web deployment and its environment,
-the GitHub CLI for the refresh workflow's secrets and variables, and the Vercel
-MCP only to inspect deployments and logs. Finish with the runbook's verification
-handoff.
-```
+## Deploy
 
-See the detailed [onboarding guide](docs/operations/onboarding.md) and the existing [operator deployment contract](docs/operations/deployment.md).
+Vercel serves the app and GitHub Actions runs CI and the weekly refresh. See the [deployment contract](docs/operations/deployment.md).

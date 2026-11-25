@@ -1,21 +1,21 @@
 import {readFileSync} from 'node:fs';
 import {describe, expect, it} from 'vitest';
 
-const role = (harness: 'claude' | 'codex', name: string) => readFileSync(`.${harness}/agents/${name}.${harness === 'claude' ? 'md' : 'toml'}`, 'utf8');
+const definition = (name: string) => readFileSync(`.claude/agents/${name}.md`, 'utf8');
 
-describe('focused-agent parity', () => {
-  it.each(['pipeline-builder', 'dashboard-builder', 'evidence-reviewer'])('%s exists in both harnesses with the same boundary', (name) => {
-    const claude = role('claude', name);
-    const codex = role('codex', name);
-    expect(claude).toContain(name);
-    expect(codex).toContain(name);
-    if (name === 'pipeline-builder') for (const definition of [claude, codex]) for (const term of ['competitor-data-contracts', 'raw provider', 'sanitized fixture']) expect(definition.toLowerCase()).toContain(term);
-    if (name === 'dashboard-builder') for (const definition of [claude, codex]) for (const term of ['building-competitor-dashboard', 'validated domain types', 'deployment configuration']) expect(definition.toLowerCase()).toContain(term);
-    if (name === 'evidence-reviewer') {
-      expect(claude).toMatch(/read-only|without editing/i);
-      expect(codex).toMatch(/read-only|without editing/i);
-      expect(claude).toMatch(/secret exposure/i);
-      expect(codex).toMatch(/secret exposure/i);
-    }
+describe('focused agent boundaries', () => {
+  it.each([
+    ['pipeline-builder', ['competitor-data-contracts', 'raw provider', 'sanitized fixture']],
+    ['dashboard-builder', ['building-competitor-dashboard', 'validated domain types', 'deployment configuration']],
+  ])('%s names its skill and boundary', (name, terms) => {
+    const text = definition(name).toLowerCase();
+    expect(text).toContain(name);
+    for (const term of terms) expect(text).toContain(term);
+  });
+
+  it('keeps the evidence reviewer read-only and watching for secret exposure', () => {
+    const text = definition('evidence-reviewer');
+    expect(text).toMatch(/read-only|without editing/i);
+    expect(text).toMatch(/secret exposure/i);
   });
 });
