@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "airtable": {"type": "http", "url": "https://mcp.airtable.com/mcp"},
+    "apify": {"type": "http", "url": "https://mcp.apify.com"},
+    "vercel": {"type": "http", "url": "https://mcp.vercel.com"}
+  }
+}

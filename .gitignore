@@ -19,3 +19,6 @@ next-env.d.ts
 # Local source exports may contain unsanitized provider data.
 data/apollo/*.csv
 data/apify/*.json
+
+# Vercel CLI project link
+.vercel

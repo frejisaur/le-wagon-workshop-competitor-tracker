@@ -1,0 +1,15 @@
+# `vercel deploy` uploads the local directory; never upload credentials or unsanitized provider exports.
+.env
+.env.*
+!.env.example
+data/apollo/*.csv
+data/apify/*.json
+.next
+node_modules
+playwright-report
+test-results
+dogfood-output
+.superpowers
+.worktrees
+*.log
+task-*-report.md

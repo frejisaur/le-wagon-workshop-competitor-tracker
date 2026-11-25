@@ -110,8 +110,8 @@ export type SystemWireInput = {
   failedCompanies: number;
   errorSummary?: string | null;
   cacheVersion?: string | null;
-  railwayWorkflowVersion?: string | null;
-  railwayRunId?: string | null;
+  refreshWorkflowVersion?: string | null;
+  refreshRunId?: string | null;
   lastAgentRunAt?: string | null;
   agentSkillVersion?: string | null;
   agentProcessedCompanies?: number | null;

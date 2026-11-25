@@ -1,6 +1,6 @@
 # Workshop rehearsal and recovery
 
-All default rehearsal commands below use sanitized local fixtures and make no Airtable, Apify, or Railway request. Run them from the repository root.
+All default rehearsal commands below use sanitized local fixtures and make no Airtable, Apify, Vercel, or GitHub Actions request. Run them from the repository root.
 
 ## Fixture import and refresh
 
@@ -21,7 +21,7 @@ Use a new output path for every command so retries are recoverable.
 - Promote an approved current review: `npm run insights:publish-approved -- --fixture-state tests/fixtures/insights/approved-current-state.json --fixture-output-state /tmp/approved-state.json`. Expect one publication.
 - Refuse an approved stale review: `npm run insights:publish-approved -- --fixture-state tests/fixtures/insights/approved-stale-state.json --fixture-output-state /tmp/stale-state.json`. Expect one stale result and no replacement publication.
 
-Then run `npm run dev -- --webpack`, open All Companies, navigate to Company Detail, open Battlecard, follow a claim to Evidence, return to the originating claim, and confirm freshness plus independent refresh and agent run IDs.
+Then run `npm run dev`, open All Companies, navigate to Company Detail, open Battlecard, follow a claim to Evidence, return to the originating claim, and confirm freshness plus independent refresh and agent run IDs.
 
 ## Optional live demonstration
 

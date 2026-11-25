@@ -7,8 +7,8 @@
     "node": "22.x"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -16,9 +16,12 @@
     "airtable:schema": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/setup-airtable-schema.ts",
     "import:initial": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/import-initial.ts",
     "enrich": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/enrich.ts",
+    "refresh:report": "node --import tsx jobs/publish-refresh-report.ts",
+    "refresh:dispatch": "node --import tsx jobs/dispatch-refresh.ts",
     "insights:prepare": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/prepare-insights.ts",
     "insights:submit": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/submit-insight.ts",
-    "insights:publish-approved": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/publish-approved-insights.ts"
+    "insights:publish-approved": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/publish-approved-insights.ts",
+    "workshop:guide": "node --import tsx scripts/build-workshop-guide.ts"
   },
   "dependencies": {
     "@carbon/charts": "^1.27.18",

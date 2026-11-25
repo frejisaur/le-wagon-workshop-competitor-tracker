@@ -193,8 +193,8 @@ function terminalSystem(runId: string, status: EnrichmentStatus, report: Pick<En
     succeededCompanies: report.succeeded,
     failedCompanies: report.failed,
     errorSummary: report.errors.length ? report.errors.map((error) => error.code).sort().join(',').slice(0, 300) : null,
-    railwayWorkflowVersion: '1.0.0',
-    railwayRunId: runId,
+    refreshWorkflowVersion: '1.0.0',
+    refreshRunId: runId,
   };
 }
 
@@ -245,7 +245,7 @@ function indexedRecords(items: unknown[], expected: Map<string, ActiveCompany>, 
   return records;
 }
 
-/** Deterministic Railway metric refresh. It never invokes or changes the agent workflow. */
+/** Deterministic scheduled metric refresh. It never invokes or changes the agent workflow. */
 export async function runEnrichment(options: EnrichmentOptions): Promise<EnrichmentReport> {
   const batchSize = validPositiveInteger(options.batchSize, 10, 'batchSize', MAX_BATCH_SIZE);
   const maxAttempts = validPositiveInteger(options.maxAttempts, 2, 'maxAttempts', MAX_ATTEMPTS);
@@ -253,7 +253,7 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
   const retryDelayMs = options.retryDelayMs ?? 250;
   if (!Number.isInteger(retryDelayMs) || retryDelayMs < 0 || retryDelayMs > MAX_RETRY_DELAY_MS) throw new TypeError(`retryDelayMs must be an integer from 0 to ${MAX_RETRY_DELAY_MS}`);
   const now = options.now ?? (() => new Date());
-  const runId = options.runIdFactory?.() ?? `railway-${randomUUID()}`;
+  const runId = options.runIdFactory?.() ?? `refresh-${randomUUID()}`;
   const report: EnrichmentReport = {runId, status: 'failed', processed: 0, succeeded: 0, failed: 0, cacheInvalidated: false, errors: []};
   const controller = new AbortController();
   const forwardAbort = () => controller.abort(options.signal?.reason);
@@ -278,7 +278,7 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
     report.processed = companies.length + roster.failures.length;
     const running = await options.repository.updateSystem({
       systemId: SYSTEM_ID, lastRunStartedAt: iso(now), status: 'running', processedCompanies: companies.length,
-      succeededCompanies: 0, failedCompanies: 0, errorSummary: null, railwayWorkflowVersion: '1.0.0', railwayRunId: runId,
+      succeededCompanies: 0, failedCompanies: 0, errorSummary: null, refreshWorkflowVersion: '1.0.0', refreshRunId: runId,
     });
     if (running.failed > 0) throw new Error('system_start_failed');
 

@@ -1,6 +1,6 @@
 ---
 name: operating-competitor-intelligence
-description: Use when running or diagnosing competitor refreshes, checking data freshness or workflow status, handling partial failures, processing approved reviews, validating Railway deployment behavior, or recovering the 90-minute workshop through fixtures and prepared candidates.
+description: Use when running or diagnosing competitor refreshes, checking data freshness or workflow status, handling partial failures, processing approved reviews, validating Vercel deployment or GitHub Actions refresh behavior, or recovering the 90-minute workshop through fixtures and prepared candidates.
 ---
 
 # Operating Competitor Intelligence
@@ -14,7 +14,7 @@ data or insight when an external dependency fails.
    `package.json` scripts. Do not claim an operation is available when its
    repository command has not been implemented.
 2. Identify the requested control plane:
-   - Railway metric refresh
+   - GitHub Actions metric refresh
    - Agent-harness insight enrichment
    - Review promotion
    - Web/cache health

@@ -14,8 +14,14 @@ function repository() {
   return new AirtableCompetitorRepository(new AirtableClient({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT}));
 }
 
+/**
+ * Serverless hosts run many short-lived instances and a signed invalidation reaches only one of them.
+ * Every other instance converges on the refreshed Airtable data within this bound.
+ */
+const SNAPSHOT_MAX_AGE_MS = 60_000;
+
 async function loadSnapshot(): Promise<DashboardSnapshot> { return repository().getDashboardSnapshot(); }
-const dashboardService = new DashboardService(loadSnapshot);
+const dashboardService = new DashboardService(loadSnapshot, {maxAgeMs: SNAPSHOT_MAX_AGE_MS});
 export function getDashboardCache(): DashboardCache<DashboardSnapshot> { return dashboardService.getCache(); }
 
 export async function getLandscapeResponse(): Promise<LandscapeResponse> {

@@ -85,7 +85,7 @@ export async function runEnrichCli(arguments_: string[]): Promise<EnrichCliResul
         clearTimeout(timeout);
       }
     }
-    // Partial refreshes retain successful writes but must still make Railway
+    // Partial refreshes retain successful writes but must still make the scheduler
     // surface operator work. Only complete success exits zero.
     return {exitCode: report.status === 'succeeded' ? 0 : 1, stdout: JSON.stringify(report)};
   } catch {

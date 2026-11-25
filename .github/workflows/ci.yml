@@ -1,0 +1,32 @@
+# Release gate for every push and pull request. Vercel deploys main only after this passes
+# (enable "Require checks to pass" for production in the Vercel project's Git settings).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The secret-exposure test inspects the production client bundle, so build first.
+      - run: npm run build
+      - run: npm test -- --maxWorkers=2
+      - run: npx tsc --noEmit
+      - run: node scripts/verify-semrush-schema-reference.mjs

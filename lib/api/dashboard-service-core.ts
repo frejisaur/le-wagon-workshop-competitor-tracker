@@ -1,5 +1,5 @@
 import type {DashboardSnapshot} from '@/lib/airtable/types';
-import {DashboardCache, type CacheResult} from '@/lib/cache/dashboard-cache';
+import {DashboardCache, type CacheResult, type DashboardCacheOptions} from '@/lib/cache/dashboard-cache';
 import {CompanyComparisonSchema, type CompanyComparison, type CompanyResponse, type LandscapeResponse} from '@/lib/domain/dashboard';
 import {shapeDashboardSnapshot} from './shape-landscape';
 
@@ -7,8 +7,10 @@ const emptySnapshot: DashboardSnapshot = {companies: [], keywords: [], paidAds: 
 
 /** Shared cache façade used by both server routes; loader injection keeps its singleton behavior testable. */
 export class DashboardService {
-  private readonly cache = new DashboardCache<DashboardSnapshot>();
-  constructor(private readonly loader: () => Promise<DashboardSnapshot>) {}
+  private readonly cache: DashboardCache<DashboardSnapshot>;
+  constructor(private readonly loader: () => Promise<DashboardSnapshot>, cacheOptions: DashboardCacheOptions = {}) {
+    this.cache = new DashboardCache<DashboardSnapshot>(cacheOptions);
+  }
   invalidate(): void { this.cache.invalidate(); }
   peek(): CacheResult<DashboardSnapshot> { return this.cache.peek(); }
   getCache(): DashboardCache<DashboardSnapshot> { return this.cache; }

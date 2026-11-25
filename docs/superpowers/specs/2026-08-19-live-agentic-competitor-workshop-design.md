@@ -2,6 +2,8 @@
 
 Date: 2026-08-19
 
+> Updated 2026-11-25: deployment moved to Vercel + GitHub Actions.
+
 Status: Approved in collaborative design; awaiting written-spec review
 
 Companion product specifications:
@@ -20,7 +22,7 @@ The workshop demonstrates how useful agent context is assembled from project
 instructions, focused agents, skills, MCP servers, CLI tools, fixtures, tests,
 and visual references. The product outcome is a deployed competitor-tracking
 prototype backed by an Apollo roster, Apify Semrush enrichment, Airtable, and a
-scheduled Railway refresh.
+scheduled GitHub Actions refresh.
 
 The workshop is successful when the audience can explain:
 
@@ -56,7 +58,7 @@ The rebuild then proceeds in causal order:
 
 ```text
 Apollo CSV -> Apify Semrush evidence -> normalized contract -> Airtable
-           -> visual design -> dashboard -> Railway web + scheduled refresh
+           -> visual design -> dashboard -> Vercel web + GitHub Actions refresh
 ```
 
 Agent work runs in a background lane. The instructor launches a bounded task,
@@ -65,18 +67,7 @@ when there is an artifact, test result, or decision to inspect.
 
 ## 4. Run of show
 
-| Time | Segment | Live teaching outcome | Recovery asset |
-| --- | --- | --- | --- |
-| 00:00-00:07 | Reverse reveal | Show All Companies, Company Detail, evidence trace, and freshness. State the end-to-end promise. | Pre-deployed final app |
-| 00:07-00:15 | Context anatomy | Explain `CLAUDE.md`, `AGENTS.md`, skills, focused agents, MCPs, CLIs, fixtures, and tests. | Pre-generated context map |
-| 00:15-00:25 | Source acquisition | Export a prepared Apollo Saved list. Use Apify MCP/plugin to inspect the selected Actor/task and input contract. Start one bounded live enrichment. | Original Apollo CSV and saved Apify fixture |
-| 00:25-00:36 | Data skill and join | Create/refine the data-joining skill. Normalize domains, join the two files, classify fields, and inspect counts and exceptions. | Joined sanitized output and expected-count manifest |
-| 00:36-00:45 | Airtable serving layer | Authenticate the Airtable MCP with OAuth, inspect the disposable base, apply the deterministic schema command, and import through the repository command. | Prepared workshop base and import report |
-| 00:45-00:56 | Visual brainstorming | Generate two or three All Companies directions from the product constraints and real-shaped fixture. Select one hierarchy. | Pre-generated mockup set and selected reference |
-| 00:56-01:03 | Dashboard skill and handoff | Encode the selected decisions in the dashboard skill and compact UI brief. Dispatch the dashboard builder with explicit ownership and proof. | Completed dashboard skill and UI packet |
-| 01:03-01:13 | Inspect the build | Review the All Companies implementation, compare it with the selected mockup, and show the pre-generated Company Detail reference and implementation. | Working application checkpoint |
-| 01:13-01:25 | Deploy and schedule | Deploy local code with Railway CLI. Use Railway MCP to inspect services, configure the refresh command and weekly UTC schedule, and check status. | Pre-deployed service and prepared cron service |
-| 01:25-01:30 | Proof and recap | Trigger health/freshness checks, show compact status, name each context boundary, and explain replay paths. | Final verification report |
+[`workshop/run-of-show.md`](../../../workshop/run-of-show.md) is the single source of truth for segment timing, teaching outcomes, and recovery assets.
 
 The instructor may move up to two minutes between adjacent segments, but must
 not consume the final five-minute proof and recap block.
@@ -107,7 +98,7 @@ workshop/
     01-data-join-brief.md
     02-airtable-brief.md
     03-dashboard-brief.md
-    04-railway-brief.md
+    04-deploy-brief.md
     provider-summary.json
     expected-counts.json
   prompts/                         # paste-ready, bounded Claude prompts
@@ -155,10 +146,12 @@ This plane gives agents bounded ways to act.
 - Airtable MCP: discover, inspect, and demonstrate a base through browser OAuth.
 - Apify MCP/plugin: inspect Actor details and input/output contracts; run a
   bounded sample only when the selected Actor supports MCP execution.
-- Railway MCP: inspect and configure projects, services, variables, schedules,
-  deployments, and status through OAuth.
-- Railway CLI: authenticate interactively, link the local repository, deploy
-  local code, and run local commands with service configuration.
+- Vercel MCP: inspect projects, deployments, and build/runtime logs through
+  OAuth (read-only use).
+- Vercel CLI: authenticate interactively, link the local repository, set
+  production environment variables through stdin, and deploy local code.
+- GitHub CLI: set refresh secrets and variables, dispatch the refresh
+  workflow, and watch its run.
 - Repository CLIs: perform validation, joins, schema reconciliation, imports,
   refreshes, status checks, and insight lifecycle operations deterministically.
 
@@ -281,26 +274,27 @@ Use browser OAuth when supported:
 - Airtable MCP: add the remote HTTP server, then authenticate from Claude
   Code's `/mcp` flow.
 - Apify MCP/plugin: authenticate through its browser OAuth flow.
-- Railway remote MCP: authenticate through OAuth.
-- Railway CLI: use interactive browser login for the instructor workstation.
+- Vercel remote MCP (`https://mcp.vercel.com`): authenticate through OAuth.
+- Vercel CLI and GitHub CLI: use interactive browser login (`vercel login`,
+  `gh auth login`) on the instructor workstation.
 
 OAuth access is visible and revocable. It authorizes Claude to use tools within
-the instructor's account permissions. It is not copied into application code or
-Railway runtime variables.
+the instructor's account permissions. It is not copied into application code,
+Vercel environment variables, or GitHub Actions secrets.
 
 ### 9.2 Runtime credentials
 
 The application uses separate runtime variables:
 
-| Variable | Secret | Local | Web service | Refresh service |
-| --- | --- | --- | --- | --- |
+| Variable | Secret | Local | Vercel (web) | GitHub Actions (refresh) |
+|-|-|-|-|-|
 | `AIRTABLE_PAT` | Yes | `.env.local` | Required | Required |
 | `AIRTABLE_BASE_ID` | No, but sensitive metadata | `.env.local` | Required | Required |
 | Airtable table-name variables | No | `.env.local` | Required | Required |
 | `APIFY_TOKEN` | Yes | `.env.local` when refreshing | Not present | Required |
 | `APIFY_ACTOR_ID` | No | `.env.local` when refreshing | Not present | Required |
 | `CACHE_INVALIDATION_SECRET` | Yes | `.env.local` | Required | Required |
-| `APP_BASE_URL` | No | `.env.local` | Required | Required |
+| `APP_BASE_URL` | No | `.env.local` | Not present | Required |
 
 For workshop bootstrap, the Airtable PAT is limited to the disposable base and
 has record read/write plus schema read/write access. A production follow-up
@@ -308,20 +302,24 @@ should split schema-bootstrap and runtime tokens. The Apify token should be
 scoped to the required task and storage where supported and should expire soon
 after the workshop.
 
-Secrets are entered off-screen into `.env.local` or Railway variables. Prefer
-stdin or a protected UI field over shell arguments. Railway variables are
-reviewed, deployed, verified, and then sealed where the recovery trade-off is
-acceptable. Secret preflight reports names and present/missing status only.
+Secrets are entered off-screen into `.env.local`, Vercel sensitive environment
+variables (`vercel env add NAME production`), or GitHub Actions secrets
+(`gh secret set NAME`), always through stdin or a protected UI field rather than
+shell arguments. Configuration is verified by name only with `vercel env ls`,
+`gh secret list`, and `gh variable list`. Secret preflight reports names and present/missing status only.
 
 ### 9.3 Service boundaries
 
-- Web service: public domain, `npm start`, Airtable read access, no Apify token.
-- Refresh service: no public domain, `npm run enrich`, Airtable write access,
-  Apify access, cache invalidation access, and a hard timeout.
-- Railway schedule: `0 15 * * 1`, Mondays at 15:00 UTC.
-- The refresh process must close resources and exit. If the prior Railway cron
-  execution remains active, Railway skips the next scheduled execution.
-- Model or agent credentials never enter Railway. Semantic insight generation
+- Web (Vercel Hobby): public URL, `npm run build`, Airtable access, no Apify
+  token. Each serverless instance holds its own dashboard snapshot with a
+  60-second maximum age; a signed invalidation reaches one instance immediately.
+- Refresh (`.github/workflows/refresh.yml`): no public endpoint,
+  `npm run enrich`, Airtable write access, Apify access, cache invalidation
+  access, and `timeout-minutes: 15`.
+- Refresh schedule: `0 15 * * 1`, Mondays at 15:00 UTC.
+- The refresh process must close resources and exit. `concurrency: refresh`
+  queues a new run behind an active one instead of overlapping it.
+- Model or agent credentials never enter Vercel or GitHub Actions. Semantic insight generation
   remains in Claude Code, Codex, or another selected agent harness.
 
 ## 10. Checkpoint model
@@ -348,11 +346,11 @@ workshop does not switch branches or detach HEAD on stage.
 Live recovery uses prepared artifacts and external state:
 
 | Trigger | Fallback | Resume point |
-| --- | --- | --- |
+|-|-|-|
 | Apify has not returned within 90 seconds | Disclose the switch and use the saved provider fixture | Run the same validation and join command |
 | A coding agent exceeds its segment | Use the prepared implementation artifact or working app checkpoint | Inspect diff, tests, and decision rather than waiting |
 | Airtable schema/import fails twice | Use the prepared disposable base | Verify schema/counts and continue to UI |
-| Railway build remains pending at the segment boundary | Open the pre-deployed final app and inspect the active build asynchronously | Finish with health and freshness proof |
+| Vercel build remains pending at the segment boundary | Open the pre-deployed final app and inspect the active build asynchronously | Finish with health and freshness proof |
 | Live visual generation fails or becomes unreadable | Use the pre-generated option set | Record a selection and continue with the same UI packet |
 
 Fallbacks must pass through the same validation or presentation contracts as
@@ -369,7 +367,7 @@ checkpoint.
 - Retry only documented idempotent operations.
 - Preserve the last successful dashboard data and last published insight when a
   refresh, model call, review, cache invalidation, or deployment fails.
-- Do not overlap a manual refresh with an active Railway refresh.
+- Do not overlap a manual refresh with an active GitHub Actions refresh run.
 - Do not let agent/model unavailability block deterministic metric refresh.
 - Never expose full tokens, authorization headers, raw provider payloads, or
   unsanitized records in tool output, prompts, fixtures, or logs.
@@ -398,7 +396,7 @@ checkpoint.
 Run three rehearsals:
 
 1. Full live path with all providers.
-2. Full fallback path with provider, Airtable, agent, and Railway delays forced.
+2. Full fallback path with provider, Airtable, agent, Vercel, and GitHub Actions delays forced.
 3. Projected-screen rehearsal that verifies secrets remain hidden, text remains
    readable, and terminal output is compact.
 
@@ -430,10 +428,11 @@ The completed boilerplate includes:
 - [Airtable MCP server and Claude Code setup](https://support.airtable.com/articles/9897799762-using-the-airtable-mcp-server)
 - [Apify API integration and scoped tokens](https://docs.apify.com/integrations/api)
 - [Apify MCP server](https://docs.apify.com/integrations/mcp)
-- [Railway for agents](https://docs.railway.com/agents)
-- [Railway CLI deployment](https://docs.railway.com/cli/deploying)
-- [Railway variables and sealed secrets](https://docs.railway.com/variables)
-- [Railway cron jobs](https://docs.railway.com/cron-jobs)
+- [Vercel MCP server](https://vercel.com/docs/mcp/vercel-mcp)
+- [Vercel CLI deploy](https://vercel.com/docs/cli/deploy)
+- [Vercel environment variables](https://vercel.com/docs/environment-variables)
+- [GitHub Actions scheduled workflows](https://docs.github.com/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule)
+- [GitHub Actions secrets](https://docs.github.com/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions)
 
 ## 15. Acceptance criteria
 
@@ -449,7 +448,8 @@ The workshop project is ready when:
 6. The All Companies screen can be traced from visual option to selected
    reference, dashboard skill, agent task, component tests, and deployed UI.
 7. Company Detail and evidence trace match the approved design system.
-8. Web and refresh Railway services contain only the credentials each needs.
+8. The Vercel web deployment and the GitHub Actions refresh contain only the
+   credentials each needs.
 9. The scheduled refresh exits, records status, preserves prior success on
    partial failure, and can be safely retried.
 10. Every fallback resumes through the same contract as its corresponding live

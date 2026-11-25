@@ -23,11 +23,18 @@ const WebEnvSchema = AirtableEnvSchema;
 const RefreshEnvSchema = AirtableEnvSchema.extend(RefreshOnlyEnvSchema.shape);
 const InsightEnvSchema = AirtableEnvSchema;
 const CacheInvalidationEnvSchema = z.object({CACHE_INVALIDATION_SECRET: z.string().min(1)});
+/** A scheduled agent only triggers the refresh workflow; it never holds Airtable, Apify, or cache credentials. */
+const RefreshDispatchEnvSchema = z.object({
+  GITHUB_DISPATCH_TOKEN: z.string().min(1),
+  GITHUB_REPOSITORY: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+  REFRESH_REF: z.string().regex(/^[A-Za-z0-9_./-]+$/).default('main'),
+});
 
 export type WebEnv = z.infer<typeof WebEnvSchema>;
 export type RefreshEnv = z.infer<typeof RefreshEnvSchema>;
 export type InsightEnv = z.infer<typeof InsightEnvSchema>;
 export type CacheInvalidationEnv = z.infer<typeof CacheInvalidationEnvSchema>;
+export type RefreshDispatchEnv = z.infer<typeof RefreshDispatchEnvSchema>;
 type EnvSource = NodeJS.Dict<string>;
 
 function formatEnvError(error: z.ZodError): string {
@@ -70,4 +77,8 @@ export function getInsightEnv(source: EnvSource = process.env): InsightEnv {
 /** The signed internal endpoint needs only its own secret, never refresh credentials. */
 export function getCacheInvalidationEnv(source: EnvSource = process.env): CacheInvalidationEnv {
   return parseEnv(CacheInvalidationEnvSchema, source);
+}
+
+export function getRefreshDispatchEnv(source: EnvSource = process.env): RefreshDispatchEnv {
+  return parseEnv(RefreshDispatchEnvSchema, source);
 }

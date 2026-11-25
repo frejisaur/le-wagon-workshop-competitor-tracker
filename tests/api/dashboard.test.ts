@@ -79,6 +79,36 @@ describe('dashboard response and cache', () => {
     expect(response).toMatchObject({status: 'empty', kpis: {combinedOrganicTraffic: {value: 0, coverage: {available: 0, total: 0}}}});
   });
 
+  it('revalidates in the background after maxAgeMs so serverless instances converge without an invalidation', async () => {
+    let now = 1_000;
+    const cache = new DashboardCache<typeof snapshot>({maxAgeMs: 60_000, now: () => now});
+    const first = vi.fn(async () => snapshot);
+    await cache.getOrLoad(first, {background: true});
+    now += 59_999;
+    await cache.getOrLoad(first, {background: true});
+    expect(first).toHaveBeenCalledTimes(1);
+
+    now += 1;
+    const updated = {...snapshot, companies: []};
+    let finish!: (value: typeof snapshot) => void;
+    const reload = vi.fn(() => new Promise<typeof snapshot>((done) => { finish = done; }));
+    // An aged snapshot is served immediately and is not labelled stale: age alone is not evidence of a newer refresh.
+    expect(await cache.getOrLoad(reload, {background: true})).toMatchObject({snapshot, state: {status: 'succeeded'}});
+    expect(reload).toHaveBeenCalledTimes(1);
+    finish(updated);
+    await vi.waitFor(() => expect(cache.peek().snapshot).toEqual(updated));
+  });
+
+  it('keeps the aged snapshot and reports failure when a background revalidation fails', async () => {
+    let now = 0;
+    const cache = new DashboardCache<typeof snapshot>({maxAgeMs: 10, now: () => now});
+    cache.seed(snapshot);
+    now = 10;
+    await cache.getOrLoad(async () => { throw new Error('unavailable'); }, {background: true});
+    await vi.waitFor(() => expect(cache.peek().state.status).toBe('failed'));
+    expect(cache.peek().snapshot).toEqual(snapshot);
+  });
+
   it('does not let an older load generation clear a later invalidation', async () => {
     const cache = new DashboardCache<typeof snapshot>();
     cache.seed(snapshot);

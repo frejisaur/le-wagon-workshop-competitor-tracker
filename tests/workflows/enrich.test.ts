@@ -44,13 +44,13 @@ function dependencies(store: CompetitorStore, runDomainOverview: (domains: strin
       },
       cache: {invalidate: async () => { callOrder.push('cache:invalidate'); }},
       now: () => new Date('2026-08-18T12:00:00.000Z'),
-      runIdFactory: () => 'railway-run-1',
+      runIdFactory: () => 'refresh-run-1',
     },
   };
 }
 
 describe('runEnrichment', () => {
-  it('persists validated partial successes independently in canonical-domain order and updates only Railway status', async () => {
+  it('persists validated partial successes independently in canonical-domain order and updates only refresh status', async () => {
     const store = repository();
     const batchCalls: string[][] = [];
     const {dependencies: deps} = dependencies(store, async (domains) => {
@@ -64,7 +64,7 @@ describe('runEnrichment', () => {
     const alpha = snapshot.companies.find((record) => record.fields['Identity • Company ID'] === 'company-alpha');
 
     expect(batchCalls).toEqual([['alpha.example'], ['existing.example']]);
-    expect(report).toMatchObject({runId: 'railway-run-1', status: 'partial', processed: 2, succeeded: 1, failed: 1, cacheInvalidated: true});
+    expect(report).toMatchObject({runId: 'refresh-run-1', status: 'partial', processed: 2, succeeded: 1, failed: 1, cacheInvalidated: true});
     expect(alpha?.fields['Workflow • Evidence Fingerprint']).toMatch(/^[a-f0-9]{64}$/);
     expect(snapshot.publishedInsights).toEqual([]);
     expect(snapshot.reviews).toEqual([]);
@@ -120,7 +120,7 @@ describe('runEnrichment', () => {
       return store.updateSystem(input);
     };
 
-    const report = await runEnrichment({repository: failing, runDomainOverview: async () => [providerRecords[0]], cache: {invalidate}, now: () => new Date('2026-08-18T12:00:00.000Z'), runIdFactory: () => 'railway-run-2'});
+    const report = await runEnrichment({repository: failing, runDomainOverview: async () => [providerRecords[0]], cache: {invalidate}, now: () => new Date('2026-08-18T12:00:00.000Z'), runIdFactory: () => 'refresh-run-2'});
     const system = (await store.getDashboardSnapshot()).system[0];
 
     expect(report).toMatchObject({status: 'failed', cacheInvalidated: false});
@@ -159,13 +159,13 @@ describe('runEnrichment', () => {
   it('never overwrites agent workflow fields and does not invalidate an all-failed provider refresh', async () => {
     const store = FixtureCompetitorRepository.fromSnapshot(resolve(fixtures, 'airtable/refresh-system-snapshot.json'));
     const invalidate = vi.fn(async () => {});
-    const report = await runEnrichment({repository: store, runDomainOverview: async () => { throw new Error('offline'); }, cache: {invalidate}, maxAttempts: 1, now: () => new Date('2026-08-18T12:00:00.000Z'), runIdFactory: () => 'railway-run-3'});
+    const report = await runEnrichment({repository: store, runDomainOverview: async () => { throw new Error('offline'); }, cache: {invalidate}, maxAttempts: 1, now: () => new Date('2026-08-18T12:00:00.000Z'), runIdFactory: () => 'refresh-run-3'});
     const system = (await store.getDashboardSnapshot()).system[0];
 
     expect(report).toMatchObject({status: 'failed', succeeded: 0, failed: 1, cacheInvalidated: false});
     expect(invalidate).not.toHaveBeenCalled();
     expect(system.fields).toMatchObject({
-      'Railway • Run ID': 'railway-run-3',
+      'Refresh • Run ID': 'refresh-run-3',
       'Agent • Last Run At': '2026-08-01T00:00:00.000Z',
       'Agent • Skill Version': '1.0.0',
       'Agent • Processed Companies': 4,
@@ -178,11 +178,11 @@ describe('runEnrichment', () => {
     const store = repository();
     const failing = Object.create(store) as CompetitorStore;
     failing.getDashboardSnapshot = async () => { throw new Error('snapshot unavailable'); };
-    const report = await runEnrichment({repository: failing, runDomainOverview: async () => providerRecords, runIdFactory: () => 'railway-startup-snapshot'});
+    const report = await runEnrichment({repository: failing, runDomainOverview: async () => providerRecords, runIdFactory: () => 'refresh-startup-snapshot'});
     const system = (await store.getDashboardSnapshot()).system[0];
 
     expect(report.status).toBe('failed');
-    expect(system.fields).toMatchObject({'Workflow • Status': 'failed', 'Railway • Run ID': 'railway-startup-snapshot'});
+    expect(system.fields).toMatchObject({'Workflow • Status': 'failed', 'Refresh • Run ID': 'refresh-startup-snapshot'});
     expect(system.fields).not.toHaveProperty('Workflow • Last Successful Run At');
   });
 

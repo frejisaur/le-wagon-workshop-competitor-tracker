@@ -88,15 +88,18 @@ describe('release secret boundary', () => {
     } finally { rmSync(temp, {recursive: true}); }
   });
 
-  it('documents only blank server-side credential placeholders and excludes env files from Docker', () => {
+  it('documents only blank server-side credential placeholders and excludes env files from deploy uploads', () => {
     const env = readFileSync('.env.example', 'utf8');
     for (const name of ['AIRTABLE_PAT', 'AIRTABLE_BASE_ID', 'APIFY_TOKEN', 'APIFY_ACTOR_ID', 'CACHE_INVALIDATION_SECRET']) {
       expect(env).toMatch(new RegExp(`^${name}=$`, 'm'));
       expect(env).not.toContain(`NEXT_PUBLIC_${name}`);
     }
-    const ignore = readFileSync('.dockerignore', 'utf8');
-    expect(ignore).toMatch(/^\.env$/m);
-    expect(ignore).toContain('.env.*');
-    expect(ignore).toContain('!.env.example');
+    for (const file of ['.gitignore', '.vercelignore']) {
+      const ignore = readFileSync(file, 'utf8');
+      expect(ignore).toMatch(/^\.env$/m);
+      expect(ignore).toContain('.env.*');
+      expect(ignore).toContain('!.env.example');
+      expect(ignore).toContain('data/apollo/*.csv');
+    }
   });
 });

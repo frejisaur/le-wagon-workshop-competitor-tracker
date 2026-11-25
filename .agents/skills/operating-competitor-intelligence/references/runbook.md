@@ -3,8 +3,8 @@
 ## Command map
 
 | Operation | Repository interface | Success evidence |
-|---|---|---|
-| Metric refresh | `npm run enrich` | Railway status exits `succeeded` or documented `partial`; successful companies persist; cache invalidates after writes. |
+|-|-|-|
+| Metric refresh | `npm run enrich` | The refresh workflow run (`refresh-…` ID) exits `succeeded` or documented `partial`; successful companies persist; cache invalidates after writes. |
 | Prepare due insights | `npm run insights:prepare -- --due` | Bounded manifest contains only due companies and current fingerprints. |
 | Submit candidate | `npm run insights:submit -- <candidate-file>` | Result identifies published, queued, stale, or rejected with run/company identity. |
 | Promote reviews | `npm run insights:publish-approved` | Current approved candidates publish; changed fingerprints become `stale`. |
@@ -17,14 +17,14 @@ implementation rather than inventing a substitute.
 ## Failure classification
 
 | Failure | Safe response |
-|---|---|
+|-|-|
 | Apify timeout or failed batch | Retry with bounded backoff; retain other batches and record company failures. |
 | Airtable `429` | Honor retry timing and use exponential backoff with jitter. |
 | Partial transform validation | Omit malformed nested modules; retain valid top-level company data. |
 | Agent/model unavailable | Leave published insights unchanged; metric refresh remains independent. |
 | Candidate fingerprint mismatch | Mark stale; prepare fresh work instead of publishing. |
 | Cache invalidation failure | Keep serving last successful cache, report stale status, retry invalidation after confirming writes. |
-| Railway task still running | Do not overlap manually; inspect timeout and wait or terminate through an approved operator action. |
+| Refresh workflow run still in progress | Do not overlap manually; `concurrency: refresh` queues a dispatched run. Inspect with `gh run watch`, then wait or cancel through an approved operator action. |
 
 ## Workshop fallback order
 
@@ -35,7 +35,7 @@ implementation rather than inventing a substitute.
 4. Use pre-generated valid candidates if live model generation is unavailable.
 5. Demonstrate submission, review routing, approval, and publication against the
    non-production Airtable base.
-6. End with freshness and separate Railway/agent workflow statuses.
+6. End with freshness and separate refresh workflow (GitHub Actions) and agent workflow statuses.
 
 The fallback demonstrates the same contracts as the live path; it must not use
 hand-edited output that bypasses validation.

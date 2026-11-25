@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'line',
   webServer: {
-    command: 'npm run dev -- --webpack --hostname 127.0.0.1 --port 3115',
+    command: 'npm run dev -- --hostname 127.0.0.1 --port 3115',
     url: 'http://127.0.0.1:3115',
     reuseExistingServer: false,
     timeout: 120_000,

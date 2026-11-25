@@ -1,4 +1,4 @@
-# GTM Competitor Intelligence Workshop — Design Specification
+# GTM Competitor Intelligence Workshop - Design Specification
 
 Date: 2026-08-18
 
@@ -12,8 +12,8 @@ The product replaces part of an expensive all-in-one competitive-intelligence su
 2. Enrich company domains through the Apify Semrush scraper.
 3. Store editable, curated records in Airtable.
 4. Generate evidence-backed GTM battlecards through a repository skill run by the user's agent harness of choice.
-5. Serve an enterprise-style dashboard from a Railway-hosted application.
-6. Refresh scraper-derived facts through a scheduled Railway job and run semantic enrichment on an independent agent-harness schedule.
+5. Serve an enterprise-style dashboard from a Vercel-hosted application.
+6. Refresh scraper-derived facts through a scheduled GitHub Actions refresh and run semantic enrichment on an independent agent-harness schedule.
 
 ## 2. Audience and workshop outcome
 
@@ -23,7 +23,7 @@ By the end of the session, attendees should have:
 
 - A working, deployed prototype.
 - A clear understanding of the research, enrichment, transformation, and display pipeline.
-- A reusable repository containing the application, deterministic Railway job, versioned agent skill, harness-neutral enrichment commands, and configuration examples.
+- A reusable repository containing the application, deterministic GitHub Actions refresh workflow, versioned agent skill, harness-neutral enrichment commands, and configuration examples.
 - A practical understanding of where free plans are sufficient and where their limits shape the architecture.
 
 ## 3. Scope
@@ -36,8 +36,8 @@ By the end of the session, attendees should have:
 - Display an all-companies competitive landscape.
 - Display a detailed individual-company view.
 - Generate one evidence-backed GTM battlecard per company.
-- Deploy the web application and deterministic scraper-enrichment command to Railway.
-- Refresh all scraper-derived company, keyword, and paid-ad fields weekly through Railway.
+- Deploy the web application to Vercel and run the deterministic scraper-enrichment command from a GitHub Actions refresh workflow.
+- Refresh all scraper-derived company, keyword, and paid-ad fields weekly through the GitHub Actions refresh.
 - Generate or refresh semantic GTM insights on an independent schedule configured in the user's agent harness, such as Claude Code or Codex.
 - Route low-confidence agent output to an Airtable review queue without replacing the last published insight.
 - Show freshness and job status in the application.
@@ -228,7 +228,7 @@ The complete visual system, including tokens, layouts, components, charts, state
 
 Airtable is the editable serving layer, not the raw warehouse. The design targets the Free plan limit of 1,000 cumulative records per base and 1,000 API calls per workspace per month.
 
-### 7.1 Companies — approximately 52 records
+### 7.1 Companies - approximately 52 records
 
 Contains:
 
@@ -245,7 +245,7 @@ Contains:
 - Canonical agent-evidence fingerprint calculated from the exact curated fields exposed to the skill.
 - Last successful scraper refresh and next agent-enrichment due timestamp.
 
-### 7.2 Keywords — approximately 358 records in the supplied sample
+### 7.2 Keywords - approximately 358 records in the supplied sample
 
 Contains:
 
@@ -260,7 +260,7 @@ Contains:
 
 The compound identity is company plus keyword plus normalized landing URL.
 
-### 7.3 Paid Ads — approximately 16 records in the supplied sample
+### 7.3 Paid Ads - approximately 16 records in the supplied sample
 
 Contains:
 
@@ -271,7 +271,7 @@ Contains:
 
 The stable identity is a hash of company, keyword, title, description, and normalized landing URL.
 
-### 7.4 GTM Insights — up to 52 records
+### 7.4 GTM Insights - up to 52 records
 
 Contains:
 
@@ -286,7 +286,7 @@ Contains:
 
 Only published insights are stored here. A candidate never replaces the last published insight until it passes automatic publication gates or is explicitly approved.
 
-### 7.5 Insight Reviews — up to 52 records
+### 7.5 Insight Reviews - up to 52 records
 
 Contains at most one reusable review record per company:
 
@@ -299,7 +299,7 @@ Contains at most one reusable review record per company:
 
 The Airtable base includes a `Needs Review` view. Rejected candidates and reviewer notes remain available to the next agent attempt. The same company-linked row is reused so the review queue remains bounded.
 
-### 7.6 System — one record
+### 7.6 System - one record
 
 Contains:
 
@@ -309,7 +309,7 @@ Contains:
 - Processed, succeeded, and failed company counts.
 - Short error summary.
 - Current cache version.
-- Last Railway workflow version and run ID.
+- Last refresh workflow version and run ID.
 - Last agent-enrichment run, skill version, processed count, review count, and error summary.
 
 Estimated Version 1 record count using the supplied sample: approximately 531 records, including the maximum 52 review-queue records.
@@ -327,33 +327,33 @@ The named dataset is the evidence source for:
 
 ## 9. Scheduling and execution architecture
 
-Version 1 has two independent control planes. Railway owns deterministic scraper collection and transformation. A user-selected agent harness owns semantic enrichment that requires an LLM. Airtable and validated repository commands form the handoff boundary; neither control plane must invoke or wait for the other.
+Version 1 has two independent control planes. The GitHub Actions refresh owns deterministic scraper collection and transformation. A user-selected agent harness owns semantic enrichment that requires an LLM. Airtable and validated repository commands form the handoff boundary; neither control plane must invoke or wait for the other.
 
 ### 9.1 Web service
 
 - Serves the frontend and server-side API.
 - Reads Airtable with server-only credentials.
 - Shapes Companies, Keywords, Paid Ads, and GTM Insights into a dashboard response.
-- Stores the shaped response in an in-memory cache.
-- Rebuilds the cache on first request after a restart.
+- Stores the shaped response in a per-instance in-memory cache with a 60-second maximum age (each Vercel serverless instance holds its own snapshot).
+- Rebuilds the cache on first request on a new instance.
 - Supports a signed internal cache-invalidation endpoint.
 - Exposes health and data-freshness status.
 
-Start command: `npm start`.
+Hosted on Vercel; build command: `npm run build`.
 
-### 9.2 Railway cron service
+### 9.2 GitHub Actions refresh workflow
 
-- Uses the same repository, image, environment-variable names, validation schemas, and transformation modules.
+- Uses the same repository revision, environment-variable names, validation schemas, and transformation modules.
 - Runs the scraper, validates its response, transforms records, performs batched Airtable upserts, updates agent-evidence fingerprints and System status, invalidates the web cache, and exits.
 - Writes only observed provider fields and deterministic calculations that can be reproduced from the scraper response.
 - Does not invoke an LLM, an agent, or a semantic-enrichment skill.
-- Has no public domain.
-- Uses Railway scheduling in UTC.
+- Has no public endpoint.
+- Uses GitHub Actions scheduling in UTC.
 - Has one weekly schedule: `0 15 * * 1` (Mondays at 15:00 UTC).
-- Applies a hard task timeout.
+- Applies a hard job timeout (`timeout-minutes: 15`) and never overlaps another run (`concurrency: refresh`).
 - Exits nonzero on an unrecovered failure.
 
-Start command: `npm run enrich`.
+Command: `npm run enrich` in `.github/workflows/refresh.yml`.
 
 ### 9.3 Agent-harness enrichment
 
@@ -397,7 +397,7 @@ All other valid candidates are upserted into Insight Reviews with `needs_review`
 
 - No Postgres.
 - No Redis or queue.
-- No persistent Railway volume.
+- No persistent volume.
 - No separate API service.
 - No client-side Airtable calls.
 
@@ -416,7 +416,7 @@ All other valid candidates are upserted into Insight Reviews with `needs_review`
 ### 10.2 Weekly deterministic scraper refresh
 
 1. Read active company domains from Airtable.
-2. Create a run ID and mark the Railway workflow in the System record as running.
+2. Create a run ID and mark the refresh workflow in the System record as running.
 3. Submit domains to the Apify Domain Overview actor in bounded batches.
 4. Poll each actor run with a hard timeout.
 5. Validate every returned record.
@@ -427,7 +427,7 @@ All other valid candidates are upserted into Insight Reviews with `needs_review`
 10. Upsert paid-ad records and observation dates.
 11. Persist the new agent-evidence fingerprint without invoking or changing the status of the agent workflow.
 12. Record per-company failures without discarding successful companies.
-13. Update the Railway workflow's System status.
+13. Update the refresh workflow's System status.
 14. Invalidate the web cache.
 15. Close connections and exit.
 
@@ -459,12 +459,12 @@ An insight is due when it has no published version, its configured refresh times
 - Airtable 429 responses use exponential backoff with jitter.
 - Each external call has a timeout.
 - The cron command always closes resources and terminates.
-- If a previous Railway cron execution is still active, Railway may skip the next execution; therefore the task timeout must be shorter than the schedule interval.
-- Railway and agent workflows have separate run IDs, timestamps, and `running`, `partial`, `succeeded`, and `failed` statuses.
+- If a previous refresh run is still active, the next run queues behind it; the job timeout is far shorter than the schedule interval so runs never pile up.
+- Refresh and agent workflows have separate run IDs, timestamps, and `running`, `partial`, `succeeded`, and `failed` statuses.
 - The UI continues serving the last successful cache when enrichment fails and displays its freshness.
 - Cache invalidation occurs only after Airtable writes complete.
-- Agent-harness unavailability, missed schedules, and generation failures do not block the Railway metric refresh.
-- Railway failures do not erase published insights; the agent workflow may continue using the most recent successful evidence and its freshness metadata.
+- Agent-harness unavailability, missed schedules, and generation failures do not block the GitHub Actions metric refresh.
+- Refresh failures do not erase published insights; the agent workflow may continue using the most recent successful evidence and its freshness metadata.
 - Submission is idempotent by company, agent-evidence fingerprint, skill version, and workflow version.
 - Replaying a run cannot create duplicate insight or review records.
 - A candidate whose agent-evidence fingerprint no longer matches is marked `stale` and cannot be published.
@@ -472,9 +472,9 @@ An insight is due when it has no published version, its configured refresh times
 
 ## 12. Security
 
-- Airtable and Apify tokens used by the web and scraper workflows exist only in Railway environment variables.
-- The model token used by semantic enrichment belongs to the user's agent harness and is not required by the Railway service.
-- The browser calls only the Railway application API.
+- Airtable and Apify tokens used by the web and scraper workflows exist only in Vercel server environment variables and GitHub Actions secrets; Vercel never receives the Apify token.
+- The model token used by semantic enrichment belongs to the user's agent harness and is not required by the web deployment or the refresh workflow.
+- The browser calls only the Vercel-hosted application API.
 - The cache-invalidation endpoint requires a secret signature.
 - Logs must not contain secrets or full authorization headers.
 - Raw provider responses are not returned wholesale to the browser.
@@ -556,7 +556,7 @@ the application has no autonomous multi-agent runtime. `AGENTS.md` and
 Harness-specific agent files contain only role and tool configuration.
 
 | Definition | Responsibility |
-|---|---|
+|-|-|
 | `building-competitor-dashboard` | Applies the approved interface system to dashboard navigation, components, visualizations, responsive behavior, accessibility, and visual states. |
 | `competitor-data-contracts` | Provider validation, transformations, Airtable identities, evidence fingerprints, and fixtures. |
 | `generating-gtm-battlecards` | Due-work selection, structured candidates, evidence, confidence, review routing, and publication. |
@@ -581,7 +581,7 @@ neither production secrets nor unattended deployment authority.
 - Unit-test provider-response validation and every deterministic calculation.
 - Test the known data-quality cases: self-competitors, zero AI countries, inconsistent backlink totals, formatted Moz strings, suspicious Moz page values, absent paid data, and unknown SERP codes.
 - Test idempotent Airtable record identities and batched writes.
-- Test partial-failure behavior independently in the Railway and agent workflows.
+- Test partial-failure behavior independently in the refresh and agent workflows.
 - Test that the due-work manifest selects changed, stale, skill-version-mismatched, reviewer-requested, and never-generated companies while excluding unchanged companies and active review candidates.
 - Test that generated insights contain evidence, harness, model, skill version, workflow version, agent-evidence fingerprint, run ID, and timestamp metadata.
 - Contract-test the skill against representative high-confidence, low-confidence, conflicting-evidence, and malformed-output cases.
@@ -609,7 +609,7 @@ The repository should be prepared in checkpoints so the presenter can recover fr
 - Run `generating-gtm-battlecards` in one supported agent harness and retain pre-generated candidates as fallback.
 - Show one high-confidence battlecard auto-publish and one low-confidence candidate enter Airtable's `Needs Review` view.
 - Add a reviewer note, approve the candidate, run `npm run insights:publish-approved`, and show the promoted battlecard in the dashboard.
-- Deploy the prepared Railway project and demonstrate that its weekly scraper cron is independent from the agent-harness schedule.
+- Deploy the prepared Vercel project and demonstrate that the weekly GitHub Actions refresh is independent from the agent-harness schedule.
 - Finish by showing both workflow statuses, evidence freshness, and the Version 1.2 extension point.
 
 ## 16. Acceptance criteria
@@ -625,11 +625,11 @@ Version 1 is complete when:
 5. The All Companies screen renders real portfolio metrics and supports navigation to a company.
 6. The Company Detail screen renders trends, keyword evidence, competitors, AI presence, authority, and conditional paid data.
 7. A battlecard distinguishes inference from observed evidence, links to its sources, and records harness, model, skill version, agent-evidence fingerprint, workflow version, and run ID.
-8. The weekly Railway service refreshes only scraper-derived facts, finishes, and exits cleanly without requiring an agent or model token.
+8. The weekly GitHub Actions refresh only scraper-derived facts, finishes, and exits cleanly without requiring an agent or model token.
 9. A supported agent harness can invoke the repository skill on an independent schedule and catch up work selected by timestamps, fingerprints, review requests, and skill versions.
 10. High-confidence validated candidates publish automatically, while other candidates preserve the last published insight and enter the bounded Airtable review queue.
 11. An approved current candidate can be promoted with `npm run insights:publish-approved`; a stale candidate cannot be published.
-12. Replaying Railway or agent work is idempotent, and partial failures preserve successful updates and the last successful dashboard cache.
+12. Replaying refresh or agent work is idempotent, and partial failures preserve successful updates and the last successful dashboard cache.
 13. The deployed prototype can be demonstrated from a fresh browser session.
 14. Claude Code and Codex can discover the repository guidance, invoke the three canonical skills, and use equivalent focused agent roles without changing application code.
 15. The workshop can demonstrate the fixture fallback, one skill-driven workflow, and one read-only evidence review without depending on live external-service timing.
@@ -640,7 +640,8 @@ Version 1 is complete when:
 - Airtable Web API limits and pagination: <https://support.airtable.com/getting-started-with-airtables-web-api>
 - Apify scraper documentation: <https://apify.com/pro100chok/semrush-scraper>
 - Apify storage retention: <https://docs.apify.com/storage>
-- Railway cron behavior: <https://docs.railway.com/cron-jobs>
+- GitHub Actions scheduled workflows: <https://docs.github.com/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#schedule>
+- Vercel Next.js deployments: <https://vercel.com/docs/frameworks/nextjs>
 - Codex project instructions: <https://developers.openai.com/codex/guides/agents-md>
 - Codex skills: <https://developers.openai.com/codex/skills>
 - Codex custom agents: <https://developers.openai.com/codex/multi-agent>

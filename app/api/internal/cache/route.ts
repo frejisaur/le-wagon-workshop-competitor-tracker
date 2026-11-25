@@ -5,6 +5,8 @@ import {getCacheInvalidationEnv} from '@/lib/config/server-env';
 
 export const runtime = 'nodejs';
 function bad(status: number): NextResponse { return NextResponse.json({error: 'cache_invalidation_rejected'}, {status}); }
+// Per-instance on serverless hosts. The signed timestamp window is the cross-instance bound, and a replayed
+// invalidation is harmless because it only triggers an idempotent reload of the same Airtable data.
 const replayStore = new CacheInvalidationReplayStore();
 
 export async function POST(request: Request): Promise<NextResponse> {

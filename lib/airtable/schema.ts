@@ -131,7 +131,7 @@ const system: AirtableSchemaTable = {
     ...text(
       'Identity • System ID', 'Workflow • Last Run Started At', 'Workflow • Last Run Finished At',
       'Workflow • Last Successful Run At', 'Workflow • Status', 'Workflow • Cache Version',
-      'Railway • Workflow Version', 'Railway • Run ID', 'Agent • Last Run At', 'Agent • Skill Version',
+      'Refresh • Workflow Version', 'Refresh • Run ID', 'Agent • Last Run At', 'Agent • Skill Version',
     ),
     ...integers(
       'Workflow • Processed Companies', 'Workflow • Succeeded Companies', 'Workflow • Failed Companies',

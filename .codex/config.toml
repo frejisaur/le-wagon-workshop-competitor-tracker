@@ -1,6 +1,10 @@
-[mcp_servers.railway]
-command = "railway"
-args = ["mcp", "proxy"]
+# Remote MCP servers authenticate through browser OAuth; no token belongs in this file.
+[mcp_servers.airtable]
+url = "https://mcp.airtable.com/mcp"
+
+[mcp_servers.apify]
+url = "https://mcp.apify.com"
+
+[mcp_servers.vercel]
+url = "https://mcp.vercel.com"
 default_tools_approval_mode = "writes"
-startup_timeout_sec = 20
-tool_timeout_sec = 120

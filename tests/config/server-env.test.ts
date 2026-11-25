@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {DEFAULT_APIFY_ACTOR_ID} from '@/lib/apify/constants';
-import {getInsightEnv, getRefreshEnv, getWebEnv} from '@/lib/config/server-env';
+import {getInsightEnv, getRefreshDispatchEnv, getRefreshEnv, getWebEnv} from '@/lib/config/server-env';
 
 const airtableEnv = {
   AIRTABLE_PAT: 'airtable-pat',
@@ -60,5 +60,11 @@ describe('server environment scopes', () => {
     expect(message).toContain('AIRTABLE_SYSTEM_TABLE');
     expect(message).not.toContain('sentinel-apify-token');
     expect(message).not.toContain('sentinel-cache-secret');
+  });
+
+  it('gives a refresh dispatcher only its GitHub token, never data or provider credentials', () => {
+    const env = getRefreshDispatchEnv({...airtableEnv, APIFY_TOKEN: 'token', GITHUB_DISPATCH_TOKEN: 'gh-token', GITHUB_REPOSITORY: 'owner/repo'});
+    expect(env).toEqual({GITHUB_DISPATCH_TOKEN: 'gh-token', GITHUB_REPOSITORY: 'owner/repo', REFRESH_REF: 'main'});
+    expect(() => getRefreshDispatchEnv({GITHUB_DISPATCH_TOKEN: 'sentinel-gh-token', GITHUB_REPOSITORY: 'not a repo'})).toThrow(/^(?!.*sentinel-gh-token).*GITHUB_REPOSITORY/);
   });
 });

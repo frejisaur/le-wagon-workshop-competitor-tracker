@@ -4,6 +4,8 @@ Date: 2026-08-19
 
 Status: Approved
 
+Updated 2026-11-25: deployment moved from Railway to Vercel + GitHub Actions. The Railway steps below are historical; `docs/operations/onboarding.md` and `docs/operations/deployment.md` are current.
+
 Companion specifications:
 
 - [`gtm-competitor-intelligence-design.md`](../../../gtm-competitor-intelligence-design.md)

@@ -25,33 +25,6 @@ describe('release contracts', () => {
     }
   });
 
-  it('defines one shared Node 22 image and distinct safe Railway service contracts', () => {
-    const dockerfile = read('Dockerfile');
-    const railway = read('railway.toml');
-    const deployment = read('docs/operations/deployment.md');
-    expect(dockerfile).toMatch(/FROM node:22-/);
-    expect(dockerfile).toMatch(/USER app/);
-    expect(dockerfile).toContain('CMD ["npm", "start"]');
-    expect(dockerfile).not.toMatch(/^HEALTHCHECK/m);
-    expect(railway).toMatch(/builder\s*=\s*"DOCKERFILE"/);
-    expect(railway).not.toMatch(/startCommand|cronSchedule|healthcheckPath/);
-    expect(deployment).toContain('npm start');
-    expect(deployment).toContain('npm run enrich');
-    expect(deployment).toContain('0 15 * * 1');
-    expect(deployment).toMatch(/no public domain/i);
-    expect(deployment).toMatch(/timeout.*15m/i);
-    expect(deployment).toMatch(/present.*missing/i);
-    expect(deployment).not.toMatch(/echo \$|printenv/i);
-  });
-
-  it('makes the default runtime image depend on completed test, type, and schema gates', () => {
-    const dockerfile = read('Dockerfile');
-    const testStage = dockerfile.slice(dockerfile.indexOf('FROM builder AS test'), dockerfile.indexOf('FROM node:22-bookworm-slim AS app'));
-    const appStage = dockerfile.slice(dockerfile.indexOf('FROM node:22-bookworm-slim AS app'));
-    expect(testStage).toMatch(/npm test[\s\S]*tsc --noEmit[\s\S]*verify-semrush-schema-reference[\s\S]*release-verified/);
-    expect(appStage).toMatch(/COPY --from=test[^\n]*release-verified/);
-  });
-
   it('keeps the supplied release estimate below the strict free-plan limit', () => {
     expect(estimateRecordBudget({companies: 52, keywords: 358, paidAds: 16, insights: 52, reviews: 52, system: 1}))
       .toEqual({total: 531, withinFreeLimit: true});
