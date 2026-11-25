@@ -4,12 +4,6 @@ import {DEFAULT_APIFY_ACTOR_ID} from '@/lib/apify/constants';
 const AirtableEnvSchema = z.object({
   AIRTABLE_PAT: z.string().min(1),
   AIRTABLE_BASE_ID: z.string().min(1),
-  AIRTABLE_COMPANIES_TABLE: z.string().min(1),
-  AIRTABLE_KEYWORDS_TABLE: z.string().min(1),
-  AIRTABLE_PAID_ADS_TABLE: z.string().min(1),
-  AIRTABLE_GTM_INSIGHTS_TABLE: z.string().min(1),
-  AIRTABLE_INSIGHT_REVIEWS_TABLE: z.string().min(1),
-  AIRTABLE_SYSTEM_TABLE: z.string().min(1),
 });
 
 const RefreshOnlyEnvSchema = z.object({

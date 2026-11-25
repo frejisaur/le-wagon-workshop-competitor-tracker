@@ -5,12 +5,6 @@ import {getInsightEnv, getRefreshDispatchEnv, getRefreshEnv, getWebEnv} from '@/
 const airtableEnv = {
   AIRTABLE_PAT: 'airtable-pat',
   AIRTABLE_BASE_ID: 'app-test',
-  AIRTABLE_COMPANIES_TABLE: 'Companies',
-  AIRTABLE_KEYWORDS_TABLE: 'Keywords',
-  AIRTABLE_PAID_ADS_TABLE: 'Paid Ads',
-  AIRTABLE_GTM_INSIGHTS_TABLE: 'GTM Insights',
-  AIRTABLE_INSIGHT_REVIEWS_TABLE: 'Insight Reviews',
-  AIRTABLE_SYSTEM_TABLE: 'System',
 };
 
 describe('server environment scopes', () => {
@@ -51,13 +45,13 @@ describe('server environment scopes', () => {
         ...airtableEnv,
         APIFY_TOKEN: 'sentinel-apify-token',
         CACHE_INVALIDATION_SECRET: 'sentinel-cache-secret',
-        AIRTABLE_SYSTEM_TABLE: '',
+        AIRTABLE_BASE_ID: '',
       });
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
 
-    expect(message).toContain('AIRTABLE_SYSTEM_TABLE');
+    expect(message).toContain('AIRTABLE_BASE_ID');
     expect(message).not.toContain('sentinel-apify-token');
     expect(message).not.toContain('sentinel-cache-secret');
   });

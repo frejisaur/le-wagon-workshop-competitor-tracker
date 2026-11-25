@@ -1,5 +1,5 @@
 import {pathToFileURL} from 'node:url';
-import {getWebEnv, type WebEnv} from '@/lib/config/server-env';
+import {getWebEnv} from '@/lib/config/server-env';
 import {ensureAirtableSchema, type EnsureAirtableSchemaResult} from '@/lib/airtable/schema';
 
 type SchemaCliDependencies = {
@@ -9,22 +9,9 @@ type SchemaCliDependencies = {
 
 export type AirtableSchemaCliResult = {exitCode: number; stdout: string};
 
-function expectedTableNames(env: WebEnv): string[] {
-  return [
-    env.AIRTABLE_COMPANIES_TABLE,
-    env.AIRTABLE_KEYWORDS_TABLE,
-    env.AIRTABLE_PAID_ADS_TABLE,
-    env.AIRTABLE_GTM_INSIGHTS_TABLE,
-    env.AIRTABLE_INSIGHT_REVIEWS_TABLE,
-    env.AIRTABLE_SYSTEM_TABLE,
-  ];
-}
-
 export async function runAirtableSchemaCli(dependencies: SchemaCliDependencies = {}): Promise<AirtableSchemaCliResult> {
   try {
     const env = getWebEnv(dependencies.env ?? process.env);
-    const canonical = ['Companies', 'Keywords', 'Paid Ads', 'GTM Insights', 'Insight Reviews', 'System'];
-    if (JSON.stringify(expectedTableNames(env)) !== JSON.stringify(canonical)) throw new TypeError('configured Airtable table names do not match the serving contract');
     const result = await (dependencies.ensure ?? ensureAirtableSchema)({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT});
     const createdFields = Object.values(result.createdFields).reduce((sum, count) => sum + count, 0);
     return {exitCode: 0, stdout: JSON.stringify({status: 'succeeded', createdTables: result.createdTables.length, createdFields})};

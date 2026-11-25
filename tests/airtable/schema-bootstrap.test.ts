@@ -68,12 +68,6 @@ describe('Airtable schema bootstrap', () => {
       env: {
         AIRTABLE_PAT: 'do-not-print-token',
         AIRTABLE_BASE_ID: 'do-not-print-base',
-        AIRTABLE_COMPANIES_TABLE: 'Companies',
-        AIRTABLE_KEYWORDS_TABLE: 'Keywords',
-        AIRTABLE_PAID_ADS_TABLE: 'Paid Ads',
-        AIRTABLE_GTM_INSIGHTS_TABLE: 'GTM Insights',
-        AIRTABLE_INSIGHT_REVIEWS_TABLE: 'Insight Reviews',
-        AIRTABLE_SYSTEM_TABLE: 'System',
       },
       ensure: async () => ({createdTables: ['Companies'], createdFields: {Companies: 72}}),
     });
