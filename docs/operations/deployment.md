@@ -18,7 +18,6 @@ Use an Airtable PAT limited to the selected base with `data.records:read`, `data
 |-|-|-|-|
 | `AIRTABLE_PAT` | present | present | Vercel sensitive env / Actions secret |
 | `AIRTABLE_BASE_ID` | present | present | Vercel env / Actions variable |
-| `AIRTABLE_*_TABLE` names | present | present | Vercel env / Actions variable |
 | `CACHE_INVALIDATION_SECRET` | present | present | Vercel sensitive env / Actions secret |
 | `APIFY_TOKEN` | not required | present | Actions secret |
 | `APIFY_ACTOR_ID` | not required | present | Actions variable |
@@ -35,7 +34,7 @@ Vercel must not receive `APIFY_TOKEN`, `APIFY_ACTOR_ID`, or `APP_BASE_URL`. Both
 - Framework preset: Next.js. Build command: the default `npm run build` (the script already selects webpack). Node.js 22.
 - Manual production deploy from a clean checkout: `vercel deploy --prod`. `.vercelignore` excludes env files and raw provider exports from the upload.
 - Health check: `GET /api/health`; require `200`, `status: ok`, and non-secret freshness metadata.
-- Server variables (Production and Preview): Airtable names plus `CACHE_INVALIDATION_SECRET`. Mark the PAT and secret as sensitive.
+- Server variables (Production and Preview): `AIRTABLE_PAT`, `AIRTABLE_BASE_ID`, and `CACHE_INVALIDATION_SECRET`. Mark the PAT and secret as sensitive. Table names are fixed in code, so no table-name variables exist.
 
 Serverless instances each hold their own dashboard snapshot. A signed invalidation reaches one instance immediately; every other instance reloads within the 60-second snapshot maximum age set in `lib/api/dashboard-service.ts`.
 
@@ -51,7 +50,7 @@ After a non-production deployment, open a fresh browser session and verify lands
 - Hard timeout: `timeout-minutes: 15`. The job installs a 14-minute internal deadline so it can publish a bounded terminal state before the outer termination.
 - No overlap: `concurrency: refresh` with `cancel-in-progress: false`, so a manual run queues behind an active one.
 - No retries: a failed or partial run exits nonzero and is flagged for operator review.
-- Variables: secrets `AIRTABLE_PAT`, `APIFY_TOKEN`, `CACHE_INVALIDATION_SECRET`; variables `AIRTABLE_BASE_ID`, the six `AIRTABLE_*_TABLE` names, `APIFY_ACTOR_ID=pro100chok/semrush-scraper`, and `APP_BASE_URL` (the Vercel production HTTPS origin).
+- Variables: secrets `AIRTABLE_PAT`, `APIFY_TOKEN`, `CACHE_INVALIDATION_SECRET`; variables `AIRTABLE_BASE_ID`, `APIFY_ACTOR_ID=pro100chok/semrush-scraper`, and `APP_BASE_URL` (the Vercel production HTTPS origin).
 - GitHub disables scheduled workflows after 60 days without repository activity. Re-enable it from the Actions tab.
 
 - Reporting: the run writes a counts-and-error-codes table to its run page and one `refresh-report` annotation (`npm run refresh:report`). Company identifiers stay in the step log.

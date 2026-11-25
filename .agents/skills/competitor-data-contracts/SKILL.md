@@ -31,8 +31,9 @@ between layers.
 6. Start with the smallest sanitized fixture that reproduces the case. Add a
    failing contract or unit test, implement the smallest change, then run the
    broader relevant suite.
-7. Check the estimated Airtable record count and API-call impact whenever a
-   persisted collection grows.
+7. Check the JSON byte budget and API-call impact whenever a persisted
+   collection grows. Keep new stored collections inside a Companies JSON field
+   unless they need independent editing.
 
 ## Schema maintenance
 
@@ -60,7 +61,7 @@ Report:
 - Validation and normalization behavior.
 - Identity or fingerprint impact.
 - Tests run and fixture coverage.
-- Airtable record/API impact, or `none`.
+- Airtable field, byte-budget, or API-call impact, or `none`.
 
 ## Boundaries
 

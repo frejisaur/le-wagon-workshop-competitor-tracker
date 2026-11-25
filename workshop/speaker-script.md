@@ -75,9 +75,9 @@ npm run airtable:schema
 npm run import:initial -- --apollo data/apollo/workshop.csv --semrush data/apify/workshop.json
 ```
 
-4. Ask Claude: "Using the Airtable MCP, count records in Companies. Do not write."
+4. Ask Claude: "Using the Airtable MCP, count records in Companies, then show the Companies fields grouped by Observed / Calculated / Inferred. Do not write."
 
-**Verify**: the Companies count equals the dry-run accepted count.
+**Verify**: the Companies count equals the dry-run accepted count, and the schema command created exactly two tables, Companies and System. **Say**: "The field names carry the layer. Keywords and ads live inside the company row as JSON, so a refresh is one write per company."
 
 **Run** (right) `npm run dev`, and leave it running: it warms up now so segment 6 has no dead air.
 

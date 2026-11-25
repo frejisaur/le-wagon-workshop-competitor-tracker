@@ -39,6 +39,11 @@ claims have valid evidence, it has no review reason, and its overall confidence
 is `high`. Every other valid candidate goes to review without replacing the last
 published insight.
 
+Both live on the company's own Companies row: the published battlecard in
+`Inferred • Battlecard JSON` and the `Workflow • Battlecard …` fields, and the
+review candidate in `Review • Candidate JSON` with `Review • Status`. Reviewers
+work in Airtable by filtering Companies on `Review • Status` = `needs_review`.
+
 ## Required run summary
 
 Return the run ID, harness, model, skill version, workflow version, companies

@@ -8,7 +8,7 @@ Everything here happens off stage. Nothing in this file is shown to the audience
 |-|-|-|
 | GitHub | Free, public repository | Code, CI, weekly refresh (Actions minutes are free for public repos) |
 | Vercel | Hobby | Web hosting (non-commercial use; use Pro if Le Wagon treats the workshop as commercial) |
-| Airtable | Free | Serving layer (1,000 records per base: the ~10-company roster uses about 150) |
+| Airtable | Free | Serving layer (two tables: one Companies row per company plus one System row, so the ~10-company roster uses about 11 of the 1,000-record limit) |
 | Apify | Free monthly credit | `pro100chok/semrush-scraper` runs |
 | Apollo | Free | Saved company list and CSV export (free plans have limited export credits: check the balance) |
 | Claude | Plan with Claude Code on the web | The scheduled routine in segment 5 |
@@ -40,7 +40,7 @@ vercel login && gh auth login
    gh secret set CACHE_INVALIDATION_SECRET
    gh variable set APIFY_ACTOR_ID --body pro100chok/semrush-scraper
    gh variable set APP_BASE_URL --body "$APP_URL"
-   # plus AIRTABLE_BASE_ID (the showcase base) and the six AIRTABLE_*_TABLE names from .env.example
+   gh variable set AIRTABLE_BASE_ID      # prompts for the showcase base ID; table names are fixed in code
    ```
 
 6. Set up the Claude routine's environment (segment 5):
@@ -82,7 +82,7 @@ If Lane C takes more than 15 minutes, shrink the roster. If Lane B overruns twic
 - [ ] Secret-safe check (the only credential output that appears on screen). Locally you only need Airtable: the Apify side lives in Actions.
 
   ```sh
-  for n in AIRTABLE_PAT AIRTABLE_BASE_ID AIRTABLE_COMPANIES_TABLE AIRTABLE_SYSTEM_TABLE; do
+  for n in AIRTABLE_PAT AIRTABLE_BASE_ID; do
     grep -q "^$n=." .env.local && echo "$n present" || echo "$n missing"
   done
   vercel env ls production && gh secret list && gh variable list

@@ -10,7 +10,7 @@ observed sample contract rather than a guarantee of future provider behavior.
 ## Data layers
 
 | Layer | Examples | Rule |
-|---|---|---|
+|-|-|-|
 | Observed | Provider traffic, keywords, backlinks, ads, AI mentions | Preserve source, database, raw link, and observation time. |
 | Calculated | 30-day change, non-brand share, benchmark gap, tracked-set share | Derive through tested pure functions from observed values. |
 | Inferred | Themes, vulnerabilities, recommendations, confidence | Store only through the insight candidate and publication workflow. |
@@ -58,7 +58,7 @@ missing website. The supplied Apify file has 52 unique domains, all matching the
 - Keyword: company + keyword + normalized landing URL.
 - Paid ad: hash of company + keyword + title + description + normalized landing URL.
 - Insight submission: company + evidence fingerprint + skill version + workflow version.
-- Review: one reusable company-linked record.
+- Review: one reusable review state on the company's own row.
 
 Normalize domains and URLs in one shared module. Consumers import that module;
 they do not implement their own normalization. On retry, resolve an existing
@@ -73,9 +73,52 @@ and normalized scalar representations, then hash it in one shared function.
 Exclude run IDs and generated insight text. Any evidence field addition,
 removal, or normalization change requires a fingerprint contract test.
 
-## Airtable budget
+## Airtable serving model
 
-Version 1 targets fewer than 1,000 records and 1,000 API calls per workspace per
-month. The supplied sample estimate is about 531 records: 52 Companies, 358
-Keywords, 16 Paid Ads, up to 52 GTM Insights, up to 52 Insight Reviews, and one
-System record. Batch writes and store bounded summaries rather than raw payloads.
+Airtable is the editable serving layer, not the raw warehouse. The base has two
+tables with fixed names, defined in `lib/airtable/schema.ts`:
+
+| Table | Rows | Holds |
+|-|-|-|
+| Companies | One per company | Identity, Apollo roster fields, observed and calculated metrics, keyword and paid-ad snapshots, the published battlecard, and the review candidate |
+| System | One | Refresh and agent run state |
+
+Field names carry their provenance prefix: `Identity •`, `Observed •`,
+`Calculated •`, `Inferred •`, `Workflow •`, `Quality •`, `Review •`, and, on
+System, `Refresh •` and `Agent •`. Companies holds these JSON fields:
+
+| Field | Content |
+|-|-|
+| `Observed • Keywords JSON` | `CuratedKeyword[]`, ordered by traffic, at most 60 |
+| `Observed • Keywords At` | Observation time of that keyword snapshot |
+| `Observed • Paid Ads JSON` | Curated paid ads with first and last observed times, ordered by traffic, at most 40 |
+| `Inferred • Battlecard JSON` | The published claims and overall confidence; its provenance sits in the `Workflow • Battlecard …` fields |
+| `Review • Candidate JSON` | The latest candidate with its provenance and review reasons |
+| `Review • Status`, `Review • Identity`, `Review • At`, `Review • Notes` | Human review state, edited in Airtable |
+
+Rules:
+
+- `lib/airtable/company-row.ts` is the only codec. JSON fields hold validated
+  domain types, never raw provider objects or Airtable field-name maps, and are
+  parsed with zod on read.
+- A JSON field that fails to parse adds an `unreadable_stored_json` quality
+  issue to that company and renders as missing. It never fails the snapshot
+  and is never read as zero or as an empty snapshot.
+- Each JSON field stays under 90,000 UTF-8 bytes (Airtable allows 100,000).
+  Snapshot truncation keeps whole items and records a
+  `stored_snapshot_truncated` quality issue with retained and original counts.
+  Claims that do not fit are rejected rather than cut.
+- A refresh writes one PATCH per company: metrics, keyword and paid-ad
+  snapshots, and the evidence fingerprint of the resulting row land together
+  or not at all. An omitted provider module keeps the stored snapshot.
+- A refresh or import never writes battlecard or review fields. Reviewer
+  fields are only written when explicitly supplied, so edits made in Airtable
+  survive candidate replacement.
+- Evidence references keep pointing at keyword and paid-ad IDs inside the JSON,
+  so claim-to-evidence tracing does not depend on row layout.
+- Only the latest published battlecard and the latest candidate are kept.
+  Battlecard history would need its own table.
+
+With two rows per tracked company plus System, the base stays far below the
+Airtable Free-plan record limit. API calls, not records, are the budget to
+watch: batch reads and writes, and keep one write per refreshed company.

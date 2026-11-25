@@ -7,7 +7,7 @@
 | Metric refresh | `npm run enrich` | The refresh workflow run (`refresh-…` ID) exits `succeeded` or documented `partial`; successful companies persist; cache invalidates after writes. |
 | Prepare due insights | `npm run insights:prepare -- --due` | Bounded manifest contains only due companies and current fingerprints. |
 | Submit candidate | `npm run insights:submit -- <candidate-file>` | Result identifies published, queued, stale, or rejected with run/company identity. |
-| Promote reviews | `npm run insights:publish-approved` | Current approved candidates publish; changed fingerprints become `stale`. |
+| Promote reviews | `npm run insights:publish-approved` | Companies rows with `Review • Status` = `approved` publish when current; changed fingerprints become `stale`. |
 | Web health | Application health endpoint defined by implementation | Service is reachable and reports data freshness without exposing secrets. |
 
 Inspect `package.json` and application routes for the implemented interface
