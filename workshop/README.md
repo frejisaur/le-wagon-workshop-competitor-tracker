@@ -33,7 +33,7 @@ Next.js on **Vercel**, **Airtable** as the data store, **Apify** for Semrush dat
 
    ```sh
    git fetch origin workshop/fallback-ui-<x>
-   git diff main origin/workshop/fallback-ui-<x> --stat
+   git diff live-demo origin/workshop/fallback-ui-<x> --stat
    ```
 
 4. To deploy your own copy, follow the [deployment contract](../docs/operations/deployment.md) and `preflight.md`.

@@ -21,7 +21,8 @@ const CacheInvalidationEnvSchema = z.object({CACHE_INVALIDATION_SECRET: z.string
 const RefreshDispatchEnvSchema = z.object({
   GITHUB_DISPATCH_TOKEN: z.string().min(1),
   GITHUB_REPOSITORY: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
-  REFRESH_REF: z.string().regex(/^[A-Za-z0-9_./-]+$/).default('main'),
+  /** Optional override; the dispatcher otherwise targets the repository's default branch. */
+  REFRESH_REF: z.string().regex(/^[A-Za-z0-9_./-]+$/).optional(),
 });
 
 export type WebEnv = z.infer<typeof WebEnvSchema>;

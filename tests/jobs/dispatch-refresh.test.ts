@@ -69,6 +69,20 @@ describe('refresh dispatch', () => {
     expect(await dispatchRefresh({token: TOKEN, repository: 'owner/repo', ref: 'main', fetch, ...clock()})).toMatchObject({status: 'partial', conclusion: 'failure'});
   });
 
+  it('targets the repository default branch when no ref is given', async () => {
+    let listed = 0;
+    const {fetch, calls} = fakeGitHub([
+      (call) => (call.path === '' ? {status: 200, body: {default_branch: 'live-demo'}} : undefined),
+      (call) => (call.path.startsWith('/actions/workflows/refresh.yml/runs') ? {status: 200, body: {workflow_runs: listed++ ? [{id: 2, status: 'completed', conclusion: 'success', html_url: 'u'}] : []}} : undefined),
+      (call) => (call.method === 'POST' ? {status: 204} : undefined),
+      (call) => (call.path === '/actions/runs/2/jobs' ? {status: 200, body: {jobs: [{id: 3}]}} : undefined),
+      (call) => (call.path === '/check-runs/3/annotations' ? {status: 200, body: [{title: 'refresh-report', message: JSON.stringify(report)}]} : undefined),
+    ]);
+    expect(await dispatchRefresh({token: TOKEN, repository: 'owner/repo', fetch, ...clock()})).toMatchObject({status: 'succeeded'});
+    expect(calls.find((call) => call.method === 'POST')?.body).toBe('{"ref":"live-demo"}');
+    expect(calls.find((call) => call.path.startsWith('/actions/workflows/refresh.yml/runs'))?.path).toContain('branch=live-demo');
+  });
+
   it('fails closed with a status code only when GitHub rejects the dispatch', async () => {
     const {fetch} = fakeGitHub([runsList([]), (call) => (call.method === 'POST' ? {status: 403, body: {message: `bad credentials ${TOKEN}`}} : undefined)]);
     const result = await dispatchRefresh({token: TOKEN, repository: 'owner/repo', ref: 'main', fetch, ...clock()});

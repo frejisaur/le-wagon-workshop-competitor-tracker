@@ -142,7 +142,7 @@ git push -u origin HEAD
 vercel deploy --prod
 ```
 
-**Lane D starts** (collect at 74). The live work sits on today's `workshop/live-*` branch, so `main` stays the clean starting point. The push also gets a Vercel preview URL. **Say**: "Every branch gets its own preview. Production changes only when I say so."
+**Lane D starts** (collect at 74). The live work sits on today's `workshop/live-*` branch, so `live-demo` stays the clean starting point. The push also gets a Vercel preview URL. **Say**: "Every branch gets its own preview. Production changes only when I say so."
 
 **Fallback**: Lane B not back by 64: stop the agent, disclose, then (right) `git fetch origin workshop/fallback-ui-<x> && git checkout origin/workshop/fallback-ui-<x> -- components styles` and run the same checks. The commands above are in shell history from rehearsal; recall them rather than typing.
 

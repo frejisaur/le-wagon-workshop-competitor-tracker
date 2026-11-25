@@ -1,10 +1,10 @@
-# Release gate for every push and pull request. Vercel deploys main only after this passes
+# Release gate for every push and pull request. Vercel deploys the production branch only after this passes
 # (enable "Require checks to pass" for production in the Vercel project's Git settings).
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [live-demo]
   pull_request:
 
 permissions:

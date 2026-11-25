@@ -30,7 +30,7 @@ Vercel must not receive `APIFY_TOKEN`, `APIFY_ACTOR_ID`, or `APP_BASE_URL`. Both
 
 ## Web (Vercel)
 
-- Link once: `vercel link` (creates the ignored `.vercel/` directory). Connect the GitHub repository in the Vercel dashboard so pushes to `main` deploy production and pull requests get preview URLs.
+- Link once: `vercel link` (creates the ignored `.vercel/` directory). Connect the GitHub repository in the Vercel dashboard and set its production branch to `live-demo` (the GitHub default branch), so pushes to `live-demo` deploy production and other branches get preview URLs.
 - Framework preset: Next.js. Build command: the default `npm run build` (the script already selects webpack). Node.js 22.
 - Manual production deploy from a clean checkout: `vercel deploy --prod`. `.vercelignore` excludes env files and raw provider exports from the upload.
 - Health check: `GET /api/health`; require `200`, `status: ok`, and non-secret freshness metadata.
@@ -61,7 +61,7 @@ Before a non-production refresh, export the `System` table row as a sanitized be
 
 A Claude Code routine (`/schedule`, managed at claude.ai/code/routines) can trigger the refresh on its own cadence and explain the result in plain language. It adds judgment on top of the clock, never a second executor:
 
-- The routine runs `npm ci && npm run refresh:dispatch`. The command dispatches `refresh.yml` on `main`, waits up to 35 minutes (a run can queue behind an active one), reads the `refresh-report` annotation, prints one sanitized JSON result and exits nonzero unless the refresh succeeded. It never retries.
+- The routine runs `npm ci && npm run refresh:dispatch`. The command dispatches `refresh.yml` on the repository's default branch (override with `REFRESH_REF`), waits up to 35 minutes (a run can queue behind an active one), reads the `refresh-report` annotation, prints one sanitized JSON result and exits nonzero unless the refresh succeeded. It never retries.
 - Its cloud environment holds only `GITHUB_DISPATCH_TOKEN` and `GITHUB_REPOSITORY`. The token is a fine-grained personal access token for this one repository with **Actions: read and write** and nothing else. Airtable, Apify and cache credentials stay in Actions secrets. Environment variables are visible to everyone who can use that environment, which is why the token can do nothing but trigger and read workflow runs.
 - The environment must reach `api.github.com`. Confirm it with a manual "Run now" before relying on the schedule.
 - Both the Actions cron and the routine may stay enabled: the concurrency group queues overlapping triggers, and each trigger costs one Apify run. To give the routine sole ownership of the cadence, remove the `schedule:` block and keep `workflow_dispatch`.

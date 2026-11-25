@@ -28,7 +28,8 @@ export type DispatchResult = {
 export type DispatchOptions = {
   token: string;
   repository: string;
-  ref: string;
+  /** Defaults to the repository's default branch, the only branch GitHub runs scheduled workflows from. */
+  ref?: string;
   fetch?: typeof globalThis.fetch;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -71,21 +72,23 @@ export async function dispatchRefresh(options: DispatchOptions): Promise<Dispatc
     return response.status === 204 ? null : ((await response.json()) as T);
   }
 
-  const listRuns = async () => (await github<{workflow_runs: WorkflowRun[]}>(
-    `/actions/workflows/${WORKFLOW}/runs?event=workflow_dispatch&branch=${encodeURIComponent(options.ref)}&per_page=20`,
+  const listRuns = async (ref: string) => (await github<{workflow_runs: WorkflowRun[]}>(
+    `/actions/workflows/${WORKFLOW}/runs?event=workflow_dispatch&branch=${encodeURIComponent(ref)}&per_page=20`,
   ))?.workflow_runs ?? [];
 
   let run: WorkflowRun | undefined;
   try {
     // Runs that existed before this dispatch are ignored, so clock skew cannot match an old run.
-    const before = new Set((await listRuns()).map(({id}) => id));
-    await github(`/actions/workflows/${WORKFLOW}/dispatches`, {method: 'POST', body: JSON.stringify({ref: options.ref})});
+    const ref = options.ref ?? (await github<{default_branch?: string}>(''))?.default_branch;
+    if (!ref) throw new DispatchError('default_branch_unknown');
+    const before = new Set((await listRuns(ref)).map(({id}) => id));
+    await github(`/actions/workflows/${WORKFLOW}/dispatches`, {method: 'POST', body: JSON.stringify({ref})});
 
     const findDeadline = now() + (options.findRunTimeoutMs ?? DEFAULT_FIND_RUN_MS);
     while (!run) {
       if (now() > findDeadline) return result('dispatch_failed', 'run_not_found');
       await sleep(Math.min(pollMs, 5_000));
-      run = (await listRuns()).filter(({id}) => !before.has(id)).sort((left, right) => left.id - right.id)[0];
+      run = (await listRuns(ref)).filter(({id}) => !before.has(id)).sort((left, right) => left.id - right.id)[0];
     }
 
     const deadline = started + (options.deadlineMs ?? DEFAULT_DEADLINE_MS);

@@ -58,7 +58,7 @@ describe('server environment scopes', () => {
 
   it('gives a refresh dispatcher only its GitHub token, never data or provider credentials', () => {
     const env = getRefreshDispatchEnv({...airtableEnv, APIFY_TOKEN: 'token', GITHUB_DISPATCH_TOKEN: 'gh-token', GITHUB_REPOSITORY: 'owner/repo'});
-    expect(env).toEqual({GITHUB_DISPATCH_TOKEN: 'gh-token', GITHUB_REPOSITORY: 'owner/repo', REFRESH_REF: 'main'});
+    expect(env).toEqual({GITHUB_DISPATCH_TOKEN: 'gh-token', GITHUB_REPOSITORY: 'owner/repo'});
     expect(() => getRefreshDispatchEnv({GITHUB_DISPATCH_TOKEN: 'sentinel-gh-token', GITHUB_REPOSITORY: 'not a repo'})).toThrow(/^(?!.*sentinel-gh-token).*GITHUB_REPOSITORY/);
   });
 });

@@ -49,7 +49,7 @@ vercel login && gh auth login
    - Rehearse `/schedule` with `prompts/05-schedule-routine.md`, press "Run now" once, and confirm the reply reports the run. Then pause that routine: it is the `/schedule` fallback. Delete the routines you create on stage after each session, so dispatches don't pile up.
 
 7. Trigger one refresh (`gh workflow run refresh.yml`) so there is a "last scheduled run" to fall back to.
-8. Full rehearsal with a stopwatch, using the same two-pane layout. Record in the table below. Build one fallback per design option, because the room may vote for any of them. For each `<x>` in `a`, `b`, `c`: run Lane B for that option, check it against the brief, then `git switch -c workshop/fallback-ui-<x> && git add -A components styles && git commit -m "feat: restyle All Companies (option <x>)" && git push -u origin HEAD && git switch main`.
+8. Full rehearsal with a stopwatch, using the same two-pane layout. Record in the table below. Build one fallback per design option, because the room may vote for any of them. For each `<x>` in `a`, `b`, `c`: run Lane B for that option, check it against the brief, then `git switch -c workshop/fallback-ui-<x> && git add -A components styles && git commit -m "feat: restyle All Companies (option <x>)" && git push -u origin HEAD && git switch live-demo`.
 
 ## Rehearsal notes (fill in, do not commit real company names)
 
@@ -76,7 +76,7 @@ If Lane C takes more than 15 minutes, shrink the roster. If Lane B overruns twic
 - [ ] Terminal: two panes, Claude Code on the left and a plain shell on the right. Font size 20+, a light theme, prompt trimmed to the folder name. Clear the scrollback, but keep the shell history from rehearsal (the commit and fallback commands are recalled, not typed).
 - [ ] Close every window that could show a secret: `.env.local`, password manager, Vercel or GitHub settings pages.
 - [ ] Browser tabs, in order: `$APP_URL`, Apollo Saved list, Apify run, Airtable workshop base, the three `workshop/design/option-*.html` files, the GitHub Actions tab, claude.ai/code/routines.
-- [ ] Start from a clean `main` on a dated branch: `git switch main && git pull && git switch -c "workshop/live-$(date +%F)"`.
+- [ ] Start from a clean `live-demo` on a dated branch: `git switch live-demo && git pull && git switch -c "workshop/live-$(date +%F)"`.
 - [ ] Remove last rehearsal's exports from `data/apollo/` and `data/apify/`.
 - [ ] Reset `workshop/context/dashboard-brief.md` (`git checkout -- workshop/context/dashboard-brief.md workshop/starters`).
 - [ ] Secret-safe check (the only credential output that appears on screen). Locally you only need Airtable: the Apify side lives in Actions.
@@ -92,7 +92,7 @@ If Lane C takes more than 15 minutes, shrink the roster. If Lane B overruns twic
 
 ## After the session
 
-- Restore production to `main`: `git switch main && vercel deploy --prod`.
+- Restore production to `live-demo`: `git switch live-demo && vercel deploy --prod`.
 - Delete the routine created on stage (keep the paused fallback).
 - Revoke the workshop PATs and the Apify token, or rotate them if the repository stays live.
 - Keep or revoke the Airtable, Apify and Vercel MCP OAuth grants, as you intend.
