@@ -1,33 +1,40 @@
-# Terminating weekly metric refresh and the only refresh executor. It runs on this cron, a manual dispatch,
-# or a dispatch from a scheduled Claude routine (npm run refresh:dispatch). The project creates no Apify schedule.
-# Secrets and variables live in this repository's Actions settings and never in this file.
 name: Weekly refresh
 
 on:
-  schedule:
-    - cron: '0 15 * * 1' # Monday 15:00 UTC
   workflow_dispatch:
+    inputs:
+      run_ids:
+        description: Completed Apify run IDs, comma-separated
+        required: true
+        type: string
+      target:
+        description: Airtable and Vercel environment
+        required: true
+        type: choice
+        options: [pilot, production]
+        default: pilot
 
 permissions:
   contents: read
 
-# Never overlap refreshes: a manual run queues behind an active scheduled run instead of cancelling it.
 concurrency:
   group: refresh
   cancel-in-progress: false
 
 jobs:
   enrich:
+    if: inputs.target == 'pilot' || inputs.target == 'production'
+    environment: ${{ inputs.target }}
     runs-on: ubuntu-latest
-    # The job publishes a bounded terminal state at its internal 14-minute deadline, before this outer limit.
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       AIRTABLE_PAT: ${{ secrets.AIRTABLE_PAT }}
       AIRTABLE_BASE_ID: ${{ vars.AIRTABLE_BASE_ID }}
       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-      APIFY_ACTOR_ID: ${{ vars.APIFY_ACTOR_ID }}
+      APIFY_ACTOR_ID: pro100chok/semrush-scraper
       APP_BASE_URL: ${{ vars.APP_BASE_URL }}
       CACHE_INVALIDATION_SECRET: ${{ secrets.CACHE_INVALIDATION_SECRET }}
+      RUN_IDS: ${{ inputs.run_ids }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,10 +42,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Prints one sanitized JSON report; exits nonzero for partial or failed refreshes so the run is flagged.
-      # The explicit bash shell enables pipefail, so tee cannot hide that exit code.
-      - run: npm run --silent enrich | tee "$RUNNER_TEMP/refresh-report.json"
+      - run: npm run --silent enrich -- --run-ids "$RUN_IDS" | tee "$RUNNER_TEMP/refresh-report.json"
         shell: bash
-      # Run page summary plus the annotation a dispatcher reads back. Counts and error codes only.
+      - run: npm run --silent apollo -- export "$RUN_IDS"
       - if: always()
         run: npm run --silent refresh:report -- "$RUNNER_TEMP/refresh-report.json"

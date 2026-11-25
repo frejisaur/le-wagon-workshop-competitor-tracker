@@ -47,6 +47,8 @@ Moz values, and the paid-activity flag.
 
 ## Initial Apollo-to-Apify join
 
+The November export adds an observed root discriminator, `type: domain_overview`. Older exports omit it. Validate it when present. The 52-record reference inventory above describes the original sample.
+
 The Apollo CSV is the roster and the Apify JSON is enrichment. Join Apollo
 `Website` to Apify `domain` using the shared domain normalizer. Extract and
 lowercase the hostname, remove a leading `www.` and any trailing dot, and ignore
@@ -152,3 +154,5 @@ stores only the raw-record reference (`Observed • Raw Ref`). That dataset is
 the source for long historical series not copied into Airtable, debugging
 transforms, rebuilding Airtable after schema changes, and auditing battlecard
 claims.
+
+The two System attachment fields `Refresh • Apollo CSV` and `Refresh • Enriched CSV` hold the original roster and latest successful export. The dashboard projection omits both. The export preserves Apollo order and columns and appends match status, canonical domain, observed database, timestamp and five observed metrics. Completed-run observations use the Actor finish time and exact dataset offset.

@@ -21,6 +21,12 @@ describe('provider boundary schemas', () => {
     expect(result.issues[0]).toMatchObject({domain: 'alpha.example', section: 'moz'});
   });
 
+  it('accepts the Domain Overview discriminator while rejecting a different report type', () => {
+    const [sample] = loadJson('semrush-sample.json') as Record<string, unknown>[];
+    expect(parseSemrushPayload([{...sample, type: 'domain_overview'}]).records).toHaveLength(1);
+    expect(() => parseSemrushPayload([{...sample, type: 'rankings'}])).toThrow();
+  });
+
   it('rejects a non-array Semrush payload', () => {
     expect(() => parseSemrushPayload({domain: 'alpha.example'})).toThrow(/array/);
   });

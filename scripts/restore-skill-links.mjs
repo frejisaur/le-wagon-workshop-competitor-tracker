@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 
 const canonicalSkills = [
   'competitor-data-contracts',
+  'enrich-apollo-accounts',
   'building-competitor-dashboard',
   'generating-gtm-battlecards',
   'operating-competitor-intelligence',

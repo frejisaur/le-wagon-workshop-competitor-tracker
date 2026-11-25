@@ -11,3 +11,7 @@ test-results
 dogfood-output
 .worktrees
 *.log
+
+data/*.csv
+data/*.json
+apollo-accounts-enriched.csv

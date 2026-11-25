@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "airtable": {"type": "http", "url": "https://mcp.airtable.com/mcp"},
-    "apify": {"type": "http", "url": "https://mcp.apify.com"},
+    "apify": {"type": "http", "url": "https://mcp.apify.com/?tools=actors,docs,pro100chok/semrush-scraper"},
     "vercel": {"type": "http", "url": "https://mcp.vercel.com"}
   }
 }

@@ -1,7 +1,7 @@
 type TextField = {name: string; type: 'singleLineText' | 'multilineText'};
 type NumberField = {name: string; type: 'number'; options: {precision: number}};
 type CheckboxField = {name: string; type: 'checkbox'; options: {color: 'greenBright'; icon: 'check'}};
-export type AirtableSchemaField = TextField | NumberField | CheckboxField;
+export type AirtableSchemaField = TextField | NumberField | CheckboxField | {name: string; type: 'multipleAttachments'};
 export type AirtableSchemaTable = {name: string; fields: AirtableSchemaField[]};
 
 const text = (...names: string[]): TextField[] => names.map((name) => ({name, type: 'singleLineText'}));
@@ -65,6 +65,8 @@ const system: AirtableSchemaTable = {
       'Workflow • Processed Companies', 'Workflow • Succeeded Companies', 'Workflow • Failed Companies',
       'Agent • Processed Companies', 'Agent • Review Count',
     ),
+    {name: 'Refresh • Apollo CSV', type: 'multipleAttachments'},
+    {name: 'Refresh • Enriched CSV', type: 'multipleAttachments'},
     ...longText('Workflow • Error Summary', 'Agent • Error Summary'),
   ],
 };

@@ -10,7 +10,7 @@ export type AirtableTable = (typeof AIRTABLE_TABLES)[keyof typeof AIRTABLE_TABLE
 export type AirtableFieldValue = string | number | boolean | null;
 export type AirtableFields = Record<string, AirtableFieldValue | undefined>;
 export type AirtableRecord = {id: string; fields: AirtableFields; createdTime?: string};
-export type AirtableWriteRecord = {id?: string; fields: AirtableFields};
+export type AirtableWriteRecord = {id?: string; fields: Record<string, AirtableFieldValue | {id: string}[] | undefined>};
 export type AirtableListResponse = {records: AirtableRecord[]; offset?: string};
 export type AirtableWriteResponse = {records: AirtableRecord[]};
 

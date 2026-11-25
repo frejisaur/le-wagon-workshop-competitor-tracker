@@ -5,6 +5,7 @@ import {AirtableClient} from '@/lib/airtable/client';
 import {FixtureCompetitorRepository} from '@/lib/airtable/fixture-repository';
 import {AirtableCompetitorRepository} from '@/lib/airtable/repository';
 import {ApifyClient} from '@/lib/apify/client';
+import {loadCompletedRuns, parseRunIds} from '@/lib/apify/completed-runs';
 import {DEFAULT_APIFY_ACTOR_ID} from '@/lib/apify/constants';
 import {createCacheInvalidationAdapter} from '@/lib/cache/invalidation-client';
 import {runDomainOverview} from '@/lib/apify/run-domain-overview';
@@ -12,23 +13,25 @@ import {getRefreshEnv} from '@/lib/config/server-env';
 import {parseSemrushPayload} from '@/lib/schemas/semrush';
 import {runEnrichment, type EnrichmentReport} from '@/lib/workflows/enrich';
 
-type CliArguments = {providerFixture?: string; fixtureState?: string; outputState?: string; actorId?: string};
+type CliArguments = {providerFixture?: string; fixtureState?: string; outputState?: string; actorId?: string; runIds?: string[]};
 
 function parseArguments(arguments_: string[]): CliArguments {
   const parsed: CliArguments = {};
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
-    if (!['--provider-fixture', '--fixture-state', '--output-state', '--actor-id'].includes(argument)) throw new TypeError(`unsupported argument: ${argument}`);
+    if (!['--provider-fixture', '--fixture-state', '--output-state', '--actor-id', '--run-ids'].includes(argument)) throw new TypeError(`unsupported argument: ${argument}`);
     const value = arguments_[index + 1];
     if (!value || value.startsWith('--')) throw new TypeError(`${argument} requires a file path or actor ID`);
     if (argument === '--provider-fixture') parsed.providerFixture = value;
     if (argument === '--fixture-state') parsed.fixtureState = value;
     if (argument === '--output-state') parsed.outputState = value;
+    if (argument === '--run-ids') parsed.runIds = parseRunIds(value);
     if (argument === '--actor-id') parsed.actorId = value;
     index += 1;
   }
   if (parsed.providerFixture && !parsed.fixtureState) throw new TypeError('--provider-fixture requires --fixture-state');
   if (parsed.outputState && !parsed.fixtureState) throw new TypeError('--output-state requires --fixture-state');
+  if (parsed.runIds && (parsed.actorId || parsed.fixtureState)) throw new Error('run IDs require live completed-run mode');
   return parsed;
 }
 
@@ -73,7 +76,11 @@ export async function runEnrichCli(arguments_: string[]): Promise<EnrichCliResul
       try {
         report = await runEnrichment({
           repository,
-          runDomainOverview: (domains, options) => runDomainOverview(apify, domains, {...options, actorId}),
+          ...(args.runIds ? {
+            runIdFactory: () => 'apify-' + args.runIds!.join(','),
+            completedRuns: (domains: string[], signal: AbortSignal) => loadCompletedRuns(apify, args.runIds!, domains, signal),
+            maxAttempts: 1,
+          } : {runDomainOverview: (domains, options) => runDomainOverview(apify, domains, {...options, actorId})}),
           // Live only: fixture mode remains self-contained and never needs a URL or secret.
           cache: createCacheInvalidationAdapter({baseUrl: env.APP_BASE_URL, secret: env.CACHE_INVALIDATION_SECRET}),
           signal: controller.signal,

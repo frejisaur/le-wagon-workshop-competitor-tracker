@@ -91,6 +91,7 @@ const sections = {authority: AuthoritySchema, backlinks_detail: BacklinksDetailS
 
 /** Strictly validates independently useful, provider-observed root metrics. */
 export const SemrushDomainOverviewSchema = z.object({
+  type: z.literal('domain_overview').optional(),
   domain: z.string().min(1), database: z.string().refine((value): boolean => value === 'worldwide', 'database must be worldwide'), is_root_domain: z.boolean(),
   authority_score: nullableNumber, backlinks: nullableNumber, referring_domains: nullableNumber,
   follow_backlinks: nullableNumber, nofollow_backlinks: nullableNumber, organic_traffic: nullableNumber,

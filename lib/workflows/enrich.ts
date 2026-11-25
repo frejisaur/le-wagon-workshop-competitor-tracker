@@ -26,13 +26,13 @@ export type EnrichmentReport = {
 };
 
 export type ProviderBatchResult = {items: unknown[]; datasetId: string};
+export type CompletedDataset = ProviderBatchResult & {domains: string[]; observedAt: string; unavailable?: boolean};
 type DomainOverviewPort = (domains: string[], options: {signal: AbortSignal; timeoutMs: number}) => Promise<ProviderBatchResult | unknown[]>;
 type CachePort = {invalidate: () => Promise<void>};
-export type EnrichmentOptions = {
+type CompletedRunsPort = (domains: string[], signal: AbortSignal) => Promise<{datasets: CompletedDataset[]}>;
+type ProviderOptions = {runDomainOverview: DomainOverviewPort; completedRuns?: never} | {completedRuns: CompletedRunsPort; runDomainOverview?: never};
+export type EnrichmentOptions = ProviderOptions & {
   repository: CompetitorStore;
-  /** Server-only boundary; the workflow never receives raw client credentials. */
-  runDomainOverview: DomainOverviewPort;
-  /** Task 10 supplies the HTTP cache adapter; Task 9 depends only on this port. */
   cache?: CachePort;
   batchSize?: number;
   maxAttempts?: number;
@@ -155,15 +155,7 @@ function companyWrite(company: ActiveCompany, record: SemrushDomainOverview, ref
     identity: evidence.company.identity,
     observed: evidence.company.observed,
     calculated: evidence.company.calculated!,
-    displayName: stringField(company.fields, 'Observed • Display Name'),
-    segment: stringField(company.fields, 'Observed • Segment'),
-    apolloWebsite: stringField(company.fields, 'Observed • Apollo Website'),
-    apifyDomain: stringField(company.fields, 'Observed • Apify Domain'),
-    apolloAccountStage: stringField(company.fields, 'Observed • Apollo Account Stage'),
-    apolloLists: stringField(company.fields, 'Observed • Apollo Lists'),
-    apolloEmployees: stringField(company.fields, 'Observed • Apollo Employees'),
-    apolloIndustry: stringField(company.fields, 'Observed • Apollo Industry'),
-    apolloCompanyCountry: stringField(company.fields, 'Observed • Apollo Company Country'),
+    apifyDomain: record.domain,
     qualityIssues: evidence.qualityIssues,
     // An omitted provider module is not an authoritative empty snapshot: the stored one is kept.
     ...(record.organic ? {keywords: evidence.keywords} : {}),
@@ -205,7 +197,7 @@ function terminalSystem(runId: string, status: EnrichmentStatus, report: Pick<En
   };
 }
 
-type IndexedRecord = {record: SemrushDomainOverview; rawRef?: string};
+type IndexedRecord = {record: SemrushDomainOverview; rawRef?: string; observedAt?: string};
 
 function datasetItemRef(datasetId: string, offset: number): string | undefined {
   if (!datasetId) return undefined;
@@ -288,35 +280,62 @@ export async function runEnrichment(options: EnrichmentOptions): Promise<Enrichm
     });
     if (running.failed > 0) throw new Error('system_start_failed');
 
-    for (const batch of split(companies, batchSize)) {
+    if (options.completedRuns && !companies.length) {
+      report.errors.push({stage: 'validation', code: 'empty_roster'});
+      fatalStartupFailure = true;
+    }
+    const batches = options.completedRuns && companies.length ? [companies] : split(companies, batchSize);
+    for (const batch of batches) {
       const expected = new Map(batch.map((company) => [company.canonicalDomain, company]));
-      let provider: ProviderBatchResult | undefined;
+      const datasetErrors: EnrichmentError[] = [];
+      const parsed = new Map<string, IndexedRecord>();
       for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
         try {
-          const result = await options.runDomainOverview(batch.map((company) => company.canonicalDomain), {signal: controller.signal, timeoutMs});
-          provider = Array.isArray(result) ? {items: result, datasetId: ''} : result;
+          if (options.completedRuns) {
+            const {datasets} = await options.completedRuns([...expected.keys()], controller.signal);
+            for (const dataset of datasets) {
+              const subset = new Map(dataset.domains.map(domain => [domain, expected.get(domain)!]));
+              if (dataset.unavailable) {
+                for (const company of subset.values()) datasetErrors.push({stage: 'provider', code: 'dataset_unavailable', companyId: company.companyId});
+                continue;
+              }
+              for (const [domain, item] of indexedRecords(dataset.items, subset, datasetErrors, dataset.datasetId)) {
+                parsed.set(domain, {...item, observedAt: dataset.observedAt});
+              }
+            }
+          } else {
+            const result = await options.runDomainOverview([...expected.keys()], {signal: controller.signal, timeoutMs});
+            const provider = Array.isArray(result) ? {items: result, datasetId: ''} : result;
+            for (const [domain, item] of indexedRecords(provider.items, expected, datasetErrors, provider.datasetId)) parsed.set(domain, item);
+          }
           break;
         } catch (error) {
           if (attempt + 1 === maxAttempts) {
-            for (const company of batch) report.errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'provider', code: safeErrorCode(error)});
+            for (const company of batch) datasetErrors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'provider', code: safeErrorCode(error)});
           } else if (retryDelayMs > 0) await (options.sleep ?? ((milliseconds) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds))))(retryDelayMs * (2 ** attempt));
         }
       }
-      if (!provider) continue;
-      const datasetErrors: EnrichmentError[] = [];
-      const parsed = indexedRecords(provider.items, expected, datasetErrors, provider.datasetId);
       report.errors.push(...datasetErrors);
       const completeTrackedSetCoverage = report.processed === batch.length && parsed.size === batch.length;
       const trackedSetTotalTraffic = completeTrackedSetCoverage
         ? [...parsed.values()].reduce<number | null>((total, value) => total === null || typeof value.record.total_traffic !== 'number' || !Number.isFinite(value.record.total_traffic) ? null : total + value.record.total_traffic, 0)
         : null;
       for (const company of batch) {
+        if (controller.signal.aborted) {
+          report.errors.push({companyId: company.companyId, stage: 'provider', code: 'operation_aborted'});
+          continue;
+        }
         const indexed = parsed.get(company.canonicalDomain);
         if (!indexed) {
           if (!datasetErrors.some((error) => error.companyId === company.companyId)) report.errors.push({companyId: company.companyId, canonicalDomain: company.canonicalDomain, stage: 'validation', code: 'dataset_item_missing'});
           continue;
         }
-        const refreshedAt = iso(now);
+        const refreshedAt = indexed.observedAt ?? iso(now);
+        const previous = stringField(company.fields, 'Observed • At');
+        if (indexed.observedAt && previous && Date.parse(previous) > Date.parse(refreshedAt)) {
+          report.errors.push({companyId: company.companyId, stage: 'validation', code: 'older_observation'});
+          continue;
+        }
         let write: CompanyWrite;
         try {
           write = companyWrite(company, indexed.record, refreshedAt, indexed.rawRef, trackedSetTotalTraffic, completeTrackedSetCoverage);

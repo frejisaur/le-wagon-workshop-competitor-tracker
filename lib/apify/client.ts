@@ -107,6 +107,19 @@ export class ApifyClient {
     if (!Number.isInteger(this.defaultTimeoutMs) || this.defaultTimeoutMs < 1 || this.defaultTimeoutMs > MAX_OPERATION_TIMEOUT_MS) throw new TypeError(`defaultTimeoutMs must be an integer from 1 to ${MAX_OPERATION_TIMEOUT_MS}`);
   }
 
+  async getResource(path: string, signal: AbortSignal, envelope = true): Promise<unknown> {
+    // Only fixed metadata and INPUT paths are accepted by this authenticated reader.
+    if (!/^(acts\/[a-zA-Z0-9_~-]+|actor-runs\/[a-zA-Z0-9]+|key-value-stores\/[a-zA-Z0-9]+\/records\/INPUT)$/.test(path)) throw new TypeError('invalid resource path');
+    const operation = operationSignal({signal}, this.defaultTimeoutMs);
+    try {
+      const response = await this.request(path, {method: 'GET'}, operation.signal);
+      const body = await this.json(response);
+      return envelope ? (body as {data?: unknown})?.data : body;
+    } finally {
+      operation.cleanup();
+    }
+  }
+
   async startRun(actorId: string, input: Record<string, unknown>, options: ApifyOperationOptions = {}): Promise<ApifyRun> {
     if (!actorId.trim() || actorId.includes('..')) throw new TypeError('actorId is invalid');
     const signal = operationSignal(options, this.defaultTimeoutMs);
@@ -187,6 +200,7 @@ export class ApifyClient {
     try {
       const response = await this.fetch(url, {
         ...init,
+        redirect: 'error',
         signal,
         headers: {authorization: `Bearer ${this.options.token}`, accept: 'application/json', ...(init.body ? {'content-type': 'application/json'} : {})},
       });

@@ -1,20 +1,20 @@
 import {pathToFileURL} from 'node:url';
+import {parseRunIds} from '@/lib/apify/completed-runs';
 import {getRefreshDispatchEnv} from '@/lib/config/server-env';
 import {parseAnnotationMessage, REFRESH_REPORT_ANNOTATION_TITLE, type RefreshReportSummary} from '@/lib/refresh/report';
 
 /**
  * Triggers `.github/workflows/refresh.yml` and waits for its verdict. This is
- * what a scheduled Claude routine runs: the workflow stays the only executor, so
+ * what a scheduled Claude routine runs: the workflow stays the only Airtable writer for weekly runs, so
  * its concurrency group, timeout and Actions secrets still apply, and the caller
  * needs nothing more than a token that can dispatch workflows on one repository.
  */
 
 const WORKFLOW = 'refresh.yml';
 const API = 'https://api.github.com';
-/** A dispatched run may queue behind an active one (15 min) before running (15 min). */
-const DEFAULT_DEADLINE_MS = 35 * 60 * 1_000;
+/** Allow one 20-minute job to finish ahead of this 20-minute job. */
+const DEFAULT_DEADLINE_MS = 45 * 60 * 1_000;
 const DEFAULT_POLL_MS = 15_000;
-const DEFAULT_FIND_RUN_MS = 2 * 60 * 1_000;
 
 export type DispatchStatus = 'succeeded' | 'partial' | 'failed' | 'timed_out' | 'dispatch_failed';
 export type DispatchResult = {
@@ -28,14 +28,15 @@ export type DispatchResult = {
 export type DispatchOptions = {
   token: string;
   repository: string;
-  /** Defaults to the repository's default branch, the only branch GitHub runs scheduled workflows from. */
+  /** A pilot may use a branch with the new workflow before production cutover. */
   ref?: string;
   fetch?: typeof globalThis.fetch;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   pollIntervalMs?: number;
   deadlineMs?: number;
-  findRunTimeoutMs?: number;
+  runIds: string;
+  target: 'pilot' | 'production';
 };
 
 type WorkflowRun = {id: number; html_url: string; status: string; conclusion: string | null};
@@ -59,7 +60,7 @@ export async function dispatchRefresh(options: DispatchOptions): Promise<Dispatc
         headers: {
           accept: 'application/vnd.github+json',
           authorization: `Bearer ${options.token}`,
-          'x-github-api-version': '2022-11-28',
+          'x-github-api-version': '2026-03-10',
           'user-agent': 'competitor-intelligence-refresh-dispatch',
           ...(init.body ? {'content-type': 'application/json'} : {}),
         },
@@ -72,24 +73,16 @@ export async function dispatchRefresh(options: DispatchOptions): Promise<Dispatc
     return response.status === 204 ? null : ((await response.json()) as T);
   }
 
-  const listRuns = async (ref: string) => (await github<{workflow_runs: WorkflowRun[]}>(
-    `/actions/workflows/${WORKFLOW}/runs?event=workflow_dispatch&branch=${encodeURIComponent(ref)}&per_page=20`,
-  ))?.workflow_runs ?? [];
-
   let run: WorkflowRun | undefined;
   try {
-    // Runs that existed before this dispatch are ignored, so clock skew cannot match an old run.
+    const runIds = parseRunIds(options.runIds);
     const ref = options.ref ?? (await github<{default_branch?: string}>(''))?.default_branch;
     if (!ref) throw new DispatchError('default_branch_unknown');
-    const before = new Set((await listRuns(ref)).map(({id}) => id));
-    await github(`/actions/workflows/${WORKFLOW}/dispatches`, {method: 'POST', body: JSON.stringify({ref})});
-
-    const findDeadline = now() + (options.findRunTimeoutMs ?? DEFAULT_FIND_RUN_MS);
-    while (!run) {
-      if (now() > findDeadline) return result('dispatch_failed', 'run_not_found');
-      await sleep(Math.min(pollMs, 5_000));
-      run = (await listRuns(ref)).filter(({id}) => !before.has(id)).sort((left, right) => left.id - right.id)[0];
-    }
+    const dispatched = await github<{workflow_run_id: number; html_url: string}>(`/actions/workflows/${WORKFLOW}/dispatches`, {
+      method: 'POST', body: JSON.stringify({ref, inputs: {run_ids: runIds.join(','), target: options.target}}),
+    });
+    if (!dispatched || !Number.isSafeInteger(dispatched.workflow_run_id)) throw new DispatchError('run_id_missing');
+    run = {id: dispatched.workflow_run_id, html_url: dispatched.html_url, status: 'queued', conclusion: null};
 
     const deadline = started + (options.deadlineMs ?? DEFAULT_DEADLINE_MS);
     while (run.status !== 'completed') {
@@ -99,8 +92,10 @@ export async function dispatchRefresh(options: DispatchOptions): Promise<Dispatc
     }
 
     const report = await readReport(run.id);
-    const status: DispatchStatus = report?.status ?? (run.conclusion === 'success' ? 'succeeded' : 'failed');
-    return result(status, report ? null : 'report_missing', run, report);
+    if (!report) return result('failed', 'report_missing', run);
+    if (report.runId !== 'apify-' + runIds.join(',')) return result('failed', 'report_run_mismatch', run, report);
+    if (report.status === 'succeeded' && run.conclusion !== 'success') return result('failed', 'workflow_failed_after_refresh', run, report);
+    return result(report.status, null, run, report);
   } catch (error) {
     return result('dispatch_failed', error instanceof DispatchError ? error.message : 'dispatch_error', run);
   }
@@ -121,7 +116,7 @@ export async function dispatchRefresh(options: DispatchOptions): Promise<Dispatc
   }
 }
 
-export async function runDispatchRefreshCli(env: NodeJS.Dict<string> = process.env): Promise<{exitCode: number; stdout: string}> {
+export async function runDispatchRefreshCli(env: NodeJS.Dict<string> = process.env, args: string[] = process.argv.slice(2)): Promise<{exitCode: number; stdout: string}> {
   let config;
   try {
     config = getRefreshDispatchEnv(env);
@@ -130,7 +125,11 @@ export async function runDispatchRefreshCli(env: NodeJS.Dict<string> = process.e
     const message = error instanceof Error ? error.message : 'invalid_environment';
     return {exitCode: 1, stdout: JSON.stringify({status: 'dispatch_failed', error: message})};
   }
-  const outcome = await dispatchRefresh({token: config.GITHUB_DISPATCH_TOKEN, repository: config.GITHUB_REPOSITORY, ref: config.REFRESH_REF});
+  const [target, runIds] = args;
+  if (!runIds || (target !== 'pilot' && target !== 'production') || args.length !== 2) {
+    return {exitCode: 1, stdout: JSON.stringify({status: 'dispatch_failed', error: 'expected_target_and_run_ids'})};
+  }
+  const outcome = await dispatchRefresh({runIds, target, token: config.GITHUB_DISPATCH_TOKEN, repository: config.GITHUB_REPOSITORY, ref: config.REFRESH_REF});
   // No retries: a failed or partial run is left for an operator, like a scheduled one.
   return {exitCode: outcome.status === 'succeeded' ? 0 : 1, stdout: JSON.stringify(outcome)};
 }

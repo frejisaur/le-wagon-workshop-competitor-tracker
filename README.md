@@ -22,7 +22,9 @@ Development runs against sanitized fixtures; no credentials are needed. Never co
 | `npm run insights:prepare` | Builds the evidence package for battlecard generation |
 | `npm run insights:submit` | Validates an agent-written battlecard and publishes or queues it for review |
 | `npm run insights:publish-approved` | Publishes reviewed battlecards |
-| `npm run refresh:dispatch` | Triggers the refresh workflow and waits for its result (used by a Claude routine) |
+| `npm run apollo -- prepare [INPUT.csv]` | Prepares the saved domains and fixed Actor settings |
+| `npm run refresh:dispatch -- <pilot or production> <run IDs>` | Waits for ingestion and export of completed MCP runs |
+| `npm run apollo -- export INPUT.csv OUTPUT.csv [SNAPSHOT.json]` | Adds saved Airtable or fixture metrics to the original rows |
 
 Release checks: `npm test`, `npx tsc --noEmit`, `npm run build`, `npm run test:e2e`, `node scripts/verify-semrush-schema-reference.mjs`.
 

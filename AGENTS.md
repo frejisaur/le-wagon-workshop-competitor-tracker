@@ -46,6 +46,7 @@ points.
 
 Load the relevant repository skill before changing its domain:
 
+- `enrich-apollo-accounts`: weekly MCP execution, completed-run ingestion, and CSV recovery.
 - `competitor-data-contracts`: schemas, transforms, Airtable mapping, record
   identity, fingerprints, fixtures, or API shaping.
 - `building-competitor-dashboard`: dashboard screens, navigation, tables,

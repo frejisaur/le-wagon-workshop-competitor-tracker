@@ -57,6 +57,8 @@ describe('Airtable schema bootstrap', () => {
     const result = await ensureAirtableSchema({baseId: 'app-test', apiToken: 'secret', fetch});
 
     expect(result.createdTables).toEqual(['System']);
+    const replay = await ensureAirtableSchema({baseId: 'app-test', apiToken: 'secret', fetch});
+    expect(replay).toEqual({createdTables: [], createdFields: {Companies: 0, System: 0}});
     expect(result.createdFields.Companies).toBeGreaterThan(1);
     expect(requests.some((request) => request.method === 'DELETE')).toBe(false);
     expect(requests.some((request) => request.method === 'PATCH')).toBe(false);

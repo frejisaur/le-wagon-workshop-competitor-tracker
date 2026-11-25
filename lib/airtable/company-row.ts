@@ -417,6 +417,12 @@ export function presentFields(fields: AirtableFields): AirtableFields {
 /** Stages one refresh PATCH: evidence merged against the stored row, plus the fingerprint of the row it produces. */
 export function stageCompanyEvidence(existing: AirtableRecord, company: CompanyWrite, fingerprint: EvidenceFingerprinter): AirtableFields {
   const fields = toCompanyFields(company, parseCompanyRecord(existing));
+  // The roster is editable between snapshot load and PATCH. Only the importer owns its identity and Apollo fields.
+  for (const key of Object.keys(fields)) {
+    if (key.startsWith('Identity • ') || key.startsWith('Observed • Apollo ') || key === 'Observed • Display Name' || key === 'Observed • Segment') {
+      delete fields[key];
+    }
+  }
   const next = parseCompanyRecord({id: existing.id, fields: {...existing.fields, ...presentFields(fields)}});
   return {...fields, 'Workflow • Evidence Fingerprint': fingerprint(next)};
 }

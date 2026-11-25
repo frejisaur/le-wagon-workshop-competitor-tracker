@@ -5,10 +5,10 @@
 Two independent control planes share Airtable and validated repository
 commands as their only boundary; neither invokes or waits for the other.
 
-- Metric refresh: `.github/workflows/refresh.yml` runs `npm run enrich`. It
+- Metric refresh: Claude runs the Semrush Actor through Apify MCP on Mondays at 15:00 UTC. It passes completed run IDs to `.github/workflows/refresh.yml`, which runs `npm run enrich -- --run-ids "$RUN_IDS"`. It
   validates provider output, writes only observed fields and deterministic
   calculations with one write per company, updates the evidence fingerprint and
-  refresh System fields, invalidates the web cache, and exits. It never calls a
+  refresh System fields, invalidates the web cache, and exports the saved CSV on success. It never calls a
   model, agent, or skill.
 - Insight enrichment: the user's agent harness runs the
   `generating-gtm-battlecards` skill on its own schedule through
@@ -21,7 +21,7 @@ commands as their only boundary; neither invokes or waits for the other.
 
 | Operation | Repository interface | Success evidence |
 |-|-|-|
-| Metric refresh | `npm run enrich` | The refresh workflow run (`refresh-…` ID) exits `succeeded` or documented `partial`; successful companies persist; cache invalidates after writes. |
+| Metric refresh | `npm run refresh:dispatch -- pilot RUN_ID` (or `production`) | The refresh workflow run (`apify-…` ID) exits `succeeded` or documented `partial`; successful companies persist; cache invalidates after writes. |
 | Prepare due insights | `npm run insights:prepare -- --due` | Bounded manifest contains only due companies and current fingerprints. |
 | Submit candidate | `npm run insights:submit -- <candidate-file>` | Result identifies published, queued, stale, or rejected with run/company identity. |
 | Promote reviews | `npm run insights:publish-approved` | Companies rows with `Review • Status` = `approved` publish when current; changed fingerprints become `stale`. |

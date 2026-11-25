@@ -73,6 +73,17 @@ export class AirtableClient {
     return records;
   }
 
+  async uploadCsv(recordId: string, field: string, filename: string, data: Buffer): Promise<AirtableRecord> {
+    const path = [this.options.baseId, recordId, field].map(encodeURIComponent).join('/');
+    const response = await this.fetchImpl('https://content.airtable.com/v0/' + path + '/uploadAttachment', {
+      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(30_000),
+      headers: {Authorization: 'Bearer ' + this.options.apiToken, 'Content-Type': 'application/json'},
+      body: JSON.stringify({contentType: 'text/csv', filename, file: data.toString('base64')}),
+    });
+    if (!response.ok) throw new AirtableClientError('update', 'System', response.status);
+    return await response.json() as AirtableRecord;
+  }
+
   async create(table: AirtableTable, records: AirtableWriteRecord[]): Promise<AirtableRecord[]> {
     return this.write('create', table, records);
   }

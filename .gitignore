@@ -22,3 +22,7 @@ data/apify/*.json
 
 # Vercel CLI project link
 .vercel
+
+data/*.csv
+data/*.json
+apollo-accounts-enriched.csv

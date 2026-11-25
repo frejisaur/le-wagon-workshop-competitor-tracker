@@ -13,6 +13,7 @@ type CliArguments = {
   apollo: string;
   semrush?: string;
   apolloOnly: boolean;
+  observedAt?: string;
   domains?: string;
   dryRun: boolean;
   fixtureState?: string;
@@ -25,8 +26,14 @@ function parseArguments(arguments_: string[]): CliArguments {
   let fixtureState: string | undefined;
   let apolloOnly = false;
   let dryRun = false;
+  let observedAt: string | undefined;
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
+    if (argument === '--observed-at') {
+      observedAt = arguments_[++index];
+      if (!observedAt || new Date(observedAt).toISOString() !== observedAt) throw new TypeError('expected an ISO UTC timestamp');
+      continue;
+    }
     if (argument === '--dry-run') {
       dryRun = true;
       continue;
@@ -54,7 +61,7 @@ function parseArguments(arguments_: string[]): CliArguments {
   if (apolloOnly !== Boolean(domains)) {
     throw new TypeError('--domains is required only with --apollo-only');
   }
-  return {apollo, semrush, apolloOnly, domains, dryRun, fixtureState};
+  return {apollo, semrush, apolloOnly, domains, dryRun, fixtureState, observedAt};
 }
 
 function validateRequestedDomains(apolloRows: ReturnType<typeof parseApolloCsv>, requestedText: string): void {
@@ -113,7 +120,7 @@ export async function runInitialImportCli(arguments_: string[], dependencies: Cl
           const env = getWebEnv();
           return new AirtableCompetitorRepository(new AirtableClient({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT}));
         })();
-    const report = await (dependencies.runInitialImport ?? runInitialImport)({apolloRows, semrushRecords, repository, dryRun: parsedArguments.dryRun});
+    const report = await (dependencies.runInitialImport ?? runInitialImport)({apolloRows, semrushRecords, repository, dryRun: parsedArguments.dryRun, observedAt: parsedArguments.observedAt});
     // Partial imports are successful recoverable reports. A run that could not
     // persist any accepted company is unrecovered.
     const unrecovered = (report.accepted === 0 && report.rejected > 0)

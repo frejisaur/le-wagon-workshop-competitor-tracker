@@ -32,23 +32,9 @@ vercel login && gh auth login
 
     Create one PAT per base with `data.records:read`, `data.records:write`, `schema.bases:read`, `schema.bases:write`.
 4. Deploy production once, following `docs/operations/deployment.md`, against the showcase base. This is the reveal app and the deploy fallback. Set `APP_URL` in your shell profile.
-5. Set the GitHub Actions secrets and variables (values through stdin only):
-
-   ```sh
-   gh secret set AIRTABLE_PAT            # prompts for the value
-   gh secret set APIFY_TOKEN
-   gh secret set CACHE_INVALIDATION_SECRET
-   gh variable set APIFY_ACTOR_ID --body pro100chok/semrush-scraper
-   gh variable set APP_BASE_URL --body "$APP_URL"
-   gh variable set AIRTABLE_BASE_ID      # prompts for the showcase base ID; table names are fixed in code
-   ```
-
-6. Set up the Claude routine's environment (segment 5):
-   - Create a fine-grained GitHub token for this repository only, with **Actions: read and write** and no other permission.
-   - At claude.ai/code, create a cloud environment named `competitor-refresh` whose network access reaches `api.github.com`, with environment variables `GITHUB_DISPATCH_TOKEN` (the token) and `GITHUB_REPOSITORY` (`owner/repo`). Nothing else.
-   - Rehearse `/schedule` with `prompts/05-schedule-routine.md`, press "Run now" once, and confirm the reply reports the run. Then pause that routine: it is the `/schedule` fallback. Delete the routines you create on stage after each session, so dispatches don't pile up.
-
-7. Trigger one refresh (`gh workflow run refresh.yml`) so there is a "last scheduled run" to fall back to.
+5. Configure target-specific GitHub environments and Vercel credentials using [the deployment runbook](../docs/operations/deployment.md).
+6. Connect the Apify MCP connector to the pilot cloud task. Run the one-company pilot with the weekly skill, keeping its run ID, and compare its numbers across the Actor, Airtable, dashboard and CSV.
+7. Rehearse the Monday schedule with the production prompt after verifying the full roster. Keep only one active production routine.
 8. Full rehearsal with a stopwatch, using the same two-pane layout. Record in the table below. Build one fallback per design option, because the room may vote for any of them. For each `<x>` in `a`, `b`, `c`: run Lane B for that option, check it against the brief, then `git switch -c workshop/fallback-ui-<x> && git add -A components styles && git commit -m "feat: restyle All Companies (option <x>)" && git push -u origin HEAD && git switch live-demo`.
 
 ## Rehearsal notes (fill in, do not commit real company names)

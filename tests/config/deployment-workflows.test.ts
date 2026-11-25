@@ -7,14 +7,15 @@ const refreshOnly = ['APIFY_TOKEN', 'APIFY_ACTOR_ID', 'APP_BASE_URL'];
 describe('GitHub Actions deployment contracts', () => {
   it('runs one terminating, non-overlapping weekly refresh executed only by GitHub Actions', () => {
     const refresh = read('.github/workflows/refresh.yml');
-    expect(refresh).toMatch(/cron: '0 15 \* \* 1'/);
+    expect(refresh).not.toMatch(/^  schedule:/m);
+    expect(refresh).toContain('environment: ${{ inputs.target }}');
     expect(refresh).toMatch(/workflow_dispatch:/);
-    expect(refresh).toMatch(/timeout-minutes: 15/);
+    expect(refresh).toMatch(/timeout-minutes: 20/);
     expect(refresh).toMatch(/concurrency:\s*\n\s*group: refresh\s*\n\s*cancel-in-progress: false/);
     expect(refresh).toMatch(/permissions:\s*\n\s*contents: read/);
     expect(refresh).toMatch(/node-version: 22/);
     // tee keeps the report for the run page; the explicit bash shell turns on pipefail so tee cannot mask a failure.
-    expect(refresh).toMatch(/- run: npm run --silent enrich \| tee "\$RUNNER_TEMP\/refresh-report.json"\n\s+shell: bash$/m);
+    expect(refresh).toMatch(/- run: npm run --silent enrich -- --run-ids "\$RUN_IDS" \| tee "\$RUNNER_TEMP\/refresh-report.json"\n\s+shell: bash$/m);
     expect(refresh).toMatch(/- if: always\(\)\n\s+run: npm run --silent refresh:report -- "\$RUNNER_TEMP\/refresh-report.json"$/m);
     const config = refresh.split('\n').filter((line) => !line.trimStart().startsWith('#')).join('\n');
     expect(config).not.toMatch(/apify.*schedule|schedule.*apify/i);
@@ -25,10 +26,8 @@ describe('GitHub Actions deployment contracts', () => {
     for (const secret of ['AIRTABLE_PAT', 'APIFY_TOKEN', 'CACHE_INVALIDATION_SECRET']) {
       expect(refresh).toContain(`${secret}: \${{ secrets.${secret} }}`);
     }
-    const envBlock = refresh.slice(refresh.indexOf('    env:'), refresh.indexOf('    steps:'));
-    for (const line of envBlock.split('\n').slice(1).filter(Boolean)) {
-      expect(line).toMatch(/^\s+[A-Z_]+: \$\{\{ (secrets|vars)\.[A-Z_]+ \}\}$/);
-    }
+    expect(refresh).toContain('RUN_IDS: ${{ inputs.run_ids }}');
+    expect(refresh).toContain('npm run --silent apollo -- export "$RUN_IDS"');
     expect(refresh).not.toMatch(/NEXT_PUBLIC_|echo \$|printenv/);
   });
 

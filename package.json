@@ -20,7 +20,8 @@
     "refresh:dispatch": "node --import tsx jobs/dispatch-refresh.ts",
     "insights:prepare": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/prepare-insights.ts",
     "insights:submit": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/submit-insight.ts",
-    "insights:publish-approved": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/publish-approved-insights.ts"
+    "insights:publish-approved": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/publish-approved-insights.ts",
+    "apollo": "node --env-file-if-exists=.env --env-file-if-exists=.env.local --import tsx jobs/apollo.ts"
   },
   "dependencies": {
     "@carbon/charts": "^1.27.18",

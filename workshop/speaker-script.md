@@ -109,11 +109,11 @@ npm run import:initial -- --apollo data/apollo/workshop.csv --semrush data/apify
 
 **Verify**: `/api/health` returns `200`, `status: ok`, and freshness.
 
-**Show** `.github/workflows/refresh.yml` and name four lines: `cron` (a clock owns the schedule), `timeout-minutes` (it must end), `concurrency` (never two at once), `refresh:report` (it leaves a readable result).
+**Show** `.github/workflows/refresh.yml` and name four lines: `run_ids` (Claude supplies completed Actor runs), `timeout-minutes` (it must end), `concurrency` (never two at once), `refresh:report` (it leaves a readable result).
 
-**Run** (right) `gh workflow run refresh.yml`. **Lane C starts** (collect at 72).
+**Run** (right) `npm run refresh:dispatch -- pilot "$PILOT_RUN_ID"`. **Lane C starts** (collect at 72).
 
-**Say**: "That was me pressing the button. The cron presses it every Monday. What if the thing pressing it could also tell us what went wrong?"
+**Say**: "That was me pressing the button. Claude runs the Actor every Monday at 15:00 UTC and reports the workflow result."
 
 **Run** (left) `prompts/05-schedule-routine.md`: `/schedule`, then open claude.ai/code/routines and show the next run time. Make the three points in the prompt file.
 
@@ -157,7 +157,7 @@ gh run list --workflow refresh.yml --limit 1   # completed? then:
 gh run view --web "$(gh run list --workflow refresh.yml --limit 1 --json databaseId -q '.[0].databaseId')"
 ```
 
-**Show** the run page: the **Refresh report** table (status, processed / succeeded / failed, cache invalidated, error codes) and the `refresh-report` annotation. **Say**: "That annotation is what the routine reads back on Thursday."
+**Show** the run page: the **Refresh report** table (status, processed / succeeded / failed, cache invalidated, error codes) and the `refresh-report` annotation. **Say**: "That annotation is what the routine reads back on Monday."
 
 Ask Claude: "Using the Airtable MCP, show the System table's latest run ID, last attempt and last success. Do not write."
 
