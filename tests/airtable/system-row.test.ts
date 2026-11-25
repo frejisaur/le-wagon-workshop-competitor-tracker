@@ -1,4 +1,4 @@
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
@@ -27,6 +27,17 @@ describe('System row codec', () => {
       {id: 'rec-system', fields: {'Identity • System ID': 'system', 'Workflow • Status': 'exploded', 'Workflow • Last Successful Run At': 42}},
     ])).toEqual({recordId: 'rec-system', systemId: 'system'});
     expect(selectSystemRecord([{id: 'rec-only', fields: {'Workflow • Status': 'partial'}}])).toEqual({recordId: 'rec-only', status: 'partial'});
+  });
+
+  it('keeps every sanitized Airtable state fixture in the two-table shape the fixture repository loads', async () => {
+    const states = ['airtable', 'import', 'insights'].flatMap((directory) => readdirSync(resolve(process.cwd(), 'tests/fixtures', directory))
+      .filter((name) => name.endsWith('.json') && !name.startsWith('candidate-')).map((name) => resolve(process.cwd(), 'tests/fixtures', directory, name)));
+    expect(states.length).toBeGreaterThanOrEqual(7);
+    for (const path of states) {
+      expect(Object.keys(JSON.parse(readFileSync(path, 'utf8'))).sort(), path).toEqual(['companies', 'system']);
+      const {companies} = await FixtureCompetitorRepository.fromSnapshot(path).getDashboardSnapshot();
+      expect(companies.flatMap((row) => row.storageIssues), path).toEqual([]);
+    }
   });
 
   it('uses a sanitized two-table fixture snapshot only and rejects retired tables', () => {
