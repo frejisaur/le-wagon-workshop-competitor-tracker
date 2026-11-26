@@ -22,9 +22,11 @@ export function exportApolloCsv(source: string, snapshot: DashboardSnapshot) {
     if (domain) byDomain.set(domain, [...(byDomain.get(domain) ?? []), company]);
   }
   let matched = 0;
-  const result = cells.map((original, index) => {
+  const result: string[][] = [];
+  cells.forEach((original, index) => {
     const domain = normalizeDomain(rows[index].Website);
-    const companies = byDomain.get(domain ?? '') ?? [];
+    if (!domain) return;
+    const companies = byDomain.get(domain) ?? [];
     const fields = companies[0]?.fields;
     const account = rows[index]['Apollo Account Id'];
     const record = rows[index]['Apollo Record Id'];
@@ -34,7 +36,7 @@ export function exportApolloCsv(source: string, snapshot: DashboardSnapshot) {
       : !fields ? 'company_missing' : !fields['Observed • At'] ? 'observation_missing' : 'matched');
     if (status === 'matched') matched++;
     const metrics = observed.map(name => status === 'matched' ? fields['Observed • ' + name] ?? '' : '');
-    return [...original, status, domain ?? '', ...metrics];
+    result.push([...original, status, domain, ...metrics.map(String)]);
   });
-  return {csv: Papa.unparse([[...columns, ...headers], ...result]), rows: rows.length, matched, accepted: join.accepted.length};
+  return {csv: Papa.unparse([[...columns, ...headers], ...result]), rows: result.length, matched, accepted: join.accepted.length};
 }

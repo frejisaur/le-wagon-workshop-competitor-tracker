@@ -46,7 +46,7 @@ Before replacing the CSV, the export verifies the dashboard count, successful re
 
 ## Activate and recover
 
-After the pilot passes, seed the full production base and run the skill with target `production`. Confirm 52 Companies, 53 CSV data rows, the missing-website reason, and matching dashboard freshness. In Claude Code create the cloud routine for Monday at 15:00 **UTC**, with the production connector, environment and repository. Use the prompt below. Verify its next occurrence in Claude and deploy the dispatch-only workflow to the default branch before that occurrence. During migration the old default-branch revision may still have its Monday cron.
+After the pilot passes, seed the full production base and run the skill with target `production`. Confirm 52 Companies, 52 CSV data rows with a usable website, and matching dashboard freshness. In Claude Code create the cloud routine for Monday at 15:00 **UTC**, with the production connector, environment and repository. Use the prompt below. Verify its next occurrence in Claude and deploy the dispatch-only workflow to the default branch before that occurrence. During migration the old default-branch revision may still have its Monday cron.
 
 > Use the enrich-apollo-accounts skill to refresh the production roster. Report company counts, dashboard freshness, Actor run links, the workflow link and the private CSV cell link.
 

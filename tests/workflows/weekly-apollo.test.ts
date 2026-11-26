@@ -69,8 +69,9 @@ describe('completed Actor run ingestion and saved CSV', () => {
     const csv = Papa.parse<Record<string,string>>(before.csv, {header: true}).data;
     expect(csv[0]).toMatchObject({'Company Name': 'Alpha, Inc', Comment: 'First\nline', 'Paid Traffic': '0', 'Observation Time': observedAt,
       'Organic Traffic': String(api.kpis.organicTraffic.value), 'Authority Score': String(api.kpis.authorityScore.value)});
-    expect(csv[1]).toMatchObject({'Match Status': 'missing_apollo_website', 'Paid Traffic': '', 'Observation Time': ''});
-    expect(csv[2]).toMatchObject({'Organic Keywords': '', Comment: 'Quoted "note"'});
+    expect(before.rows).toBe(2);
+    expect(csv.map(row => row.Website)).toEqual(['https://www.alpha.example', 'existing.example']);
+    expect(csv[1]).toMatchObject({'Organic Keywords': '', Comment: 'Quoted "note"'});
     expect(await run()).toMatchObject({status: 'succeeded'});
     expect(exportApolloCsv(source, await repo.getDashboardSnapshot())).toEqual(before);
     expect(repo.toSnapshot().companies.map(row => row.id)).toEqual(original.companies.map(row => row.id));
@@ -87,6 +88,6 @@ describe('completed Actor run ingestion and saved CSV', () => {
     const csv = source.replace('acct-1', 'wrong-account') + '\r\nOther,alpha.example,,,';
     const exported = exportApolloCsv(csv, await repo.getDashboardSnapshot());
     expect(Papa.parse<Record<string,string>>(exported.csv, {header: true}).data.map(row => row['Match Status']))
-      .toEqual(['duplicate_apollo_domain', 'missing_apollo_website', 'stored_identity_conflict', 'duplicate_apollo_domain']);
+      .toEqual(['duplicate_apollo_domain', 'stored_identity_conflict', 'duplicate_apollo_domain']);
   });
 });
