@@ -30,6 +30,8 @@ npm run import:initial -- --apollo "$APOLLO_CSV" --semrush "$SEMRUSH_JSON" --obs
 npm run apollo -- save-roster "$APOLLO_CSV"
 ```
 
+When the original dataset ID is known, pass `--dataset-id "$DATASET_ID"` to retain each source item link. For an existing Enriched Accounts legacy table, save the original CSV first and run `npm run apollo -- adopt-legacy --dry-run` before importing. The explicit `--remove-missing-websites` mode adopts exact domain/account matches in place and removes legacy rows verified against blank source websites. It aborts on conflicting identities.
+
 The supplied full roster should yield 52 accepted companies, one missing website, zero unmatched domains and zero write failures. Copy the authenticated Airtable cell URL for **Refresh • Enriched CSV** from the System record into the matching Claude environment as `CSV_CELL_URL`. This link points to the downloadable attachment as it is replaced each week.
 
 ## Connect and run the pilot

@@ -6,6 +6,7 @@ import {FixtureCompetitorRepository} from '@/lib/airtable/fixture-repository';
 import {EXPORT_FILE, ROSTER_FILE, readSavedRoster, rosterSystem, saveCsv} from '@/lib/airtable/roster-files';
 import {getWebEnv} from '@/lib/config/server-env';
 import {actorInput} from '@/lib/apify/run-domain-overview';
+import {planApolloAdoption} from '@/lib/workflows/adopt-apollo';
 import {verifyDashboard} from '@/lib/workflows/verify-dashboard';
 import {exportApolloCsv} from '@/lib/workflows/apollo-export';
 import {joinRoster} from '@/lib/transforms/join-roster';
@@ -36,6 +37,15 @@ export async function runApollo([command, source, destination, state]: string[])
 
   const env = getWebEnv();
   const client = new AirtableClient({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT});
+  if (command === 'adopt-legacy' && (source === '--dry-run' || source === '--remove-missing-websites')) {
+    const original = await readSavedRoster(await rosterSystem(client));
+    const plan = planApolloAdoption(original, await client.list('Companies'));
+    if (source === '--remove-missing-websites') {
+      await client.update('Companies', plan.updates);
+      for (const recordId of plan.missingWebsiteIds) await client.deleteRecord('Companies', recordId);
+    }
+    return {mode: source, adopted: plan.updates.length, missingWebsites: plan.missingWebsiteIds.length};
+  }
   if (command === 'save-roster' && source) {
     const data = readFileSync(source);
     const roster = joinRoster(parseApolloCsv(data.toString('utf8')), []);

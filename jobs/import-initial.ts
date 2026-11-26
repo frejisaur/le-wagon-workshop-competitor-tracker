@@ -14,6 +14,7 @@ type CliArguments = {
   semrush?: string;
   apolloOnly: boolean;
   observedAt?: string;
+  datasetId?: string;
   domains?: string;
   dryRun: boolean;
   fixtureState?: string;
@@ -27,8 +28,14 @@ function parseArguments(arguments_: string[]): CliArguments {
   let apolloOnly = false;
   let dryRun = false;
   let observedAt: string | undefined;
+  let datasetId: string | undefined;
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
+    if (argument === '--dataset-id') {
+      datasetId = arguments_[++index];
+      if (!datasetId || !/^[a-zA-Z0-9]+$/.test(datasetId)) throw new TypeError('invalid dataset ID');
+      continue;
+    }
     if (argument === '--observed-at') {
       observedAt = arguments_[++index];
       if (!observedAt || new Date(observedAt).toISOString() !== observedAt) throw new TypeError('expected an ISO UTC timestamp');
@@ -61,7 +68,7 @@ function parseArguments(arguments_: string[]): CliArguments {
   if (apolloOnly !== Boolean(domains)) {
     throw new TypeError('--domains is required only with --apollo-only');
   }
-  return {apollo, semrush, apolloOnly, domains, dryRun, fixtureState, observedAt};
+  return {apollo, semrush, apolloOnly, domains, dryRun, fixtureState, observedAt, datasetId};
 }
 
 function validateRequestedDomains(apolloRows: ReturnType<typeof parseApolloCsv>, requestedText: string): void {
@@ -120,7 +127,7 @@ export async function runInitialImportCli(arguments_: string[], dependencies: Cl
           const env = getWebEnv();
           return new AirtableCompetitorRepository(new AirtableClient({baseId: env.AIRTABLE_BASE_ID, apiToken: env.AIRTABLE_PAT}));
         })();
-    const report = await (dependencies.runInitialImport ?? runInitialImport)({apolloRows, semrushRecords, repository, dryRun: parsedArguments.dryRun, observedAt: parsedArguments.observedAt});
+    const report = await (dependencies.runInitialImport ?? runInitialImport)({apolloRows, semrushRecords, repository, dryRun: parsedArguments.dryRun, datasetId: parsedArguments.datasetId, observedAt: parsedArguments.observedAt});
     // Partial imports are successful recoverable reports. A run that could not
     // persist any accepted company is unrecovered.
     const unrecovered = (report.accepted === 0 && report.rejected > 0)

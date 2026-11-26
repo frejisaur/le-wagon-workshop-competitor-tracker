@@ -1,3 +1,4 @@
+import {datasetItemRef} from '@/lib/apify/constants';
 import {randomUUID} from 'node:crypto';
 import {buildEvidencePackage} from '@/lib/agents/evidence/build-package';
 import {fingerprintEvidence} from '@/lib/agents/evidence/fingerprint';
@@ -198,11 +199,6 @@ function terminalSystem(runId: string, status: EnrichmentStatus, report: Pick<En
 }
 
 type IndexedRecord = {record: SemrushDomainOverview; rawRef?: string; observedAt?: string};
-
-function datasetItemRef(datasetId: string, offset: number): string | undefined {
-  if (!datasetId) return undefined;
-  return `https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?offset=${offset}&limit=1`;
-}
 
 function indexedRecords(items: unknown[], expected: Map<string, ActiveCompany>, errors: EnrichmentError[], datasetId?: string): Map<string, IndexedRecord> {
   const records = new Map<string, IndexedRecord>();

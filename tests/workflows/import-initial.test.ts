@@ -31,6 +31,14 @@ function fixtureRepository(): FixtureCompetitorRepository {
 }
 
 describe('runInitialImport', () => {
+  it('keeps the original dataset offset as the source reference for a verified static seed', async () => {
+    const repository = fixtureRepository();
+    await runInitialImport({...fixtureOptions(repository), datasetId: 'datasetA'});
+    const {companies} = await repository.getDashboardSnapshot();
+    expect(companies.find(c => c.fields['Identity • Canonical Domain'] === 'beta.example')?.fields['Observed • Raw Ref'])
+      .toBe('https://api.apify.com/v2/datasets/datasetA/items?offset=1&limit=1');
+  });
+
   it('imports the fixture twice without changing company IDs or creating duplicates', async () => {
     const repository = fixtureRepository();
     const mintedDomains: string[] = [];

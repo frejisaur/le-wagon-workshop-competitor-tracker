@@ -1,3 +1,4 @@
+import {datasetItemRef} from '@/lib/apify/constants';
 import {randomUUID} from 'node:crypto';
 import type {CompanyPersistenceWrite, CompanyWrite, CompetitorStore, RecordResult, UnenrichedCompanyWrite} from '@/lib/airtable/types';
 import type {ApolloRow} from '@/lib/schemas/apollo';
@@ -36,6 +37,7 @@ export type InitialImportOptions = {
   observedAt?: string;
   calculatedAt?: string;
   rawRef?: string;
+  datasetId?: string;
 };
 
 type PreparedCompany = {
@@ -151,7 +153,7 @@ export async function runInitialImport(options: InitialImportOptions): Promise<I
         identity: joined.identity,
         observedAt,
         calculatedAt,
-        rawRef: options.rawRef,
+        rawRef: options.datasetId ? datasetItemRef(options.datasetId, options.semrushRecords.indexOf(semrush)) : options.rawRef,
         trackedSetTotalTraffic,
       });
       prepared.push({
